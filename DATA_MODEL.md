@@ -226,6 +226,7 @@ Each individual wager: one row per (user, bet) pair where money was placed.
 | `user_id` | `uuid` NOT NULL FK → `users.id` | The bettor |
 | `bet_id` | `uuid` NOT NULL FK → `bets.id` | The bet being placed |
 | `amount` | `int` NOT NULL CHECK (`amount > 0`) | Whole dollars, $1 minimum |
+| `requires_admin_review` | `boolean` NOT NULL DEFAULT `false` | Set on write when the bettor appears in `bet_subjects` for the bet (self-bet flag, PRD §7). Added in Sprint 1. |
 | `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | |
 | `updated_at` | `timestamptz` NOT NULL DEFAULT `now()` | Updated on edit |
 
@@ -274,7 +275,7 @@ The actual-payout proportional split runs in TypeScript at render time, since it
 
 ## 5. Row-Level Security Highlights
 
-Full policies live in `supabase/migrations/002_rls_policies.sql`. Summary:
+Policies live inline in each table's migration file under `supabase/migrations/` (e.g., `20260507000000_users_table.sql`, `20260507000001_tournaments.sql`, `20260507000002_bets.sql`). Summary:
 
 - **`bets`**: anyone authenticated can `SELECT` rows where `status != 'draft'`. Only admins can `INSERT` / `UPDATE` / `DELETE`.
 - **`bet_placements`**: a user can `SELECT` / `INSERT` / `UPDATE` / `DELETE` their own rows. Other users' placements are visible only when the corresponding bet's status is `closed` or `resolved`. Admins can read all.
@@ -286,8 +287,15 @@ Full policies live in `supabase/migrations/002_rls_policies.sql`. Summary:
 
 ## 6. Migration Strategy
 
-- All schema changes are SQL files in `supabase/migrations/`, named with timestamps (`20260501000000_initial.sql`).
+- All schema changes are SQL files in `supabase/migrations/`, named with timestamps (`20260507000000_users_table.sql`).
 - Apply locally with `npx supabase db push` or by pasting into the Supabase SQL Editor.
 - Never edit the schema directly in Supabase Studio — only the data. Schema changes go through migration files so the production and local environments stay in sync.
 
-**Initial migration creates:** all tables above, RLS policies, the payout view, and seeds the seven `bet_categories`.
+**Migrations shipped so far** (one per phase, each with its tables + RLS + seeds):
+- `20260507000000_users_table.sql` — `users`, `is_admin()` helper, new-user trigger
+- `20260507000001_tournaments.sql` — `tournaments`, `tournament_participants`, 2026 seed
+- `20260507000002_bets.sql` — `bet_categories`, `bets`, `bet_subjects`, seven-category seed
+
+**Still to come** (see `ROADMAP.md`): `bet_placements` (Sprint 1), `placement_payouts_view` (Sprint 5).
+
+**Known inconsistency to fix in the Sprint 1 migration:** `tournament_participants.entry_fee` currently has a hardcoded `CHECK (entry_fee BETWEEN 20 AND 50)`, but the entry-fee bounds are supposed to live on the `tournaments` row (`entry_fee_min` / `entry_fee_max`) per the "rules are data, not constants" convention. Fix: drop the hardcoded CHECK (keep `entry_fee > 0`) and enforce the per-tournament bounds in `lib/validation.ts` / at participant creation instead.

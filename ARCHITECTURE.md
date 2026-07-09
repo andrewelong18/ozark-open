@@ -139,7 +139,7 @@ We enforce permissions at the database layer using Postgres Row-Level Security p
 - Only admins can insert / update rows in `bets`, `bet_categories`, `tournaments`.
 - Only admins can read `bet_placements` from other users while `status = open` (prevents herd behavior).
 
-Full policy definitions live in `supabase/migrations/002_rls_policies.sql`.
+Full policy definitions live inline in each table's migration file under `supabase/migrations/`.
 
 ---
 
@@ -149,7 +149,7 @@ Two pieces of math, two different homes:
 
 ### 5.1 Constraint validation (at submission time)
 
-Lives in: `lib/validation.ts` — invoked by the bet-submission API route in `app/api/bets/route.ts`.
+Lives in: `lib/validation.ts` — invoked by the placement API route in `app/api/placements/route.ts`.
 
 Why server-side: a malicious user could bypass client-side checks. The validation runs on Vercel before any database write.
 

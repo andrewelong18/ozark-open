@@ -1,6 +1,8 @@
 # Product Requirements Document — Ozark Open Sportsbook
 
-**Status:** Draft v1 · **Last updated:** May 2026 · **Owners:** Andrew (lead), Pat / Jake / Steve (admins)
+**Status:** Draft v2 · **Last updated:** July 2026 · **Owners:** Andrew (lead), Pat / Jake / Steve (admins)
+
+> **Draft v2 note:** Phases 0–3 are code complete (see `ROADMAP.md` for the sprint tracker). This revision surfaces every unresolved spec decision as an explicit stakeholder question — see §12. Items marked `⚠️ AWAITING STAKEHOLDER ANSWER` block specific sprints and must be resolved before Sprint 1 (bet placement) begins.
 
 ---
 
@@ -114,10 +116,14 @@ These rules come straight from the original Sportsbook memo and must be enforced
 
 1. **Per-tournament entry fee:** between $20 and $50, in whole dollars. Set when the participant joins the tournament.
 2. **Total bets per round:** minimum 5, maximum 10.
+   `⚠️ AWAITING STAKEHOLDER ANSWER (Q3)` — what happens if a participant is still under 5 bets when the round closes?
 3. **Bet amounts:** whole dollars only, $1 minimum.
 4. **Maximum single bet:** half the participant's entry fee, capped at $20. (Example: $40 entry → max $20 single bet. $20 entry → max $10 single bet.)
+   `⚠️ AWAITING STAKEHOLDER ANSWER (Q4)` — confirm this cap applies to any single placement regardless of round (assumed yes).
 5. **Maximum total bet on yourself:** one quarter of the participant's entry fee, capped at $10.
+   `⚠️ AWAITING STAKEHOLDER ANSWER (Q4)` — is this total per round or per tournament?
 6. **Total wagered:** must equal exactly the participant's entry fee. (No partial commitments.)
+   `⚠️ AWAITING STAKEHOLDER ANSWER (Q1/Q2)` — **this is the biggest open question.** Does the entry fee cover both betting rounds combined, or must each round's wagers total the full entry fee? (`ROADMAP.md` previously said "per round must equal entry fee," which contradicts this rule as written. The two readings produce different budgets, different validation code, and different pool math.) If combined: is the split between rounds the participant's choice, and can a participant wager $0 in Round 2?
 
 **Self-bet detection:** the app will flag bets where the participant appears to be the subject (their name matches a player named in the bet's `subject_player_ids`). Admins manually review flagged bets. Indirect self-bets (e.g., betting on a head-to-head you're in) cannot be reliably auto-detected — final discretion rests with the admin team, as today.
 
@@ -137,6 +143,28 @@ draft → open → closed → resolved
 - `resolved`: outcome (`hit` / `miss` / `push` / `void`) has been recorded. Theoretical payouts are now computed for placements on this bet.
 
 **There is no scheduled cutoff.** The admin closes Round 1 bets manually before Thursday tee-off. After Day 1 (match play) and Day 2 (scramble), admins enter outcomes for Round 1 bets. Round 2 bets are released ahead of Saturday's stroke-play round, with odds informed by what's already happened.
+
+### 8.1 Enforcement Timing
+
+Not all of the §7 rules can be checked at the same moment. They split into two groups:
+
+**Per-placement rules — hard-blocked at submission time** (the API rejects the write):
+
+- Bet status must be `open`.
+- Amount is a whole dollar, $1 minimum (rule 3).
+- Amount ≤ max single bet (rule 4).
+- Placement count for the round ≤ 10 (rule 2 upper bound).
+- Running self-bet total ≤ self-bet cap (rule 5).
+- Running wager total ≤ the applicable budget (rule 6 upper bound — a participant can never *over*-commit).
+
+**Round-completeness rules — can only be evaluated at round close**, because a participant is legitimately incomplete while still placing bets:
+
+- At least 5 placements in the round (rule 2 lower bound).
+- Total wagered equals exactly the required amount (rule 6).
+
+**Intended UX for the completeness rules:** while the round is `open`, the app shows the participant a running total, remaining budget, and a prominent "incomplete" warning (e.g., "You've wagered $23 of $40 — place at least 2 more bets"). The app never silently fixes anything. Admins get a view of non-compliant participants before closing the round so they can chase stragglers, exactly as Pat does today by text.
+
+`⚠️ AWAITING STAKEHOLDER ANSWER (Q3)` — what the *consequence* of closing a round with a non-compliant participant is (void their round? count what they placed? admin discretion?) is Pat's call and is not yet specified.
 
 ---
 
@@ -176,8 +204,56 @@ See `ROADMAP.md` for the phased build plan and acceptance criteria. At a high le
 
 ---
 
-## 11. Open Questions (for later phases)
+## 11. Timeline
 
-- Should bets show running aggregate stake (e.g., "$48 total wagered on Dan Mercer to win") to participants while round is `open`? Could create herd behavior. **Default: no, only show after round closes.**
-- Should the app expose a participant's career P/L across multiple tournaments, or just per-tournament? **Default: per-tournament for v1, career stats in v2.**
-- Should there be a notification when bets are released for Round 2? **Default: no for v1; could add email-via-Supabase-trigger later.**
+- **Tournament:** September 24–27, 2026.
+- **Feature freeze:** ~August 28, 2026 — everything after is testing, bugs, and polish.
+- **Fully wrapped:** September 10, 2026 at the latest (two weeks before tee-off), with a group dry run before then.
+
+Sprint-by-sprint dates live in `ROADMAP.md`.
+
+---
+
+## 12. Open Questions for Stakeholders (Pat / Jake)
+
+Every unresolved spec decision, phrased so a short answer unblocks a sprint. Each has a proposed default — "yes, use the default" is a complete answer. Questions marked **[BLOCKER]** gate Sprint 1 (bet placement).
+
+### Money & betting rules — Pat
+
+| # | Question | Proposed default | Blocks |
+|---|---|---|---|
+| Q1 | **[BLOCKER]** Does the entry fee fund **both betting rounds combined**, or must **each round's** wagers total the full entry fee? ($40 entry: $40 across both rounds, or $40 per round?) | Combined — total across both rounds equals entry fee | Sprint 1 |
+| Q2 | **[BLOCKER]** If combined: is the split between rounds the participant's choice? Can someone wager $0 in Round 2 (subject to the 5-bet minimum)? | Participant's choice, but each round they participate in needs ≥5 bets; must hit exact total by end of Round 2 | Sprint 1 |
+| Q3 | **[BLOCKER]** What happens today when someone misses the 5-bet minimum or doesn't hit the exact total by round close? (Chase them? Void their round? Count what they placed?) | Admin chases before closing; if still short, count what they placed | Sprint 1, 3 |
+| Q4 | **[BLOCKER]** Are the max-single-bet cap ($20 / half-entry) and self-bet cap ($10 / quarter-entry) **per round** or **per tournament**? | Single-bet cap: per placement (always). Self-bet cap: per tournament | Sprint 1 |
+| Q5 | Payout rounding: are Venmo payments made to the cent, or rounded to whole dollars? What should the app display? | Display cents; Pat rounds however he pays | Sprint 6 |
+| Q6 | Confirm push/void semantics: stake is returned and **counts toward** the theoretical total (matches the spreadsheet)? | Yes, stake counts | Sprint 5 |
+| Q7 | If a void drops someone below the 5-bet minimum retroactively, is any adjustment made? | No adjustment — voids happen, life goes on | Sprint 5 |
+
+### Bet menu & tournament ops — Pat / Jake
+
+| # | Question | Proposed default | Blocks |
+|---|---|---|---|
+| Q8 | Roughly how many bets were on the menu per round in 2026? (Sizes the menu UI and the Studio data-entry workflow.) | Assume 15–25 per round | UI polish |
+| Q9 | Confirm round mapping: Round 1 bets resolve on Day 1 (match play) + Day 2 (scramble); Round 2 bets cover Saturday stroke play only? | Yes as stated | — |
+| Q10 | Do "the field" bets exist (e.g., "the field to beat Dan Mercer")? How should they be labeled on the menu? | Yes; displayed like any bet, no special subject rows | Sprint 2 |
+
+### Visibility & identity — Jake
+
+| # | Question | Proposed default | Blocks |
+|---|---|---|---|
+| Q11 | While a round is open, hide the aggregate money on each bet (avoids herd behavior)? | Hide until close | Sprint 2 |
+| Q12 | After a round closes, do participants see everyone's **individual amounts**, or just **who bet on what**? | Full amounts visible after close | Sprint 3 |
+| Q13 | Display names: set by admins in Studio, or user-editable in the app? (Currently defaults to the email address — someone must fix each one by hand.) | Admin-set in Studio for v1 | Sprint 0 |
+| Q14 | Any non-playing bettors expected in 2026? (They're exempt from the self-bet rule.) | Support them; expect 0–2 | — |
+
+### Leaderboard — Pat
+
+| # | Question | Proposed default | Blocks |
+|---|---|---|---|
+| Q15 | Will you mirror the scoring workbook to Google Sheets? Which tabs/columns should the app's leaderboard show, and how often will you update during tournament days? | One "Leaderboard" tab: player, thru, score, position; updated after each day | Sprint 7 |
+
+### Defaults already taken (not blocking — speak up only to change)
+
+- No career P/L across tournaments in v1 — per-tournament only.
+- No notifications when Round 2 bets are released — Pat texts the group chat, as today.
