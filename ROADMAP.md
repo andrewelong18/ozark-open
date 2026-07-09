@@ -66,9 +66,12 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 **Target:** week of Jul 13 · **Blockers:** none — do this first.
 
 - [ ] Confirm the Vercel project exists, is connected to the repo, and auto-deploys `main`; create it if not.
-- [ ] Confirm the production Supabase project exists; apply all three migrations (`npx supabase db push` or SQL editor).
+- [ ] Confirm the production Supabase project exists and **is not paused** (free tier pauses after ~1 week idle); apply all three migrations (`npx supabase db push` or SQL editor).
 - [ ] Set env vars in Vercel (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
-- [ ] Log in via magic link on a phone (real-world email deliverability check).
+- [ ] **Configure custom SMTP (Resend free tier) for Supabase Auth emails.** The built-in email service is dev-only and rate-limited to a few messages/hour — it will drop magic links on tournament morning.
+- [ ] Extend session/JWT duration in Supabase Auth settings so a login during dry-run week survives through Sept 27.
+- [ ] Decide: upgrade to Supabase Pro ($25) for September (backups + no pausing), or accept manual mitigation.
+- [ ] Log in via magic link on a phone (real-world email deliverability check through Resend).
 - [ ] Promote Andrew, Pat, Jake, Steve to `is_admin = true` in Studio.
 - [ ] Fix the four admins' `display_name` values in Studio (they default to email addresses) — per PRD Q13 default.
 - [ ] Seed 3–5 sample bets in Studio; confirm they render on `/bets` grouped correctly.
@@ -83,9 +86,11 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 **Goal:** the `bet_placements` table exists with correct RLS, and every §7 rule is encoded server-side.
 **Target:** mid July · **Blockers:** ⚠️ PRD Q1–Q4 (budget semantics — do not guess these).
 
-- [ ] Migration: `bet_placements` per `DATA_MODEL.md` §3.7, **plus** `requires_admin_review boolean NOT NULL DEFAULT false`.
-- [ ] RLS: users insert/update/delete own rows while the bet is `open`; others' placements visible only once the bet is `closed`/`resolved`; admins read all.
-- [ ] `lib/validation.ts`: pure functions for every rule in PRD §7 + §8.1, parameterized by the `tournaments` row (no hardcoded limits). Encode the Q1–Q4 answers.
+- [ ] Migration: `bet_placements` per `DATA_MODEL.md` §3.7, including `requires_admin_review boolean NOT NULL DEFAULT false`, `odds_at_placement int NOT NULL` (odds snapshot — PRD §7.1), and `deleted_at timestamptz` (soft delete — placements are never hard-deleted).
+- [ ] Same migration: add CHECK constraint on `bets`: `(status = 'resolved') = (outcome IS NOT NULL)` — makes the two Studio fat-fingers impossible (PRD §8).
+- [ ] Same migration: drop the hardcoded `entry_fee BETWEEN 20 AND 50` CHECK on `tournament_participants` (keep `> 0`); bounds move to validation per the rules-are-data convention.
+- [ ] RLS: users insert/update/soft-delete own rows while the bet is `open`; others' placements visible only once the bet is `closed`/`resolved`; admins read all; all reads filter `deleted_at IS NULL`.
+- [ ] `lib/validation.ts`: pure functions for every rule in PRD §7 + §8.1, parameterized by the `tournaments` row (no hardcoded limits). Payout-relevant reads use `odds_at_placement`, not `bets.american_odds`. Encode the Q1–Q4 answers.
 - [ ] Unit-test the validation functions against the worked examples in PRD §5/§7 (including the $40-entry and $20-entry examples).
 
 **Done when:** validation tests pass and the migration applies cleanly to prod.
@@ -97,7 +102,7 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 **Goal:** a participant can place, edit, and remove a bet from the menu.
 **Target:** mid–late July · **Blockers:** Sprint 1 · PRD Q10, Q11.
 
-- [ ] `app/api/placements/route.ts`: POST/PATCH/DELETE, calling `lib/validation.ts` before any write; reject non-participants and closed bets.
+- [ ] `app/api/placements/route.ts`: POST/PATCH/DELETE, calling `lib/validation.ts` before any write; reject non-participants and closed bets. Every write snapshots the bet's current odds into `odds_at_placement`; DELETE sets `deleted_at` (soft delete).
 - [ ] Self-bet flagging: on write, if the user is in `bet_subjects` for the bet, set `requires_admin_review = true`.
 - [ ] Inline amount input on `/bets` for each `open` bet (participant's own placement shown pre-filled if it exists).
 - [ ] Clear error surface: rule violations come back as human-readable messages ("Max single bet is $20 for your $40 entry").
@@ -112,6 +117,8 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 **Target:** late July · **Blockers:** Sprint 2 · PRD Q3, Q12.
 
 - [ ] "My Bets" view: current placements grouped by round, running total, remaining budget.
+- [ ] Personalized rules card: "Your entry: $40 · max single bet: $20 · max on yourself: $10 · 3 of 5 minimum bets placed" — computed from the `tournaments` row, kills the questions Pat gets by text today.
+- [ ] Pool total on the dashboard (sum of participant entry fees).
 - [ ] Compliance banner per PRD §8.1: "incomplete" warning while under the 5-bet minimum or off the exact total.
 - [ ] Admin compliance view (can be a simple page or a Studio SQL snippet documented in README): who is non-compliant per round, encoding the Q3 answer.
 - [ ] Other participants' placements become visible on bet close per the Q12 answer.
@@ -139,9 +146,10 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 **Goal:** per-bet and total theoretical payouts, matching what Pat would compute by hand.
 **Target:** early–mid August · **Blockers:** Sprint 4 · PRD Q6, Q7.
 
-- [ ] Migration: `placement_payouts_view` exactly as defined in `DATA_MODEL.md` §4.
+- [ ] Migration: `placement_payouts_view` as defined in `DATA_MODEL.md` §4 — computes from `odds_at_placement` (not `bets.american_odds`) and excludes soft-deleted rows.
 - [ ] "My Bets": theoretical payout column per resolved placement + "Total theoretical payout" summary.
-- [ ] Admin "view all" page: everyone's placements and payouts in one table (replicates the spreadsheet's `View` sheet).
+- [ ] **Participant-facing "All Bets" page:** everyone's placements on closed/resolved bets — who bet what, for how much, and how it's going. This is the social heart of the pool (PRD §9); distinct from the admin view below.
+- [ ] Admin "view all" page: everyone's placements and payouts in one table, including still-open rounds and self-bet review flags (replicates the spreadsheet's `View` sheet).
 - [ ] Cross-check: reproduce Jake Kohne's $21.87 from the 2026 spreadsheet example (PRD §5).
 
 **Done when:** the numbers match Pat's hand-math for any user.
@@ -183,7 +191,8 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 - [ ] Mobile pass on every page — the tournament happens on phones.
 - [ ] **Group dry run:** recruit 5+ real participants, run a full fake betting round (open → place → close → resolve → payouts) start to finish.
 - [ ] Fix everything the dry run surfaces.
-- [ ] Pre-tournament checklist doc: what admins do the week of, day before, and each morning of the tournament.
+- [ ] Pre-tournament checklist doc: what admins do the week of, day before, and each morning of the tournament. Must include: verify the Supabase project is awake (free tier pauses after ~1 week idle), verify magic-link email works end-to-end, and run a DB export.
+- [ ] Data safety: CSV/`pg_dump` export **before Round 1 opens** and **after final payouts** — free tier has no automated backups and this is money data.
 - [ ] Optional stretch (only if time): bet aggregate stats after close ("$48 wagered on Dan Mercer to win").
 
 **Done when:** the dry run completes without an admin needing to touch code or ask Andrew a question.

@@ -120,6 +120,8 @@ sequenceDiagram
 ```
 
 **Implementation notes:**
+- **Magic-link emails must go through custom SMTP (Resend, free tier).** Supabase's built-in email service is for development only — it's rate-limited to a handful of messages per hour, which guarantees dropped logins when 24 people hit the app on tournament morning. Configured in Sprint 0.
+- **Session duration is extended** (Supabase Auth settings) so a login during dry-run week survives through the tournament — the magic link is a fallback, not a daily ritual.
 - First time a new email logs in, Supabase auto-creates an `auth.users` row. We sync this to our `public.users` table via a database trigger.
 - New users default to `is_admin = false`. To promote someone to admin, edit the `is_admin` column in Supabase Studio.
 - Sessions persist via HTTP-only cookies (handled by Supabase client SDK).
@@ -185,5 +187,7 @@ Why a view: the payout for any user is fully determined by their placements and 
 - **A queue or background job system.** All work is request/response; there are no async jobs.
 - **A separate CMS (Sanity, Contentful, etc.).** Supabase Studio is the CMS.
 - **Caching layer.** Postgres handles 24 users without breaking a sweat. If we ever need it, Vercel has built-in Edge caching.
-- **Custom email server.** Supabase Auth sends magic-link emails for free.
+- **Custom email server.** Supabase Auth handles the sending; only the SMTP relay is external (Resend free tier — see §3).
 - **CI/CD pipeline.** Vercel rebuilds and deploys on every `git push`.
+- **Real-time updates or websockets.** A page refresh is fine for 24 users.
+- **Live odds movement / tote-board mechanics.** Odds are hand-set by admins and snapshotted per placement (PRD §7.1); the pool is pari-mutuel *at settlement*, not a live tote. Parlays, in-play betting, and cash-out are equally out — permanently.

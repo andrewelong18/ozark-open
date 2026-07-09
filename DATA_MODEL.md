@@ -9,7 +9,7 @@ The database schema for the Ozark Open Sportsbook. This is the most important fi
 1. **Generic bets, not hardcoded ones.** The seven bet categories from the original Sportsbook are stored as data, not code. Adding a new category requires inserting a row into `bet_categories`, not editing source files.
 2. **Evergreen identity.** A user has one record forever. Tournaments are separate entities. A user joins a tournament via a join table.
 3. **Outcomes attach to bets, not placements.** A bet hits or misses once, globally. We don't store hit/miss per-placement.
-4. **Theoretical payout is computed, never stored.** It's a function of `placement.amount`, `bet.american_odds`, and `bet.outcome`. A Postgres view derives it on demand.
+4. **Theoretical payout is computed, never stored.** It's a function of `placement.amount`, `placement.odds_at_placement`, and `bet.outcome`. A Postgres view derives it on demand. (Odds are snapshotted onto the placement at write time — see §3.7 and PRD §7.1.)
 5. **Constraints in the right place.** Schema enforces things that are always true (a placement must have positive amount). App code enforces things that are contextual (you can't have more than 10 placements in a round).
 
 ---
@@ -85,6 +85,9 @@ erDiagram
         uuid user_id FK
         uuid bet_id FK
         int amount
+        int odds_at_placement
+        boolean requires_admin_review
+        timestamptz deleted_at
         timestamptz created_at
         timestamptz updated_at
     }
@@ -190,6 +193,8 @@ The bet menu. One row per bet number (#1, #2, …) per tournament.
 
 **Constraint:** UNIQUE (`tournament_id`, `bet_number`) — bet numbers don't repeat within a tournament.
 
+**Constraint (added in Sprint 1):** CHECK `(status = 'resolved') = (outcome IS NOT NULL)` — a bet is resolved if and only if it has an outcome. Admins edit these columns directly in Studio; the database refuses the two plausible fat-fingers (outcome on an open bet, resolved with no outcome).
+
 **Why no `fractional_odds` column:** computed from `american_odds` at render time. Single source of truth.
 
 **Why no `implied_probability` column:** also computed from `american_odds`. Single source of truth.
@@ -226,11 +231,13 @@ Each individual wager: one row per (user, bet) pair where money was placed.
 | `user_id` | `uuid` NOT NULL FK → `users.id` | The bettor |
 | `bet_id` | `uuid` NOT NULL FK → `bets.id` | The bet being placed |
 | `amount` | `int` NOT NULL CHECK (`amount > 0`) | Whole dollars, $1 minimum |
+| `odds_at_placement` | `int` NOT NULL | Snapshot of `bets.american_odds` at write time. **Payouts compute from this, never from the live bet row** — admins can reprice an open bet without silently changing existing bettors' payouts (PRD §7.1). Added in Sprint 1. |
 | `requires_admin_review` | `boolean` NOT NULL DEFAULT `false` | Set on write when the bettor appears in `bet_subjects` for the bet (self-bet flag, PRD §7). Added in Sprint 1. |
+| `deleted_at` | `timestamptz` | Soft delete — removing a placement sets this instead of deleting the row. Money data keeps its history for dispute resolution. All reads filter `deleted_at IS NULL`. Added in Sprint 1. |
 | `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | |
 | `updated_at` | `timestamptz` NOT NULL DEFAULT `now()` | Updated on edit |
 
-**Constraint:** UNIQUE (`user_id`, `bet_id`) — a user can only have one placement per bet. (Editing the placement updates `amount` rather than creating a second row.)
+**Constraint:** UNIQUE (`user_id`, `bet_id`) — a user can only have one placement per bet. (Editing the placement updates `amount` rather than creating a second row. Re-placing after a soft delete revives the existing row — clears `deleted_at`, updates `amount`, and re-snapshots `odds_at_placement` — so the unique constraint holds.)
 
 **Constraints NOT enforced at the schema level** (these live in app code because they require cross-row checks):
 - Total placements per user per round between 5 and 10.
@@ -247,18 +254,18 @@ A read-only Postgres view that computes each placement's theoretical payout. Def
 ```sql
 CREATE VIEW placement_payouts_view AS
 SELECT
-    p.id              AS placement_id,
+    p.id                 AS placement_id,
     p.user_id,
     p.bet_id,
     p.amount,
     b.outcome,
-    b.american_odds,
+    p.odds_at_placement,
     b.tournament_id,
     CASE
-        WHEN b.outcome = 'hit' AND b.american_odds > 0
-            THEN p.amount + (p.amount * b.american_odds / 100.0)
-        WHEN b.outcome = 'hit' AND b.american_odds < 0
-            THEN p.amount + (p.amount * 100.0 / ABS(b.american_odds))
+        WHEN b.outcome = 'hit' AND p.odds_at_placement > 0
+            THEN p.amount + (p.amount * p.odds_at_placement / 100.0)
+        WHEN b.outcome = 'hit' AND p.odds_at_placement < 0
+            THEN p.amount + (p.amount * 100.0 / ABS(p.odds_at_placement))
         WHEN b.outcome IN ('push', 'void')
             THEN p.amount
         WHEN b.outcome = 'miss'
@@ -266,8 +273,11 @@ SELECT
         ELSE NULL  -- bet not yet resolved
     END AS theoretical_payout
 FROM bet_placements p
-JOIN bets b ON b.id = p.bet_id;
+JOIN bets b ON b.id = p.bet_id
+WHERE p.deleted_at IS NULL;
 ```
+
+Note the view computes from `p.odds_at_placement` (the snapshot taken when the wager was written, PRD §7.1) — never from `b.american_odds`, which an admin may have repriced since — and excludes soft-deleted placements.
 
 The actual-payout proportional split runs in TypeScript at render time, since it requires summing across all users (one query, then arithmetic).
 

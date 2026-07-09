@@ -38,6 +38,7 @@ This works, but it's slow, error-prone, and gives no visibility into bets or sta
 - Public access — **strictly behind login.** No marketing, no SEO, no public landing page.
 - Real-money sportsbook regulatory compliance — this is a private pool among friends, not a commercial operation.
 - New bet *categories* without code changes. The seven existing structures (see §6) are baked in for now. Adding an eighth structure would require a small code change.
+- **Commercial-sportsbook mechanics — asked and answered, permanently out:** parlays, live/in-play betting, cash-out, odds that move with pool weight (this is pari-mutuel *at settlement*, not a live tote board), and real-time page updates (a refresh is fine for 24 users). These are how a weekend project dies; don't reopen them.
 
 ---
 
@@ -127,6 +128,10 @@ These rules come straight from the original Sportsbook memo and must be enforced
 
 **Self-bet detection:** the app will flag bets where the participant appears to be the subject (their name matches a player named in the bet's `subject_player_ids`). Admins manually review flagged bets. Indirect self-bets (e.g., betting on a head-to-head you're in) cannot be reliably auto-detected — final discretion rests with the admin team, as today.
 
+### 7.1 Odds Integrity
+
+**Odds are locked at placement time.** Each placement snapshots the bet's odds into `odds_at_placement` at the moment the wager is written, and payouts are computed from that snapshot — never from the current value on the bet. Admins remain free to reprice a bet in Studio while it's `open` (e.g., odds drifting as Round 1 golf unfolds), but a reprice only affects *future* placements. Without this, editing `american_odds` after money is down would silently change every existing bettor's theoretical payout — the classic sportsbook integrity failure.
+
 ---
 
 ## 8. Lifecycle of a Bet (admin-controlled, not time-based)
@@ -141,6 +146,8 @@ draft → open → closed → resolved
 - `open`: visible to participants; they can place / edit / remove placements.
 - `closed`: visible but no longer editable. Set when admin closes betting before tee-off.
 - `resolved`: outcome (`hit` / `miss` / `push` / `void`) has been recorded. Theoretical payouts are now computed for placements on this bet.
+
+**DB-enforced invariant:** `status = 'resolved'` **if and only if** `outcome IS NOT NULL` (CHECK constraint, added in Sprint 1). Since admins edit these columns directly in Studio, the database itself refuses the two plausible fat-fingers: setting an outcome on a bet that's still open, and marking a bet resolved without recording its outcome.
 
 **There is no scheduled cutoff.** The admin closes Round 1 bets manually before Thursday tee-off. After Day 1 (match play) and Day 2 (scramble), admins enter outcomes for Round 1 bets. Round 2 bets are released ahead of Saturday's stroke-play round, with odds informed by what's already happened.
 
@@ -177,7 +184,9 @@ See `ROADMAP.md` for the phased build plan and acceptance criteria. At a high le
 - As a participant, I can see the active bet menu, grouped by category and round.
 - As a participant, I can place bets totaling exactly my entry fee, respecting all rules in §7.
 - As a participant, I can edit or remove my bets while the round is `open`.
-- As a participant, I can see everyone's bets after the round closes.
+- As a participant, I can see everyone's bets — who bet what, and for how much — on a dedicated page after the round closes. (This is the social heart of the pool; it's a first-class feature, not a side effect of visibility rules.)
+- As a participant, I can see a personalized rules card: my entry fee, my max single bet, my max self-bet, and my progress toward the 5-bet minimum and exact total.
+- As a participant, I can see the current pool total on the dashboard.
 - As a participant, I can see the outcomes of my bets after each day.
 - As a participant, I can see my running theoretical payout and (after the tournament) my final actual share.
 - As a participant, I can see the leaderboard pulled from the scoring workbook.
@@ -194,7 +203,9 @@ See `ROADMAP.md` for the phased build plan and acceptance criteria. At a high le
 
 ## 10. Out-of-Scope Decisions Already Made
 
-- **Authentication:** magic-link email via Supabase Auth. No shared passwords. No social SSO.
+- **Authentication:** magic-link email via Supabase Auth. No shared passwords. No social SSO. **Email delivery goes through custom SMTP (Resend free tier)** — Supabase's built-in email service is rate-limited to a handful of messages per hour and is for development only; 24 people requesting magic links on tournament morning would fail. Session duration is extended so anyone who logs in during dry-run week stays logged in through the tournament.
+- **Odds integrity:** odds are snapshotted onto each placement at write time (`odds_at_placement`); payouts use the snapshot. See §7.1.
+- **Audit trail:** placements are soft-deleted (`deleted_at` timestamp), never hard-deleted. When there's a payout dispute, the history exists.
 - **Identity:** evergreen accounts across years. One user, many tournaments.
 - **Visibility:** strictly behind login.
 - **Admins:** Pat, Jake, Steve, Andrew. Stored as a role flag on the user record.
@@ -209,6 +220,11 @@ See `ROADMAP.md` for the phased build plan and acceptance criteria. At a high le
 - **Tournament:** September 24–27, 2026.
 - **Feature freeze:** ~August 28, 2026 — everything after is testing, bugs, and polish.
 - **Fully wrapped:** September 10, 2026 at the latest (two weeks before tee-off), with a group dry run before then.
+
+**Operational risks to manage around the timeline:**
+
+- **Supabase free-tier projects pause after ~1 week of inactivity.** A paused project means login is down. The pre-tournament checklist verifies the project is awake (or we spend $25 on Pro for September and skip the worry).
+- **Free tier has no automated backups — and this is money data.** A CSV/`pg_dump` export runs before Round 1 opens and after final payouts, minimum.
 
 Sprint-by-sprint dates live in `ROADMAP.md`.
 
