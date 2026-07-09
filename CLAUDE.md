@@ -1,49 +1,46 @@
 # Ozark Open Sportsbook — Context for Claude Code
 
-Private fantasy-golf betting platform for the annual Ozark Open tournament. Pari-mutuel pool — no house, no rake, no profit. ~24 participants. Strictly behind login.
+Private fantasy-golf betting platform for the annual Ozark Open (Sept 24–27, 2026; app wrapped by Sept 10). Pari-mutuel pool — no house, no rake, no profit. ~24 participants, strictly behind login. Vibe-coded weekend project: prefer the simplest thing that works; no abstraction layers or future-proofing the docs don't ask for.
 
-## Read These First
+## Stack (decided — don't relitigate; rationale in ARCHITECTURE.md §2)
 
-Before proposing or writing code, load the foundation docs in this order:
+Next.js 15 (App Router) + TypeScript · Supabase (Postgres, magic-link auth, RLS) · Vercel (auto-deploy from `main`) · Tailwind + shadcn/ui · Google Sheets API (read-only leaderboard)
 
-1. **[README.md](README.md)** — entry point, tech stack, local setup, deployment
-2. **[PRD.md](PRD.md)** — what we're building and why; pari-mutuel math; the seven bet categories; the six bet-submission rules; user stories
-3. **[ARCHITECTURE.md](ARCHITECTURE.md)** — system diagram; tech-choice rationale; auth flow; RLS strategy; where the math lives
-4. **[DATA_MODEL.md](DATA_MODEL.md)** — every table column-by-column; the payout view; RLS policy summary; migration strategy
-5. **[ROADMAP.md](ROADMAP.md)** — phased build plan; we're currently at Phase 0
+## Doc Map — read only what the task needs
 
-## Stack (decided — don't relitigate)
+| Doc | Read when |
+|---|---|
+| `ROADMAP.md` | **Always, for sprint work.** Status table + numbered sprint backlog. The single source of "where are we." |
+| `PRD.md` | Bet rules (§7, §8.1), pari-mutuel math (§5), lifecycle (§8), resolved stakeholder decisions (§12). |
+| `DATA_MODEL.md` | Touching schema, migrations, RLS, or the payout view. |
+| `ARCHITECTURE.md` | Auth flow, RLS strategy, where the math lives. |
+| `README.md` | Local setup, deploy, the admin Studio runbook. |
 
-- **Framework**: Next.js 14+ (App Router), TypeScript
-- **DB + Auth**: Supabase (Postgres, magic-link email, RLS)
-- **Hosting**: Vercel (auto-deploy from `main`)
-- **Styling**: Tailwind CSS + shadcn/ui
-- **Leaderboard source**: Google Sheets API (read-only, Phase 8)
+Do **not** re-read all foundation docs by default — each sprint in `ROADMAP.md` cites the sections it depends on; read those and start.
 
-Rationale for each choice is in `ARCHITECTURE.md` §2. If asked to swap one, push back and point at that section first.
+## Sprint Workflow ("start sprint N")
 
-## Project-Specific Conventions
+1. **Plan.** Read the Sprint N section of `ROADMAP.md` plus only the PRD/DATA_MODEL sections it cites. Verify the sprint's blockers are cleared and the prior sprint's "Done when" holds if it's a dependency. Plan exactly what the sprint's checkboxes list — no scope creep; anything extra becomes a GitHub issue, not work.
+2. **Build.** One commit per checkbox-sized task, in checkbox order where dependencies allow. Schema changes only via new files in `supabase/migrations/`.
+3. **Verify.** The sprint's **"Done when"** line is the acceptance test. Run it (or the closest local approximation — `npm run build`, unit tests, manual flow) before claiming done. Report failures plainly.
+4. **Ship & update status — same commit series, never skipped.** Check off completed tasks in `ROADMAP.md`, flip the phase row in the Status Summary (🔲 → 🔶 → ✅) with the date, and adjust target dates if the schedule moved. `ROADMAP.md` must reflect reality the moment a sprint ships.
+5. **Log leftovers as GitHub issues** — never as chat notes or code TODOs:
+   ```
+   gh issue create -R riversteve/ozark-open --title "Sprint N: <thing>" --body "<context + exact steps>"
+   ```
+   File one issue per item for: bugs found but not fixed, manual steps a human must do outside the repo (Supabase Studio data entry, Vercel/Supabase dashboard config, Resend setup, DNS, asking Pat/Jake something), and out-of-scope discoveries. Title prefix `Sprint N:`; body must be self-contained. *(If Issues are still disabled on `riversteve/ozark-open`, file against `-R andrewelong18/ozark-open` and say so in the body.)*
 
-- **Schema changes go through SQL files in `supabase/migrations/`.** Never edit schema in Supabase Studio — only data. Schema in Studio breaks prod/local parity.
-- **Supabase Studio is the admin "CMS".** No custom admin UI for v1. Adding bets, marking outcomes, promoting users to admin = all done in Studio's table editor.
-- **Bet validation runs server-side** in `lib/validation.ts`, called from API routes. Client-side checks are UX, not security.
-- **Theoretical payouts come from a Postgres view** (`placement_payouts_view`, see DATA_MODEL.md §4). The pari-mutuel proportional split runs in TypeScript at render (`lib/payouts.ts`).
-- **Tournament rule parameters live on the `tournaments` row**, not in code. Entry-fee bounds, max single bet, self-bet caps — all data, not constants. So the 2026 rules are preserved exactly even if 2027 changes them.
-- **The seven bet rules from PRD §7 are sacred.** They come from the original Sportsbook memo. Don't relax, reorder, or "simplify" them without asking.
-- **Self-bet detection** via `bet_subjects` join table; flagged placements get `requires_admin_review = true` for manual approval. Indirect self-bets aren't auto-detectable — that's by design.
+## Project Conventions
 
-## Out of Scope (don't propose these)
+- **Migrations only.** Schema changes are SQL files in `supabase/migrations/`; Supabase Studio edits data, never schema.
+- **Studio is the admin CMS.** No custom admin UI in v1.
+- **Validation is server-side** in `lib/validation.ts`, called from API routes. Client checks are UX, not security.
+- **Payout math:** `placement_payouts_view` computes theoretical payouts **from `odds_at_placement`** (snapshotted at write — never the live bet odds); `lib/payouts.ts` does the proportional split at render.
+- **Rule parameters live on the `tournaments` row** — never hardcode entry-fee bounds, bet counts, or caps.
+- **Placements are soft-deleted** (`deleted_at`) and odds-snapshotted; money rows keep their history.
+- **The seven bet rules (PRD §7) and the §12 decision log are settled.** Don't relax, reorder, or reinterpret them without asking.
+- **Docs beat code.** When they disagree, flag the drift — don't silently align to the code.
 
-- Tournament scoring, skins, leaderboard math — lives in the Excel workbook (mirrored to Sheets, read-only)
-- Payment processing — Venmo and cash, handled outside the app
-- Public access, marketing pages, SEO — private app, behind login only
-- Custom in-app admin UI — Supabase Studio is the admin UI
-- Notifications, email digests, push notifications — out for v1
-- Multi-tenancy — one pool for one group
-- New bet *categories* without code changes — the seven `resolution_type` values are baked in by design
+## Out of Scope (don't propose)
 
-## Working Style
-
-- This is a vibe-coded weekend project, not an enterprise app. Prefer the simplest thing that works.
-- Don't add abstraction layers, factories, or "future-proofing" the docs don't ask for.
-- When the docs and the code disagree, the docs are the source of truth — flag the drift, don't silently align to the code.
+Scoring/skins/leaderboard math (stays in the Excel workbook) · payments (Venmo, out of band) · public access, SEO · custom admin UI · notifications · multi-tenancy · parlays, live odds, cash-out, real-time updates · new `resolution_type` values without a code change (by design)

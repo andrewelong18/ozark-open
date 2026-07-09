@@ -71,6 +71,7 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 - [ ] **Configure custom SMTP (Resend free tier) for Supabase Auth emails.** The built-in email service is dev-only and rate-limited to a few messages/hour — it will drop magic links on tournament morning.
 - [ ] Extend session/JWT duration in Supabase Auth settings so a login during dry-run week survives through Sept 27.
 - [ ] Decide: upgrade to Supabase Pro ($25) for September (backups + no pausing), or accept manual mitigation.
+- [ ] Ask Steve to enable Issues on `riversteve/ozark-open` (Settings → General → Features → Issues; disabled by default on forks) — the sprint workflow logs bugs and manual steps there.
 - [ ] Log in via magic link on a phone (real-world email deliverability check through Resend).
 - [ ] Promote Andrew, Pat, Jake, Steve to `is_admin = true` in Studio.
 - [ ] Fix the four admins' `display_name` values in Studio (they default to email addresses) — admin-set per PRD §12 Q13.

@@ -17,6 +17,18 @@ Everything else — tournament scoring, skins, the leaderboard math — stays in
 
 ---
 
+## Current Status
+
+**Target: fully wrapped by September 10, 2026** (tournament is September 24–27).
+
+| Built (code complete) | Up next |
+|---|---|
+| Auth (magic link), tournament/participant setup, bet menu with odds display, all migrations through `bets`/`bet_subjects` | Sprint 0: verify production deploy · Sprints 1–3: bet placement & validation · Sprints 4–8: outcomes, payouts, leaderboard, dry run |
+
+`ROADMAP.md` is the live sprint tracker — status table, numbered sprints with checkboxes, blockers, and target dates. All product decisions are settled and logged in `PRD.md` §12; there are no open spec questions.
+
+---
+
 ## Tech Stack
 
 | Layer | Choice | Why |
@@ -35,17 +47,20 @@ See `ARCHITECTURE.md` for the diagram and deeper rationale.
 ## Repository Layout
 
 ```
-ozark-open-sportsbook/
+ozark-open/
 ├── README.md              ← you are here
-├── PRD.md                 ← product requirements: what & why
+├── PRD.md                 ← product requirements; bet rules; §12 decision log
 ├── ARCHITECTURE.md        ← how the pieces fit together
-├── DATA_MODEL.md          ← database schema in detail
-├── ROADMAP.md             ← phased build plan
-├── app/                   ← Next.js App Router pages
-├── components/            ← React components
-├── lib/                   ← Supabase client, helper functions, payout math
+├── DATA_MODEL.md          ← database schema in detail; payout view
+├── ROADMAP.md             ← phase roadmap + live sprint tracker
+├── CLAUDE.md              ← instructions for AI-assisted sprint work
+├── middleware.ts          ← session refresh + route protection
+├── app/                   ← Next.js App Router pages (login, dashboard, bets, auth)
+├── components/            ← header + shadcn/ui components
+├── lib/                   ← Supabase clients, odds math (validation & payouts to come)
 ├── supabase/
-│   └── migrations/        ← SQL migration files
+│   └── migrations/        ← SQL migration files (the only way schema changes)
+├── docs/superpowers/      ← per-phase design specs and implementation plans
 ├── public/                ← static assets
 └── .env.local.example     ← environment variable template
 ```
@@ -62,6 +77,19 @@ ozark-open-sportsbook/
 4. Run database migrations: `npx supabase db push` (or run the SQL files in `supabase/migrations/` manually in the Supabase SQL editor).
 5. Start the dev server: `npm run dev`
 6. Visit http://localhost:3000
+
+---
+
+## Development Workflow (sprint-driven, AI-assisted)
+
+Work happens in the numbered sprints defined in `ROADMAP.md`, built with Claude Code:
+
+1. Tell Claude **"start sprint N"** (in plan mode). It reads the sprint's tasks and blockers, plans, and waits for approval.
+2. Accept the plan; it builds task-by-task with the sprint's **"Done when"** line as the acceptance test.
+3. After shipping, it updates `ROADMAP.md` itself — checkboxes, status table, dates — so the tracker always matches reality.
+4. Anything that can't be finished in code (bugs to fix later, manual steps in Supabase Studio / Vercel / Resend, questions for Pat or Jake) gets logged as a **GitHub issue** titled `Sprint N: …` — nothing lives only in chat history.
+
+The full protocol Claude follows is in `CLAUDE.md`.
 
 ---
 
