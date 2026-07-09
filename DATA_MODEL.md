@@ -239,11 +239,11 @@ Each individual wager: one row per (user, bet) pair where money was placed.
 
 **Constraint:** UNIQUE (`user_id`, `bet_id`) — a user can only have one placement per bet. (Editing the placement updates `amount` rather than creating a second row. Re-placing after a soft delete revives the existing row — clears `deleted_at`, updates `amount`, and re-snapshots `odds_at_placement` — so the unique constraint holds.)
 
-**Constraints NOT enforced at the schema level** (these live in app code because they require cross-row checks):
-- Total placements per user per round between 5 and 10.
-- Sum of placements per user per round ≤ entry fee for that tournament.
-- Single placement amount ≤ `min(max_single_bet_pct × entry_fee, max_single_bet_cap)`.
-- Sum of self-bet placements ≤ `min(max_self_bet_pct × entry_fee, max_self_bet_cap)`.
+**Constraints NOT enforced at the schema level** (these live in app code because they require cross-row checks; semantics per PRD §7/§12):
+- Between 5 and 10 placements per user in any round they bet in.
+- Sum of placements **across both rounds** ≤ entry fee; must equal it exactly by Round 2 close ("$40 across the board" — the entry fee funds the whole tournament, not each round).
+- Single placement amount ≤ `min(max_single_bet_pct × entry_fee, max_single_bet_cap)` — per placement, either round.
+- Sum of self-bet placements **across the tournament** ≤ `min(max_self_bet_pct × entry_fee, max_self_bet_cap)`.
 
 ---
 
