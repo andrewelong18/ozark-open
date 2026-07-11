@@ -2,43 +2,334 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* ===================================================================
+   Ozark Open Sportsbook — token layer.
 
+   Two tiers, per the design system:
+     1. Raw scale   — literal brand ramps (--indigo-*, --gold-*, --green-*,
+                      --red-*, --amber-*, --ink-*). Hex values are canonical
+                      and never edited casually.
+     2. Semantic    — role aliases that reference the raw scale. shadcn's
+                      names (--background, --primary, --accent, --border,
+                      --ring…) are MAPPED here to DS values so the existing
+                      shadcn/ui primitives keep working; the sportsbook's
+                      domain roles (outcome triad, odds polarity, money P/L,
+                      compliance) are added as NEW tokens.
+
+   Single light theme — tuned for outdoor/sunlight readability (WCAG AA).
+   There is intentionally no dark theme.
+   =================================================================== */
+
+:root {
+  /* ---------- Raw: Indigo (brand primary) — logo #312F8C ---------- */
+  --indigo-950: #14133a;
+  --indigo-900: #1c1b52;
+  --indigo-800: #262573;
+  --indigo-700: #312f8c; /* BRAND PRIMARY */
+  --indigo-600: #3f3da6;
+  --indigo-500: #524fc0;
+  --indigo-400: #7d7ad6;
+  --indigo-300: #a6a4e6;
+  --indigo-200: #cbc9f2;
+  --indigo-100: #e6e5fa;
+  --indigo-50: #f2f1fc;
+
+  /* ---------- Raw: Gold (clubhouse accent) — logo #FDDA00 ---------- */
+  --gold-700: #a07f00;
+  --gold-600: #c9a300; /* AA-safe gold text on light */
+  --gold-500: #e6c200;
+  --gold-400: #fdda00; /* BRAND GOLD */
+  --gold-300: #ffe74d;
+  --gold-200: #fff29c;
+  --gold-100: #fff8cf;
+
+  /* ---------- Raw: Fairway green (wins / open / positive) ---------- */
+  --green-800: #0f5c38;
+  --green-700: #157347;
+  --green-600: #1a8a54; /* WIN base */
+  --green-500: #23a566;
+  --green-400: #4cc088;
+  --green-200: #b6e6cf;
+  --green-100: #dcf4e8;
+  --green-50: #edf9f2;
+
+  /* ---------- Raw: Flag red (losses / errors / negative) ---------- */
+  --red-800: #8f2019;
+  --red-700: #b02a22;
+  --red-600: #cc352b; /* LOSS base */
+  --red-500: #e0483d;
+  --red-200: #f6c9c5;
+  --red-100: #fbe1de;
+  --red-50: #fdeeec;
+
+  /* ---------- Raw: Amber (caution / compliance / incomplete) ---------- */
+  --amber-700: #a5620a;
+  --amber-600: #c47a12;
+  --amber-500: #e0951f;
+  --amber-100: #fcefd6;
+  --amber-50: #fdf6e9;
+
+  /* ---------- Raw: Warm neutrals (clubhouse cream + ink) ---------- */
+  --ink-950: #16172a;
+  --ink-900: #1e1f33;
+  --ink-800: #2b2c40;
+  --ink-700: #3d3e52;
+  --ink-600: #565769;
+  --ink-500: #6f7082; /* muted text — AA on white */
+  --ink-400: #9a9baa;
+  --ink-300: #c3c3ce;
+  --ink-200: #e0dfd7; /* warm hairline */
+  --ink-150: #eceae1;
+  --ink-100: #f4f2ea; /* cream sunken */
+  --ink-50: #faf8f2; /* cream page */
+  --white: #ffffff;
+
+  /* ================= SEMANTIC: shadcn roles (mapped to DS) ================= */
+
+  --background: var(--ink-50); /* warm cream page */
+  --foreground: var(--ink-950);
+  --card: var(--white);
+  --card-foreground: var(--ink-950);
+  --popover: var(--white);
+  --popover-foreground: var(--ink-950);
+
+  --primary: var(--indigo-700);
+  --primary-foreground: var(--white);
+  --secondary: var(--ink-100);
+  --secondary-foreground: var(--ink-800);
+  --muted: var(--ink-100);
+  --muted-foreground: var(--ink-500);
+
+  /* shadcn --accent is the NEUTRAL hover-wash (ghost/outline hover, menu
+     highlight). Kept neutral (warm cream) so those behaviors stay calm.
+     Brand gold lives in the --accent-gold-* tokens below, not here. */
+  --accent: var(--ink-100);
+  --accent-foreground: var(--ink-800);
+
+  --destructive: var(--red-600);
+  --border: var(--ink-200);
+  --input: var(--ink-200);
+  --ring: var(--indigo-500);
+
+  --radius: 0.625rem; /* 10px — matches DS --radius-md */
+
+  /* ================= SEMANTIC: brand roles ================= */
+
+  --primary-hover: var(--indigo-800);
+  --primary-active: var(--indigo-900);
+  --text-on-dark: var(--ink-50);
+
+  /* Rationed brand gold — the "one gold moment per screen" CTA / feature. */
+  --accent-gold: var(--gold-400);
+  --accent-gold-hover: var(--gold-500);
+  --accent-gold-strong: var(--gold-600);
+  --accent-gold-foreground: var(--indigo-900);
+
+  /* Surfaces & structural text */
+  --surface-card: var(--white);
+  --surface-sunken: var(--ink-100);
+  --surface-inverse: var(--indigo-700);
+  --surface-inverse-2: var(--indigo-900);
+  --text-strong: var(--ink-950);
+  --text-body: var(--ink-800);
+  --text-muted: var(--ink-500);
+  --border-strong: var(--ink-300);
+
+  /* ================= SEMANTIC: sportsbook domain ================= */
+
+  /* Outcome triad — hit / miss / push+void */
+  --win: var(--green-600);
+  --win-strong: var(--green-800);
+  --win-surface: var(--green-50);
+  --win-border: var(--green-200);
+  --loss: var(--red-600);
+  --loss-strong: var(--red-800);
+  --loss-surface: var(--red-50);
+  --loss-border: var(--red-200);
+  --neutral: var(--ink-500);
+  --neutral-surface: var(--ink-100);
+  --neutral-border: var(--ink-200);
+
+  /* Status hues — open / closed / resolved */
+  --status-open: var(--green-700);
+  --status-open-surface: var(--green-50);
+  --status-open-border: var(--green-200);
+  --status-closed: var(--ink-600);
+  --status-closed-surface: var(--ink-100);
+  --status-closed-border: var(--ink-200);
+  --status-resolved: var(--indigo-600);
+  --status-resolved-surface: var(--indigo-50);
+  --status-resolved-border: var(--indigo-100);
+
+  /* Odds polarity */
+  --odds-positive: var(--green-700);
+  --odds-positive-surface: var(--green-50);
+  --odds-negative: var(--ink-800);
+  --odds-negative-surface: var(--ink-100);
+
+  /* Money P/L (default + lightened for dark/indigo surfaces) */
+  --money-up: var(--green-700);
+  --money-down: var(--red-600);
+  --money-flat: var(--ink-600);
+  --money-up-on-dark: #56d996;
+  --money-down-on-dark: #ff9b8f;
+
+  /* Caution / compliance */
+  --caution: var(--amber-600);
+  --caution-strong: var(--amber-700);
+  --caution-surface: var(--amber-50);
+  --caution-border: #f3ddb0;
+
+  /* Special-purpose shadows (the xs/sm/md/lg scale is defined in @theme below).
+     Used via arbitrary values, e.g. shadow-[var(--shadow-gold)]. */
+  --shadow-focus: 0 0 0 3px rgba(82, 79, 192, 0.35);
+  --shadow-gold: 0 0 0 3px rgba(253, 218, 0, 0.4);
+
+  /* Motion — subtle; confirmation moments only */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 260ms;
+}
+
+/* ===================================================================
+   Tailwind theme bindings. Semantic + curated raw tokens become
+   utilities (bg-primary, text-win, border-status-open-border, font-display,
+   shadow-md…). Brand indigo/gold ramps are exposed for washes and steps;
+   green/red/amber flow through the win/loss/caution semantics instead.
+   =================================================================== */
 @theme inline {
+  /* Fonts (families supplied by next/font in app/layout.tsx) */
+  --font-sans: var(--font-montserrat);
+  --font-display: var(--font-azalea);
+  --font-heading: var(--font-azalea);
+  --font-mono: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+
+  /* shadcn roles */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Brand: indigo ramp (intentional override of Tailwind default indigo) */
+  --color-indigo-50: var(--indigo-50);
+  --color-indigo-100: var(--indigo-100);
+  --color-indigo-200: var(--indigo-200);
+  --color-indigo-300: var(--indigo-300);
+  --color-indigo-400: var(--indigo-400);
+  --color-indigo-500: var(--indigo-500);
+  --color-indigo-600: var(--indigo-600);
+  --color-indigo-700: var(--indigo-700);
+  --color-indigo-800: var(--indigo-800);
+  --color-indigo-900: var(--indigo-900);
+  --color-indigo-950: var(--indigo-950);
+
+  /* Brand: gold ramp + semantic accent-gold */
+  --color-gold-100: var(--gold-100);
+  --color-gold-200: var(--gold-200);
+  --color-gold-300: var(--gold-300);
+  --color-gold-400: var(--gold-400);
+  --color-gold-500: var(--gold-500);
+  --color-gold-600: var(--gold-600);
+  --color-gold-700: var(--gold-700);
+  --color-accent-gold: var(--accent-gold);
+  --color-accent-gold-hover: var(--accent-gold-hover);
+  --color-accent-gold-strong: var(--accent-gold-strong);
+  --color-accent-gold-foreground: var(--accent-gold-foreground);
+
+  /* Neutral: ink ramp (warm clubhouse neutrals; no Tailwind collision) */
+  --color-ink-50: var(--ink-50);
+  --color-ink-100: var(--ink-100);
+  --color-ink-150: var(--ink-150);
+  --color-ink-200: var(--ink-200);
+  --color-ink-300: var(--ink-300);
+  --color-ink-400: var(--ink-400);
+  --color-ink-500: var(--ink-500);
+  --color-ink-600: var(--ink-600);
+  --color-ink-700: var(--ink-700);
+  --color-ink-800: var(--ink-800);
+  --color-ink-900: var(--ink-900);
+  --color-ink-950: var(--ink-950);
+
+  /* Surfaces & structural text */
+  --color-surface-card: var(--surface-card);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-inverse: var(--surface-inverse);
+  --color-surface-inverse-2: var(--surface-inverse-2);
+  --color-text-strong: var(--text-strong);
+  --color-text-body: var(--text-body);
+  --color-text-muted: var(--text-muted);
+  --color-text-on-dark: var(--text-on-dark);
+
+  /* Outcome triad */
+  --color-win: var(--win);
+  --color-win-strong: var(--win-strong);
+  --color-win-surface: var(--win-surface);
+  --color-win-border: var(--win-border);
+  --color-loss: var(--loss);
+  --color-loss-strong: var(--loss-strong);
+  --color-loss-surface: var(--loss-surface);
+  --color-loss-border: var(--loss-border);
+  --color-neutral-tone: var(--neutral);
+  --color-neutral-surface: var(--neutral-surface);
+  --color-neutral-border: var(--neutral-border);
+
+  /* Status */
+  --color-status-open: var(--status-open);
+  --color-status-open-surface: var(--status-open-surface);
+  --color-status-open-border: var(--status-open-border);
+  --color-status-closed: var(--status-closed);
+  --color-status-closed-surface: var(--status-closed-surface);
+  --color-status-closed-border: var(--status-closed-border);
+  --color-status-resolved: var(--status-resolved);
+  --color-status-resolved-surface: var(--status-resolved-surface);
+  --color-status-resolved-border: var(--status-resolved-border);
+
+  /* Odds polarity */
+  --color-odds-positive: var(--odds-positive);
+  --color-odds-positive-surface: var(--odds-positive-surface);
+  --color-odds-negative: var(--odds-negative);
+  --color-odds-negative-surface: var(--odds-negative-surface);
+
+  /* Money P/L */
+  --color-money-up: var(--money-up);
+  --color-money-down: var(--money-down);
+  --color-money-flat: var(--money-flat);
+  --color-money-up-on-dark: var(--money-up-on-dark);
+  --color-money-down-on-dark: var(--money-down-on-dark);
+
+  /* Caution / compliance */
+  --color-caution: var(--caution);
+  --color-caution-strong: var(--caution-strong);
+  --color-caution-surface: var(--caution-surface);
+  --color-caution-border: var(--caution-border);
+
+  /* Shadows — soft, low, clubby (never neon glow) */
+  --shadow-xs: 0 1px 2px rgba(30, 31, 51, 0.06);
+  --shadow-sm: 0 1px 3px rgba(30, 31, 51, 0.08), 0 1px 2px rgba(30, 31, 51, 0.04);
+  --shadow-md: 0 4px 12px rgba(30, 31, 51, 0.08), 0 1px 3px rgba(30, 31, 51, 0.05);
+  --shadow-lg: 0 12px 28px rgba(30, 31, 51, 0.12), 0 2px 6px rgba(30, 31, 51, 0.06);
+
+  /* Radii (shadcn scale, derived from --radius=10px:
+     sm 6 · md 8 · lg 10 · xl 14 · 2xl 18 …) */
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,83 +339,34 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "tnum" 1, "lnum" 1;
   }
   html {
     @apply font-sans;
   }
+  /* Tabular figures for any odds/money/stat display. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+  }
+}
+
+/* One-shot gold confirmation flash on stake placement (see StakeInput). */
+@keyframes stake-flash {
+  from {
+    box-shadow: var(--shadow-gold);
+  }
+  to {
+    box-shadow: 0 0 0 3px rgba(253, 218, 0, 0);
+  }
+}
+
+.animate-stake-flash {
+  animation: stake-flash var(--dur-slow) var(--ease-out);
 }

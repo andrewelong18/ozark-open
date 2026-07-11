@@ -1,0 +1,32 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Status Hues — Open / Closed / Resolved" subtitle="Open inviting green, closed neutral, resolved quiet indigo" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; background: #faf8f2; font-family: "Montserrat", system-ui, sans-serif; padding: 20px; }
+  .row { display: flex; gap: 14px; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 16px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .meta { font-size: 11px; color: #6f7082; font-variant-numeric: tabular-nums; margin-top: 8px; }
+  .item { display: flex; flex-direction: column; }
+</style>
+</head>
+<body>
+<div class="row">
+  <div class="item">
+    <span class="pill" style="background:#edf9f2;color:#157347;border:1px solid #b6e6cf"><span class="dot" style="background:#1a8a54"></span>Open</span>
+    <span class="meta">green-700 · inviting</span>
+  </div>
+  <div class="item">
+    <span class="pill" style="background:#f4f2ea;color:#565769;border:1px solid #e0dfd7"><span class="dot" style="background:#9a9baa"></span>Closed</span>
+    <span class="meta">ink-600 · neutral</span>
+  </div>
+  <div class="item">
+    <span class="pill" style="background:#f2f1fc;color:#3f3da6;border:1px solid #e6e5fa"><span class="dot" style="background:#524fc0"></span>Resolved</span>
+    <span class="meta">indigo-600 · quiet</span>
+  </div>
+</div>
+</body>
+</html>

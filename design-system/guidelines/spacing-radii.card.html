@@ -1,0 +1,26 @@
+<!-- @dsCard group="Spacing" viewport="700x160" name="Radii" subtitle="4 / 6 / 10 / 14 / 20 / pill — 10px is the default" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; background: #fff; font-family: "Montserrat", system-ui, sans-serif; padding: 24px; }
+  .row { display: flex; gap: 18px; align-items: flex-end; }
+  .item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .box { width: 68px; height: 68px; background: #f2f1fc; border: 2px solid #524fc0; }
+  .n { font-size: 11px; font-weight: 700; color: #3d3e52; }
+  .t { font-size: 10px; color: #6f7082; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="row">
+  <div class="item"><div class="box" style="border-radius:4px"></div><span class="n">xs</span><span class="t">4px</span></div>
+  <div class="item"><div class="box" style="border-radius:6px"></div><span class="n">sm</span><span class="t">6px</span></div>
+  <div class="item"><div class="box" style="border-radius:10px;border-color:#e6c200"></div><span class="n">md ·default</span><span class="t">10px</span></div>
+  <div class="item"><div class="box" style="border-radius:14px"></div><span class="n">lg</span><span class="t">14px</span></div>
+  <div class="item"><div class="box" style="border-radius:20px"></div><span class="n">xl</span><span class="t">20px</span></div>
+  <div class="item"><div class="box" style="border-radius:999px"></div><span class="n">pill</span><span class="t">999</span></div>
+</div>
+</body>
+</html>

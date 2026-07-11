@@ -1,0 +1,577 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "components/betting/**",
+              "components/core/**",
+              "components/modules/**",
+              "components/navigation/**",
+              "ui_kits/sportsbook/**",
+              "ui_kits/sportsbook/screens/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/\\b\\d+px\\b/]",
+        "message": "Raw px value — use a design-system spacing token via var()."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Azalea|Montserrat))/i]",
+        "message": "Font not provided by the design system. Available: Azalea, Montserrat."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Badge'] > JSXAttribute > JSXIdentifier[name!=/^(?:tone|icon|uppercase|children|key|ref|className|style|children)$/]",
+        "message": "<Badge> doesn't accept that prop. Declared props: tone, icon, uppercase, children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Badge'] > JSXAttribute[name.name='tone'] > Literal[value!=/^(?:neutral|indigo|gold|green|red|amber|solid)$/]",
+        "message": "<Badge> tone must be one of 'neutral' | 'indigo' | 'gold' | 'green' | 'red' | 'amber' | 'solid'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='BetRow'] > JSXAttribute > JSXIdentifier[name!=/^(?:number|description|odds|status|outcome|oddsDetail|stake|placed|stakeError|onStakeChange|onPlace|style|key|ref|className|style|children)$/]",
+        "message": "<BetRow> doesn't accept that prop. Declared props: number, description, odds, status, outcome, oddsDetail, stake, placed, stakeError, onStakeChange, onPlace, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='BetRow'] > JSXAttribute[name.name='status'] > Literal[value!=/^(?:open|closed|resolved)$/]",
+        "message": "<BetRow> status must be one of 'open' | 'closed' | 'resolved'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='BetRow'] > JSXAttribute[name.name='outcome'] > Literal[value!=/^(?:hit|miss|push|void)$/]",
+        "message": "<BetRow> outcome must be one of 'hit' | 'miss' | 'push' | 'void'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='BudgetModule'] > JSXAttribute > JSXIdentifier[name!=/^(?:wagered|entryFee|betCount|minBets|maxBets|compact|style|key|ref|className|style|children)$/]",
+        "message": "<BudgetModule> doesn't accept that prop. Declared props: wagered, entryFee, betCount, minBets, maxBets, compact, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute > JSXIdentifier[name!=/^(?:variant|size|fullWidth|disabled|leadingIcon|trailingIcon|children|key|ref|className|style|children)$/]",
+        "message": "<Button> doesn't accept that prop. Declared props: variant, size, fullWidth, disabled, leadingIcon, trailingIcon, children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:primary|gold|secondary|ghost|destructive)$/]",
+        "message": "<Button> variant must be one of 'primary' | 'gold' | 'secondary' | 'ghost' | 'destructive'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute[name.name='size'] > Literal[value!=/^(?:sm|md|lg)$/]",
+        "message": "<Button> size must be one of 'sm' | 'md' | 'lg'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Card'] > JSXAttribute > JSXIdentifier[name!=/^(?:elevated|accent|padding|children|key|ref|className|style|children)$/]",
+        "message": "<Card> doesn't accept that prop. Declared props: elevated, accent, padding, children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='ComplianceBanner'] > JSXAttribute > JSXIdentifier[name!=/^(?:tone|title|children|action|style|key|ref|className|style|children)$/]",
+        "message": "<ComplianceBanner> doesn't accept that prop. Declared props: tone, title, children, action, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='ComplianceBanner'] > JSXAttribute[name.name='tone'] > Literal[value!=/^(?:warning|info|success)$/]",
+        "message": "<ComplianceBanner> tone must be one of 'warning' | 'info' | 'success'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='EmptyState'] > JSXAttribute > JSXIdentifier[name!=/^(?:glyph|title|message|action|style|key|ref|className|style|children)$/]",
+        "message": "<EmptyState> doesn't accept that prop. Declared props: glyph, title, message, action, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Header'] > JSXAttribute > JSXIdentifier[name!=/^(?:brand|markSrc|nav|active|user|onNavigate|maxWidth|navStyle|style|key|ref|className|style|children)$/]",
+        "message": "<Header> doesn't accept that prop. Declared props: brand, markSrc, nav, active, user, onNavigate, maxWidth, navStyle, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Header'] > JSXAttribute[name.name='navStyle'] > Literal[value!=/^(?:pill|underline)$/]",
+        "message": "<Header> navStyle must be one of 'pill' | 'underline'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Input'] > JSXAttribute > JSXIdentifier[name!=/^(?:size|invalid|disabled|leading|trailing|key|ref|className|style|children)$/]",
+        "message": "<Input> doesn't accept that prop. Declared props: size, invalid, disabled, leading, trailing."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Input'] > JSXAttribute[name.name='size'] > Literal[value!=/^(?:sm|md|lg)$/]",
+        "message": "<Input> size must be one of 'sm' | 'md' | 'lg'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='MoneyDisplay'] > JSXAttribute > JSXIdentifier[name!=/^(?:value|cents|pl|onDark|size|weight|style|key|ref|className|style|children)$/]",
+        "message": "<MoneyDisplay> doesn't accept that prop. Declared props: value, cents, pl, onDark, size, weight, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='MoneyDisplay'] > JSXAttribute[name.name='size'] > Literal[value!=/^(?:xs|sm|md|lg|xl)$/]",
+        "message": "<MoneyDisplay> size must be one of 'xs' | 'sm' | 'md' | 'lg' | 'xl'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='MoneyDisplay'] > JSXAttribute[name.name='weight'] > Literal[value!=/^(?:regular|medium|semibold|bold)$/]",
+        "message": "<MoneyDisplay> weight must be one of 'regular' | 'medium' | 'semibold' | 'bold'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='OddsChip'] > JSXAttribute > JSXIdentifier[name!=/^(?:odds|size|detail|style|key|ref|className|style|children)$/]",
+        "message": "<OddsChip> doesn't accept that prop. Declared props: odds, size, detail, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='OddsChip'] > JSXAttribute[name.name='size'] > Literal[value!=/^(?:sm|md|lg)$/]",
+        "message": "<OddsChip> size must be one of 'sm' | 'md' | 'lg'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='OutcomeBadge'] > JSXAttribute > JSXIdentifier[name!=/^(?:outcome|size|style|key|ref|className|style|children)$/]",
+        "message": "<OutcomeBadge> doesn't accept that prop. Declared props: outcome, size, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='OutcomeBadge'] > JSXAttribute[name.name='outcome'] > Literal[value!=/^(?:hit|miss|push|void)$/]",
+        "message": "<OutcomeBadge> outcome must be one of 'hit' | 'miss' | 'push' | 'void'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='OutcomeBadge'] > JSXAttribute[name.name='size'] > Literal[value!=/^(?:sm|md)$/]",
+        "message": "<OutcomeBadge> size must be one of 'sm' | 'md'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='RulesCard'] > JSXAttribute > JSXIdentifier[name!=/^(?:entryFee|maxSingle|maxSelf|minBets|maxBets|style|key|ref|className|style|children)$/]",
+        "message": "<RulesCard> doesn't accept that prop. Declared props: entryFee, maxSingle, maxSelf, minBets, maxBets, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='StakeInput'] > JSXAttribute > JSXIdentifier[name!=/^(?:value|max|placed|error|disabled|onChange|onPlace|style|key|ref|className|style|children)$/]",
+        "message": "<StakeInput> doesn't accept that prop. Declared props: value, max, placed, error, disabled, onChange, onPlace, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='StatCard'] > JSXAttribute > JSXIdentifier[name!=/^(?:label|value|money|cents|caption|feature|style|key|ref|className|style|children)$/]",
+        "message": "<StatCard> doesn't accept that prop. Declared props: label, value, money, cents, caption, feature, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='StatusBadge'] > JSXAttribute > JSXIdentifier[name!=/^(?:status|style|key|ref|className|style|children)$/]",
+        "message": "<StatusBadge> doesn't accept that prop. Declared props: status, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='StatusBadge'] > JSXAttribute[name.name='status'] > Literal[value!=/^(?:open|closed|resolved)$/]",
+        "message": "<StatusBadge> status must be one of 'open' | 'closed' | 'resolved'."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {
+      "Badge": {
+        "replaces": []
+      },
+      "BetRow": {
+        "replaces": []
+      },
+      "BudgetModule": {
+        "replaces": []
+      },
+      "Button": {
+        "replaces": []
+      },
+      "Card": {
+        "replaces": []
+      },
+      "ComplianceBanner": {
+        "replaces": []
+      },
+      "EmptyState": {
+        "replaces": []
+      },
+      "Header": {
+        "replaces": []
+      },
+      "Input": {
+        "replaces": []
+      },
+      "MoneyDisplay": {
+        "replaces": []
+      },
+      "OddsChip": {
+        "replaces": []
+      },
+      "OutcomeBadge": {
+        "replaces": []
+      },
+      "RulesCard": {
+        "replaces": []
+      },
+      "StakeInput": {
+        "replaces": []
+      },
+      "StatCard": {
+        "replaces": []
+      },
+      "StatusBadge": {
+        "replaces": []
+      }
+    },
+    "tokens": [
+      "--accent",
+      "--accent-foreground",
+      "--accent-strong",
+      "--amber-100",
+      "--amber-50",
+      "--amber-500",
+      "--amber-600",
+      "--amber-700",
+      "--background",
+      "--body-family",
+      "--border",
+      "--border-hairline",
+      "--border-strong",
+      "--border-thick",
+      "--caution",
+      "--caution-border",
+      "--caution-strong",
+      "--caution-surface",
+      "--container-max",
+      "--content-max",
+      "--display-family",
+      "--dur-base",
+      "--dur-fast",
+      "--dur-slow",
+      "--ease-out",
+      "--ease-standard",
+      "--font-display",
+      "--font-mono",
+      "--font-number",
+      "--font-sans",
+      "--fw-bold",
+      "--fw-medium",
+      "--fw-regular",
+      "--fw-semibold",
+      "--gold-100",
+      "--gold-200",
+      "--gold-300",
+      "--gold-400",
+      "--gold-500",
+      "--gold-600",
+      "--gold-700",
+      "--green-100",
+      "--green-200",
+      "--green-400",
+      "--green-50",
+      "--green-500",
+      "--green-600",
+      "--green-700",
+      "--green-800",
+      "--header-h",
+      "--heading-family",
+      "--indigo-100",
+      "--indigo-200",
+      "--indigo-300",
+      "--indigo-400",
+      "--indigo-50",
+      "--indigo-500",
+      "--indigo-600",
+      "--indigo-700",
+      "--indigo-800",
+      "--indigo-900",
+      "--indigo-950",
+      "--ink-100",
+      "--ink-150",
+      "--ink-200",
+      "--ink-300",
+      "--ink-400",
+      "--ink-50",
+      "--ink-500",
+      "--ink-600",
+      "--ink-700",
+      "--ink-800",
+      "--ink-900",
+      "--ink-950",
+      "--leading-normal",
+      "--leading-relaxed",
+      "--leading-snug",
+      "--leading-tight",
+      "--loss",
+      "--loss-border",
+      "--loss-strong",
+      "--loss-surface",
+      "--money-down",
+      "--money-down-on-dark",
+      "--money-flat",
+      "--money-up",
+      "--money-up-on-dark",
+      "--neutral",
+      "--neutral-border",
+      "--neutral-surface",
+      "--numeric-tabular",
+      "--odds-negative",
+      "--odds-negative-surface",
+      "--odds-positive",
+      "--odds-positive-surface",
+      "--primary",
+      "--primary-active",
+      "--primary-foreground",
+      "--primary-hover",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--radius-xl",
+      "--radius-xs",
+      "--red-100",
+      "--red-200",
+      "--red-50",
+      "--red-500",
+      "--red-600",
+      "--red-700",
+      "--red-800",
+      "--ring",
+      "--shadow-focus",
+      "--shadow-gold",
+      "--shadow-lg",
+      "--shadow-md",
+      "--shadow-sm",
+      "--shadow-xs",
+      "--space-0",
+      "--space-1",
+      "--space-10",
+      "--space-12",
+      "--space-16",
+      "--space-2",
+      "--space-20",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--status-closed",
+      "--status-closed-border",
+      "--status-closed-surface",
+      "--status-open",
+      "--status-open-border",
+      "--status-open-surface",
+      "--status-resolved",
+      "--status-resolved-border",
+      "--status-resolved-surface",
+      "--surface-card",
+      "--surface-inverse",
+      "--surface-inverse-2",
+      "--surface-sunken",
+      "--text-2xl",
+      "--text-2xs",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-5xl",
+      "--text-base",
+      "--text-body",
+      "--text-lg",
+      "--text-md",
+      "--text-muted",
+      "--text-on-dark",
+      "--text-on-gold",
+      "--text-sm",
+      "--text-strong",
+      "--text-xl",
+      "--text-xs",
+      "--touch-min",
+      "--tracking-normal",
+      "--tracking-tight",
+      "--tracking-wide",
+      "--tracking-wider",
+      "--white",
+      "--win",
+      "--win-border",
+      "--win-strong",
+      "--win-surface"
+    ],
+    "tokenKinds": {
+      "--indigo-950": "color",
+      "--indigo-900": "color",
+      "--indigo-800": "color",
+      "--indigo-700": "color",
+      "--indigo-600": "color",
+      "--indigo-500": "color",
+      "--indigo-400": "color",
+      "--indigo-300": "color",
+      "--indigo-200": "color",
+      "--indigo-100": "color",
+      "--indigo-50": "color",
+      "--gold-700": "color",
+      "--gold-600": "color",
+      "--gold-500": "color",
+      "--gold-400": "color",
+      "--gold-300": "color",
+      "--gold-200": "color",
+      "--gold-100": "color",
+      "--green-800": "color",
+      "--green-700": "color",
+      "--green-600": "color",
+      "--green-500": "color",
+      "--green-400": "color",
+      "--green-200": "color",
+      "--green-100": "color",
+      "--green-50": "color",
+      "--red-800": "color",
+      "--red-700": "color",
+      "--red-600": "color",
+      "--red-500": "color",
+      "--red-200": "color",
+      "--red-100": "color",
+      "--red-50": "color",
+      "--amber-700": "color",
+      "--amber-600": "color",
+      "--amber-500": "color",
+      "--amber-100": "color",
+      "--amber-50": "color",
+      "--ink-950": "color",
+      "--ink-900": "color",
+      "--ink-800": "color",
+      "--ink-700": "color",
+      "--ink-600": "color",
+      "--ink-500": "color",
+      "--ink-400": "color",
+      "--ink-300": "color",
+      "--ink-200": "color",
+      "--ink-150": "color",
+      "--ink-100": "color",
+      "--ink-50": "color",
+      "--white": "color",
+      "--background": "color",
+      "--surface-card": "color",
+      "--surface-sunken": "color",
+      "--surface-inverse": "color",
+      "--surface-inverse-2": "color",
+      "--text-strong": "font",
+      "--text-body": "font",
+      "--text-muted": "font",
+      "--text-on-dark": "font",
+      "--text-on-gold": "font",
+      "--border": "color",
+      "--border-strong": "color",
+      "--ring": "color",
+      "--primary": "color",
+      "--primary-hover": "color",
+      "--primary-active": "color",
+      "--primary-foreground": "color",
+      "--accent": "color",
+      "--accent-strong": "color",
+      "--accent-foreground": "color",
+      "--win": "color",
+      "--win-strong": "color",
+      "--win-surface": "color",
+      "--win-border": "color",
+      "--loss": "color",
+      "--loss-strong": "color",
+      "--loss-surface": "color",
+      "--loss-border": "color",
+      "--neutral": "color",
+      "--neutral-surface": "color",
+      "--neutral-border": "color",
+      "--status-open": "color",
+      "--status-open-surface": "color",
+      "--status-open-border": "color",
+      "--status-closed": "color",
+      "--status-closed-surface": "color",
+      "--status-closed-border": "color",
+      "--status-resolved": "color",
+      "--status-resolved-surface": "color",
+      "--status-resolved-border": "color",
+      "--odds-positive": "color",
+      "--odds-positive-surface": "color",
+      "--odds-negative": "color",
+      "--odds-negative-surface": "color",
+      "--money-up": "color",
+      "--money-down": "color",
+      "--money-flat": "color",
+      "--money-up-on-dark": "color",
+      "--money-down-on-dark": "color",
+      "--caution": "color",
+      "--caution-strong": "color",
+      "--caution-surface": "color",
+      "--caution-border": "color",
+      "--font-display": "font",
+      "--font-sans": "font",
+      "--font-mono": "font",
+      "--font-number": "font",
+      "--numeric-tabular": "other",
+      "--fw-regular": "other",
+      "--fw-medium": "other",
+      "--fw-semibold": "other",
+      "--fw-bold": "other",
+      "--text-2xs": "font",
+      "--text-xs": "font",
+      "--text-sm": "font",
+      "--text-base": "font",
+      "--text-md": "font",
+      "--text-lg": "font",
+      "--text-xl": "font",
+      "--text-2xl": "font",
+      "--text-3xl": "font",
+      "--text-4xl": "font",
+      "--text-5xl": "font",
+      "--leading-tight": "font",
+      "--leading-snug": "font",
+      "--leading-normal": "font",
+      "--leading-relaxed": "font",
+      "--tracking-tight": "font",
+      "--tracking-normal": "font",
+      "--tracking-wide": "font",
+      "--tracking-wider": "font",
+      "--display-family": "color",
+      "--heading-family": "color",
+      "--body-family": "color",
+      "--space-0": "spacing",
+      "--space-1": "spacing",
+      "--space-2": "spacing",
+      "--space-3": "spacing",
+      "--space-4": "spacing",
+      "--space-5": "spacing",
+      "--space-6": "spacing",
+      "--space-8": "spacing",
+      "--space-10": "spacing",
+      "--space-12": "spacing",
+      "--space-16": "spacing",
+      "--space-20": "spacing",
+      "--touch-min": "spacing",
+      "--radius-xs": "radius",
+      "--radius-sm": "radius",
+      "--radius-md": "radius",
+      "--radius-lg": "radius",
+      "--radius-xl": "radius",
+      "--radius-pill": "radius",
+      "--border-hairline": "spacing",
+      "--border-thick": "spacing",
+      "--shadow-xs": "shadow",
+      "--shadow-sm": "shadow",
+      "--shadow-md": "shadow",
+      "--shadow-lg": "shadow",
+      "--shadow-focus": "shadow",
+      "--shadow-gold": "shadow",
+      "--container-max": "spacing",
+      "--content-max": "spacing",
+      "--header-h": "spacing",
+      "--ease-standard": "other",
+      "--ease-out": "other",
+      "--dur-fast": "other",
+      "--dur-base": "other",
+      "--dur-slow": "other"
+    },
+    "fontFamilies": [
+      "Azalea",
+      "Montserrat"
+    ]
+  }
+}
