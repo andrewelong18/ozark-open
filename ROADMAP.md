@@ -14,7 +14,9 @@ The phased build plan **and** the live status tracker. Phases describe *what* ge
 | Window | Work |
 |---|---|
 | Week of Jul 13 | Sprint 0 (deploy & verify) — stakeholder answers already in hand (Jul 9, PRD §12) |
+| Before Sprint 1 | 🔺 **Spike A** — bet-taxonomy design meeting + non-player max decision (gates the bet-model refactor and validation) |
 | Mid–late July | Sprints 1–3 (bet placement, the heart of the app) |
+| Before Sprint 5 | 🔺 **Spike B** — confirm void → pool math (gates payouts) |
 | Early–mid August | Sprints 4–6 (outcomes, payouts, results) |
 | Late August | Sprint 7 (outcome-data import) → **feature freeze Aug 28** |
 | Sept 1–10 | Sprint 8 (mobile pass, group dry run, fixes) |
@@ -27,17 +29,17 @@ The phased build plan **and** the live status tracker. Phases describe *what* ge
 | Phase | What | Status | Sprint(s) | Target |
 |---|---|---|---|---|
 | 0 — Foundations | Skeleton, deploy pipeline | ✅ Code complete (May 7) — deploy unverified | 0 | Jul 18 |
-| 1 — Auth | Magic-link login, users table | ✅ Code complete (May 7) — prod unverified | 0 | Jul 18 |
-| 2 — Tournament setup | Tournaments, participants, dashboard | ✅ Code complete (May 7) — prod unverified | 0 | Jul 18 |
-| 3 — Bet menu | Categories, bets, `/bets` page | ✅ Code complete (May 7) — prod unverified | 0 | Jul 18 |
-| 4 — Placing bets | Placements, validation, My Bets | 🔲 Not started | 1, 2, 3 | Jul 31 |
+| 1 — Auth | Magic-link login, users table | ✅ Code complete (May 7) — prod unverified · ⚠️ **refactor:** display-name handling (user-set once + locked, admin-editable) revisits the new-user trigger — Sprint 2 | 0, 2 | Jul 18 |
+| 2 — Tournament setup | Tournaments, participants, dashboard | ✅ Code complete (May 7) — prod unverified · ⚠️ **refactor:** rename `*_bets_per_round` cols + add `betting_enabled` (schema shipped in `20260507000001`) — Sprint 1 | 0, 1 | Jul 18 |
+| 3 — Bet menu | Categories, bets, `/bets` page | ✅ Code complete (May 7) — prod unverified · ⚠️ **refactor likely** pending 🔺 Spike A (category/subcategory/`group_id` taxonomy), round-mapping/naming change, and ~70–100-bets/round scaling | 0, A | Jul 18 |
+| 4 — Placing bets | Placements, validation, My Bets | 🔲 Not started | A, 1, 2, 3 | Jul 31 |
 | 5 — Outcomes | Closed/resolved UX, Studio workflow | 🔲 Not started (outcome badges already render on `/bets`) | 4 | Aug 7 |
-| 6 — Theoretical payouts | Payout view, per-bet display | 🔲 Not started | 5 | Aug 14 |
-| 7 — Final payouts | Pari-mutuel split, `/results` | 🔲 Not started | 6 | Aug 21 |
+| 6 — Theoretical payouts | Payout view, per-bet display | 🔲 Not started | B, 5 | Aug 14 |
+| 7 — Final payouts | Pari-mutuel split, `/results` | 🔲 Not started | B, 6 | Aug 21 |
 | 8 — Outcome import | Sheets outcome feed + manual entry (no participant leaderboard) | 🔲 Not started | 7 | Aug 28 |
 | 9 — Polish & dry run | Mobile pass, group test | 🔲 Not started | 8 | Sep 10 |
 
-**Legend:** ✅ complete · 🔶 in progress · 🔲 not started
+**Legend:** ✅ complete · 🔶 in progress · 🔲 not started · ⚠️ needs refactor/rework (requirements changed or pending a decision) · 🔺 spike (a decision/meeting, not a build sprint)
 
 ---
 
@@ -52,13 +54,18 @@ Shipped May 7, 2026 (see git history and `docs/superpowers/` for the design spec
 
 **"Code complete" is not "done"** — none of this is verified against a production deployment. That's Sprint 0.
 
+**⚠️ Refactor flags from Pat's Jul 2026 review** — some shipped work needs rework as requirements firmed up:
+- **Phase 1 (Auth):** display names are now user-set at registration and then immutable by the user (admins can edit). The new-user trigger currently just copies the email — the capture flow + lock land in Sprint 2 (Q13).
+- **Phase 2 (Tournament setup):** the shipped `tournaments`/`tournament_participants` schema needs a migration to rename `min_bets_per_round`/`max_bets_per_round` (they're per-tournament now, not per-round — Q2) and add `betting_enabled` (Q14). Handled in Sprint 1.
+- **Phase 3 (Bet menu):** most exposed. Pending 🔺 **Spike A**, the bet taxonomy may move to category/subcategory/`group_id` (PRD §6.1), which would re-migrate `bets`/`bet_categories`; the round mapping/naming changed (Day 1 → R1, Day 3 → R2; Day 2 excluded — Q9); and `/bets` must scale to ~70–100 bets/round (Q8). Don't treat Phase 3 as frozen until the meeting.
+
 ---
 
 ## Sprint Backlog
 
 One sprint = one sitting. Don't start a sprint while its blockers are open. Check boxes as tasks land; move the phase row in the Status Summary when a sprint's "done when" passes.
 
-> **Open design decision affecting the bet model:** Pat has proposed restructuring bets into category / subcategory / `group_id` (PRD §6.1) and wants a Pat/Jake design meeting first. Until that lands, the current Phase 3 bet schema (seven `resolution_type`s, `round_number ∈ {1,2}`) stands. If the meeting reshapes the taxonomy, expect a follow-up migration touching `bets`/`bet_categories` and new `lib/validation.ts` selection rules. Tracked in `OUTSTANDING_DECISIONS.md` #1.
+> **🔺 Spikes are decisions, not build sprints.** They have letters (A, B), not numbers, and no code deliverable — they exist because a stakeholder decision or live meeting is a hard dependency for downstream work. Resolve a spike before starting anything it blocks. Both current spikes trace to Pat's Jul 2026 review (`OUTSTANDING_DECISIONS.md`).
 
 ---
 
@@ -84,10 +91,24 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 
 ---
 
+### 🔺 Spike A — Bet Taxonomy Design Meeting + Non-Player Max (decision, not a sprint)
+
+**Type:** live Pat/Jake meeting + decisions · **Owners:** Pat + Jake · **Target:** before Sprint 1.
+**Gates:** the Phase 3 bet-model refactor; the subcategory **selection-rule** validation in Sprint 1–2; and the non-player betting-max path in Sprint 1. *(Sprint 1's core placements table + budget/cap rules do **not** depend on this and can proceed; the selection rules and non-player max do.)*
+
+- [ ] Finalize the category / subcategory / `group_id` taxonomy proposed in PRD §6.1, and reconcile the round naming ("betting Round 2" vs golf "Round 3"). → closes `OUTSTANDING_DECISIONS.md` #1.
+- [ ] Lock the per-subcategory selection rules (Winner/Top-X allow multiple picks; head-to-heads one player; one prop per group).
+- [ ] Set the **stricter non-playing-bettor max** (flat amount? lower single/self caps? per-tournament param vs per-participant override). → closes #2.
+- [ ] Brainstorm the actual 2026 bet menu (the current seven categories are a dev-time sample).
+
+**Resolves when:** PRD §6.1 is promoted from "proposed" to decided, `OUTSTANDING_DECISIONS.md` #1–#2 are closed, and — if the taxonomy changed — a Phase 3 refactor migration is scheduled ahead of the work that depends on it.
+
+---
+
 ### Sprint 1 — Placements Schema & Validation (Phase 4a) 🔲
 
 **Goal:** the `bet_placements` table exists with correct RLS, and every §7 rule is encoded server-side.
-**Target:** mid July · **Blockers:** Sprint 0. *(Q1–Q4 per PRD §12, revised by Pat: entry fee spans both rounds combined; the **5–10 bet count also spans both rounds combined**, not per round; participant chooses the split; single-bet cap per placement; self-bet cap per tournament.)*
+**Target:** mid July · **Blockers:** Sprint 0 (fully); 🔺 Spike A (for the subcategory selection-rule validation and the non-player max value — the rest can start without it). *(Q1–Q4 per PRD §12, revised by Pat: entry fee spans both rounds combined; the **5–10 bet count also spans both rounds combined**, not per round; participant chooses the split; single-bet cap per placement; self-bet cap per tournament.)*
 
 - [ ] Migration: `bet_placements` per `DATA_MODEL.md` §3.7, including `requires_admin_review boolean NOT NULL DEFAULT false`, `odds_at_placement int NOT NULL` (odds snapshot — PRD §7.1), and `deleted_at timestamptz` (soft delete — placements are never hard-deleted).
 - [ ] Same migration: add CHECK constraint on `bets`: `(status = 'resolved') = (outcome IS NOT NULL)` — makes the two Studio fat-fingers impossible (PRD §8).
@@ -147,10 +168,21 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 
 ---
 
+### 🔺 Spike B — Confirm Void → Pool Math (decision, not a sprint)
+
+**Type:** decision (money-critical) · **Owner:** Pat · **Target:** before Sprint 5.
+**Gates:** the `placement_payouts_view` void handling (Sprint 5) and the pool-split math in `lib/payouts.ts` (Sprint 6).
+
+- [ ] Confirm a voided bet's stake is **refunded to the bettor and removed from `pool_total`** (`pool_total = Σ(entry_fee) − Σ(void refunds)`), so voided dollars earn no proportional share and don't inflate the denominator (PRD §5, DATA_MODEL §4). → closes `OUTSTANDING_DECISIONS.md` #3.
+
+**Resolves when:** the void handling in DATA_MODEL §4 is signed off, so Sprint 5/6 build the view + split against a confirmed formula rather than an inferred one.
+
+---
+
 ### Sprint 5 — Theoretical Payouts (Phase 6) 🔲
 
 **Goal:** per-bet and total theoretical payouts, matching what Pat would compute by hand.
-**Target:** early–mid August · **Blockers:** Sprint 4. *(Q6/Q7 revised by Pat: a **push** counts and returns its stake; a **void** does NOT count — its stake is refunded and removed from the pool. No adjustment when voids drop someone below the minimum.)*
+**Target:** early–mid August · **Blockers:** Sprint 4; 🔺 Spike B (the void→pool formula the view encodes). *(Q6/Q7 revised by Pat: a **push** counts and returns its stake; a **void** does NOT count — its stake is refunded and removed from the pool. No adjustment when voids drop someone below the minimum.)*
 
 - [ ] Migration: `placement_payouts_view` as defined in `DATA_MODEL.md` §4 — computes from `odds_at_placement` (not `bets.american_odds`), excludes soft-deleted rows, gives a **push** its stake, and returns a **void** as `theoretical_payout = 0` with a `refund` column carrying the stake.
 - [ ] "My Bets": theoretical payout column per resolved placement + "Total theoretical payout" summary.
@@ -165,7 +197,7 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 ### Sprint 6 — Final Pari-Mutuel Payouts (Phase 7) 🔲
 
 **Goal:** final actual-payout shares computed and displayed.
-**Target:** mid August · **Blockers:** Sprint 5. *(Q5 revised by Pat: app rounds payouts to the nearest cent; Venmo paid exactly to the cent.)*
+**Target:** mid August · **Blockers:** Sprint 5; 🔺 Spike B (the `pool_total = Σ(entry_fee) − Σ(refunds)` formula). *(Q5 revised by Pat: app rounds payouts to the nearest cent; Venmo paid exactly to the cent.)*
 
 - [ ] `lib/payouts.ts`: sum theoreticals, compute each share = `participant_total / sum_all × pool_total`, where **`pool_total = Σ(entry_fee) − Σ(void refunds)`** (voided dollars leave the pool — Q6); refund each void's stake to its bettor on top of their share. *(Confirm the void→pool math before building — `OUTSTANDING_DECISIONS.md` #3.)*
 - [ ] `/results` page: name, entry fee, theoretical payout, actual payout, profit/loss — visible only when `tournament.status = 'completed'`.
