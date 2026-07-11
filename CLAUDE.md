@@ -1,10 +1,10 @@
 # Ozark Open Sportsbook — Context for Claude Code
 
-Private fantasy-golf betting platform for the annual Ozark Open (Sept 24–27, 2026; app wrapped by Sept 10). Pari-mutuel pool — no house, no rake, no profit. ~24 participants, strictly behind login. Vibe-coded weekend project: prefer the simplest thing that works; no abstraction layers or future-proofing the docs don't ask for.
+Private fantasy-golf betting platform for the annual Ozark Open (Sept 24–26, 2026; app wrapped by Sept 10). Pari-mutuel pool — no house, no rake, no profit. ~32 participants, strictly behind login. Vibe-coded weekend project: prefer the simplest thing that works; no abstraction layers or future-proofing the docs don't ask for.
 
 ## Stack (decided — don't relitigate; rationale in ARCHITECTURE.md §2)
 
-Next.js 15 (App Router) + TypeScript · Supabase (Postgres, magic-link auth, RLS) · Vercel (auto-deploy from `main`) · Tailwind + shadcn/ui · Google Sheets API (read-only leaderboard)
+Next.js 15 (App Router) + TypeScript · Supabase (Postgres, magic-link auth, RLS) · Vercel (auto-deploy from `main`) · Tailwind + shadcn/ui · Google Sheets API (read-only bet-outcome input; no participant leaderboard)
 
 ## Doc Map — read only what the task needs
 
@@ -15,6 +15,7 @@ Next.js 15 (App Router) + TypeScript · Supabase (Postgres, magic-link auth, RLS
 | `DATA_MODEL.md` | Touching schema, migrations, RLS, or the payout view. |
 | `ARCHITECTURE.md` | Auth flow, RLS strategy, where the math lives. |
 | `README.md` | Local setup, deploy, the admin Studio runbook. |
+| `OUTSTANDING_DECISIONS.md` | Before building anything touching the bet taxonomy, non-player limits, void payout math, or entry collection — the still-open calls live here. |
 
 Do **not** re-read all foundation docs by default — each sprint in `ROADMAP.md` cites the sections it depends on; read those and start.
 
@@ -38,9 +39,9 @@ Do **not** re-read all foundation docs by default — each sprint in `ROADMAP.md
 - **Payout math:** `placement_payouts_view` computes theoretical payouts **from `odds_at_placement`** (snapshotted at write — never the live bet odds); `lib/payouts.ts` does the proportional split at render.
 - **Rule parameters live on the `tournaments` row** — never hardcode entry-fee bounds, bet counts, or caps.
 - **Placements are soft-deleted** (`deleted_at`) and odds-snapshotted; money rows keep their history.
-- **The seven bet rules (PRD §7) and the §12 decision log are settled.** Don't relax, reorder, or reinterpret them without asking.
+- **The bet rules (PRD §7) and the §12 decision log are the source of truth** (Jake's Jul 9 answers, revised by Pat Jul 2026). Don't relax, reorder, or reinterpret them without asking; genuinely open items are in `OUTSTANDING_DECISIONS.md`, not up for guessing.
 - **Docs beat code.** When they disagree, flag the drift — don't silently align to the code.
 
 ## Out of Scope (don't propose)
 
-Scoring/skins/leaderboard math (stays in the Excel workbook) · payments (Venmo, out of band) · public access, SEO · custom admin UI · notifications · multi-tenancy · parlays, live odds, cash-out, real-time updates · new `resolution_type` values without a code change (by design)
+Scoring/skins/leaderboard math (stays in the Excel workbook) · participant-facing leaderboard in the app · odds computation or suggestion (Pat & Jake hand-set all odds) · payments (Venmo/cash, out of band) · public access, SEO · custom admin UI · notifications · multi-tenancy · parlays, live odds, cash-out, real-time updates · new `resolution_type` values without a code change (by design)

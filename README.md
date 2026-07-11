@@ -11,21 +11,23 @@ A private fantasy-golf betting platform for the annual Ozark Open tournament. Pa
 A web application that lets:
 
 - **Participants** log in, view the active bet menu, place bets within the configured constraints, and see their outcomes and payouts.
-- **Admins** (Pat, Jake, Steve, Andrew) publish bets, mark outcomes (hit / miss / push / void) after each round of golf, and run final payout calculations.
+- **Admins** (Pat, Jake, Steve, Andrew) publish bets, hand-set every bet's odds, mark outcomes (hit / miss / push / void) after each scored day (Day 1 and Day 3), and run final payout calculations.
 
-Everything else — tournament scoring, skins, the leaderboard math — stays in the existing Excel workbook. The app reads from that workbook (or a Google Sheets mirror of it) for display purposes only.
+Everything else — tournament scoring, skins, the leaderboard math — stays in the existing Excel workbook. Its Sportsbook tabs are mirrored to Google Sheets (after Day 1 and Day 3) to help admins enter bet outcomes, with manual entry as the fallback. There's no participant-facing leaderboard in the app.
+
+Entry is $20–$50: the $20 minimum comes out of each participant's tournament deposit, and anything above $20 is collected by Venmo or cash.
 
 ---
 
 ## Current Status
 
-**Target: fully wrapped by September 10, 2026** (tournament is September 24–27).
+**Target: fully wrapped by September 10, 2026** (tournament is September 24–26).
 
 | Built (code complete) | Up next |
 |---|---|
-| Auth (magic link), tournament/participant setup, bet menu with odds display, all migrations through `bets`/`bet_subjects` | Sprint 0: verify production deploy · Sprints 1–3: bet placement & validation · Sprints 4–8: outcomes, payouts, leaderboard, dry run |
+| Auth (magic link), tournament/participant setup, bet menu with odds display, all migrations through `bets`/`bet_subjects` | Sprint 0: verify production deploy · Sprints 1–3: bet placement & validation · Sprints 4–8: outcomes, payouts, outcome import, dry run |
 
-`ROADMAP.md` is the live sprint tracker — status table, numbered sprints with checkboxes, blockers, and target dates. All product decisions are settled and logged in `PRD.md` §12; there are no open spec questions.
+`ROADMAP.md` is the live sprint tracker — status table, numbered sprints with checkboxes, blockers, and target dates. Product decisions are logged in `PRD.md` §12 (Jake's July 9 answers, revised by Pat in July 2026); a few items Pat reopened — chiefly a bet-taxonomy design meeting — are tracked in `OUTSTANDING_DECISIONS.md`.
 
 ---
 
@@ -38,7 +40,7 @@ Everything else — tournament scoring, skins, the leaderboard math — stays in
 | Database | **Supabase** (Postgres) | Real database with a spreadsheet-style admin UI built in |
 | Authentication | **Supabase Auth** — magic link (email) | No passwords for users to manage; reliably ties bets to people |
 | Hosting | **Vercel** | One-click deploy from GitHub; free for hobby use |
-| External data | **Google Sheets API** (read-only) | Leaderboard data lives in the existing workbook |
+| External data | **Google Sheets API** (read-only) | Bet-outcome input mirrored from the existing workbook (after Day 1 & Day 3); manual entry fallback |
 
 See `ARCHITECTURE.md` for the diagram and deeper rationale.
 
@@ -53,6 +55,7 @@ ozark-open/
 ├── ARCHITECTURE.md        ← how the pieces fit together
 ├── DATA_MODEL.md          ← database schema in detail; payout view
 ├── ROADMAP.md             ← phase roadmap + live sprint tracker
+├── OUTSTANDING_DECISIONS.md ← open decisions still needing a stakeholder call
 ├── CLAUDE.md              ← instructions for AI-assisted sprint work
 ├── middleware.ts          ← session refresh + route protection
 ├── app/                   ← Next.js App Router pages (login, dashboard, bets, auth)

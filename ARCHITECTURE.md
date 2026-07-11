@@ -23,7 +23,7 @@ graph LR
     end
 
     subgraph "Google Workspace"
-        Sheets[Google Sheets<br/>leaderboard + scoring]
+        Sheets[Google Sheets<br/>scoring workbook mirror<br/>bet-outcome input]
     end
 
     Browser -->|HTTPS| NextJS
@@ -38,7 +38,7 @@ graph LR
 
 1. **Read odds** — Browser asks Next.js for the active bet menu → Next.js queries Postgres → response rendered.
 2. **Write bets** — Browser sends bet placement to Next.js API route → Next.js validates constraints → Postgres insert/update → confirmation back to browser.
-3. **Read leaderboard** — Browser asks Next.js for tournament standings → Next.js fetches from Google Sheets API → response rendered.
+3. **Import outcomes** — after a scored day, admins pull bet results from the Google Sheets mirror (refreshed after Day 1 and Day 3) to help mark outcomes in Studio; manual entry is the fallback. There is **no participant-facing leaderboard** (dropped per PRD §12 Q15).
 
 The "CMS" is not a separate system. **The CMS is Supabase Studio**, which is the admin dashboard that ships with every Supabase project. It looks like a spreadsheet, but it edits the actual Postgres database underneath. Pat, Jake, Steve, and Andrew log in and edit rows directly.
 
@@ -69,7 +69,7 @@ The "CMS" is not a separate system. **The CMS is Supabase Studio**, which is the
 - **Row-Level Security (RLS)** policies enforce who can see what at the database layer — even if there's a bug in the app code, a participant can't see admin-only data.
 - **Free tier:** 500MB database, 50K monthly active users, unlimited API requests. We will not come close to these limits.
 
-**Alternative considered: DigitalOcean Managed Postgres + custom auth + custom admin UI.** Steve works at DO and could provision this, but we'd need to build authentication and an admin UI from scratch — easily several weekends of work that Supabase gives us for free. Steve's expertise is better deployed for code review and incident response. Save the DO option for if/when Supabase free tier becomes insufficient (it won't, for 24 users).
+**Alternative considered: DigitalOcean Managed Postgres + custom auth + custom admin UI.** Steve works at DO and could provision this, but we'd need to build authentication and an admin UI from scratch — easily several weekends of work that Supabase gives us for free. Steve's expertise is better deployed for code review and incident response. Save the DO option for if/when Supabase free tier becomes insufficient (it won't, for ~32 users).
 
 **Alternative considered: Firebase.** Works, but the NoSQL document model is a poor fit for relational bet data, and AI tools currently produce better Supabase code than Firebase code.
 
@@ -85,14 +85,15 @@ The "CMS" is not a separate system. **The CMS is Supabase Studio**, which is the
 
 **Alternative considered: DigitalOcean App Platform.** Functionally equivalent and Steve could help. Slightly more configuration; not Next.js-native. Vercel wins on simplicity.
 
-### 2.4 Google Sheets (leaderboard data source, read-only)
+### 2.4 Google Sheets (bet-outcome input, read-only)
 
-**Choice:** The existing Excel workbook gets mirrored into a Google Sheet. The app reads from the Sheet via the Google Sheets API.
+**Choice:** The existing Excel workbook — which has dedicated Sportsbook tabs — gets mirrored into a Google Sheet **after Day 1 and Day 3** (not live). The app reads from the Sheet via the Google Sheets API to **help admins mark bet outcomes**; if the mirror isn't ready, admins enter results manually (PRD §12 Q15). There is no participant-facing leaderboard.
 
 **Why:**
 - Pat already maintains the workbook and trusts the math in it. We don't want to migrate that logic.
 - Google Sheets API is well-documented and free at this scale.
 - Read-only access via a service account: simple, safe, no risk of the app corrupting the workbook.
+- Manual entry stays available as a fallback, so a Sheets hiccup never blocks resolving bets.
 
 **Why not use Google Sheets as the bets database too?** Concurrent writes to a Sheet corrupt rows in confusing ways. There are no transactions, no constraints, no real querying. For a system where 8+ people might submit bets within the same minute, this is a real risk. **Sheets for read, Postgres for write.**
 
@@ -120,7 +121,7 @@ sequenceDiagram
 ```
 
 **Implementation notes:**
-- **Magic-link emails must go through custom SMTP (Resend, free tier).** Supabase's built-in email service is for development only — it's rate-limited to a handful of messages per hour, which guarantees dropped logins when 24 people hit the app on tournament morning. Configured in Sprint 0.
+- **Magic-link emails must go through custom SMTP (Resend, free tier).** Supabase's built-in email service is for development only — it's rate-limited to a handful of messages per hour, which guarantees dropped logins when ~32 people hit the app on tournament morning. Configured in Sprint 0.
 - **Session duration is extended** (Supabase Auth settings) so a login during dry-run week survives through the tournament — the magic link is a fallback, not a daily ritual.
 - First time a new email logs in, Supabase auto-creates an `auth.users` row. We sync this to our `public.users` table via a database trigger.
 - New users default to `is_admin = false`. To promote someone to admin, edit the `is_admin` column in Supabase Studio.
@@ -175,7 +176,7 @@ Why a view: the payout for any user is fully determined by their placements and 
 | Theoretical payout | Postgres view (`payouts_view`) |
 | Actual payout split | TypeScript at render time (`lib/payouts.ts`) |
 | Admin "CMS" | Supabase Studio (web UI bundled with Supabase) |
-| Tournament leaderboard | Google Sheets (existing workbook), read via API |
+| Bet-outcome input | Google Sheets mirror of the workbook's Sportsbook tabs (after Day 1 & Day 3), read via API; manual entry fallback |
 | Tournament scoring math | Excel workbook → Google Sheets mirror (unchanged) |
 | Hosting | Vercel |
 
@@ -186,8 +187,8 @@ Why a view: the payout for any user is fully determined by their placements and 
 - **A separate backend server.** Next.js API routes on Vercel are sufficient.
 - **A queue or background job system.** All work is request/response; there are no async jobs.
 - **A separate CMS (Sanity, Contentful, etc.).** Supabase Studio is the CMS.
-- **Caching layer.** Postgres handles 24 users without breaking a sweat. If we ever need it, Vercel has built-in Edge caching.
+- **Caching layer.** Postgres handles ~32 users without breaking a sweat. If we ever need it, Vercel has built-in Edge caching.
 - **Custom email server.** Supabase Auth handles the sending; only the SMTP relay is external (Resend free tier — see §3).
 - **CI/CD pipeline.** Vercel rebuilds and deploys on every `git push`.
-- **Real-time updates or websockets.** A page refresh is fine for 24 users.
-- **Live odds movement / tote-board mechanics.** Odds are hand-set by admins and snapshotted per placement (PRD §7.1); the pool is pari-mutuel *at settlement*, not a live tote. Parlays, in-play betting, and cash-out are equally out — permanently.
+- **Real-time updates or websockets.** A page refresh is fine for ~32 users.
+- **Live odds movement / tote-board mechanics.** Odds are hand-set by Pat and Jake and snapshotted per placement (PRD §7.1); **the app never computes or suggests odds.** The pool is pari-mutuel *at settlement*, not a live tote. Parlays, in-play betting, and cash-out are equally out — permanently.

@@ -6,19 +6,19 @@ The phased build plan **and** the live status tracker. Phases describe *what* ge
 
 ## Timeline
 
-- **Tournament:** September 24–27, 2026
+- **Tournament:** September 24–26, 2026 (Day 1 Thu · Day 2 Fri scramble · Day 3 Sat)
 - **Fully wrapped:** September 10, 2026 at the latest (two weeks before tee-off)
 - **Feature freeze:** ~August 28, 2026 — after this, only bugs, polish, and dry-run fixes
-- Coding is Claude-Code-assisted, so build time per sprint is short. The pacing constraints are **stakeholder answers (PRD §12), deploy verification, and human testing** — not code.
+- Coding is Claude-Code-assisted, so build time per sprint is short. The pacing constraints are **stakeholder answers (PRD §12), deploy verification, and human testing** — not code. *(Pat's Jul 2026 review revised several §12 answers and opened a few items — see `OUTSTANDING_DECISIONS.md`.)*
 
 | Window | Work |
 |---|---|
 | Week of Jul 13 | Sprint 0 (deploy & verify) — stakeholder answers already in hand (Jul 9, PRD §12) |
 | Mid–late July | Sprints 1–3 (bet placement, the heart of the app) |
 | Early–mid August | Sprints 4–6 (outcomes, payouts, results) |
-| Late August | Sprint 7 (leaderboard) → **feature freeze Aug 28** |
+| Late August | Sprint 7 (outcome-data import) → **feature freeze Aug 28** |
 | Sept 1–10 | Sprint 8 (mobile pass, group dry run, fixes) |
-| Sept 24–27 | 🏌️ Ozark Open |
+| Sept 24–26 | 🏌️ Ozark Open |
 
 ---
 
@@ -34,7 +34,7 @@ The phased build plan **and** the live status tracker. Phases describe *what* ge
 | 5 — Outcomes | Closed/resolved UX, Studio workflow | 🔲 Not started (outcome badges already render on `/bets`) | 4 | Aug 7 |
 | 6 — Theoretical payouts | Payout view, per-bet display | 🔲 Not started | 5 | Aug 14 |
 | 7 — Final payouts | Pari-mutuel split, `/results` | 🔲 Not started | 6 | Aug 21 |
-| 8 — Leaderboard | Google Sheets mirror | 🔲 Not started | 7 | Aug 28 |
+| 8 — Outcome import | Sheets outcome feed + manual entry (no participant leaderboard) | 🔲 Not started | 7 | Aug 28 |
 | 9 — Polish & dry run | Mobile pass, group test | 🔲 Not started | 8 | Sep 10 |
 
 **Legend:** ✅ complete · 🔶 in progress · 🔲 not started
@@ -58,6 +58,8 @@ Shipped May 7, 2026 (see git history and `docs/superpowers/` for the design spec
 
 One sprint = one sitting. Don't start a sprint while its blockers are open. Check boxes as tasks land; move the phase row in the Status Summary when a sprint's "done when" passes.
 
+> **Open design decision affecting the bet model:** Pat has proposed restructuring bets into category / subcategory / `group_id` (PRD §6.1) and wants a Pat/Jake design meeting first. Until that lands, the current Phase 3 bet schema (seven `resolution_type`s, `round_number ∈ {1,2}`) stands. If the meeting reshapes the taxonomy, expect a follow-up migration touching `bets`/`bet_categories` and new `lib/validation.ts` selection rules. Tracked in `OUTSTANDING_DECISIONS.md` #1.
+
 ---
 
 ### Sprint 0 — Deploy & Verify Foundations 🔲
@@ -74,9 +76,9 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 - [ ] Ask Steve to enable Issues on `riversteve/ozark-open` (Settings → General → Features → Issues; disabled by default on forks) — the sprint workflow logs bugs and manual steps there.
 - [ ] Log in via magic link on a phone (real-world email deliverability check through Resend).
 - [ ] Promote Andrew, Pat, Jake, Steve to `is_admin = true` in Studio.
-- [ ] Fix the four admins' `display_name` values in Studio (they default to email addresses) — admin-set per PRD §12 Q13.
+- [ ] Fix the four admins' `display_name` values in Studio (they currently default to email addresses) so they match the official roster — display names are user-set going forward, but admins can always correct them (PRD §12 Q13).
 - [ ] Seed 3–5 sample bets in Studio; confirm they render on `/bets` grouped correctly.
-- [x] ~~Send PRD §12 questions to Pat and Jake~~ — **answered by Jake, July 9, 2026**; decisions logged in PRD §12.
+- [x] ~~Send PRD §12 questions to Pat and Jake~~ — **answered by Jake (Jul 9) and revised by Pat (Jul 2026)**; decisions logged in PRD §12, open items in `OUTSTANDING_DECISIONS.md`.
 
 **Done when:** any admin can log in on their phone at the production URL and see the dashboard and sample bet menu.
 
@@ -85,14 +87,16 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 ### Sprint 1 — Placements Schema & Validation (Phase 4a) 🔲
 
 **Goal:** the `bet_placements` table exists with correct RLS, and every §7 rule is encoded server-side.
-**Target:** mid July · **Blockers:** Sprint 0. *(Q1–Q4 resolved Jul 9: entry fee spans both rounds combined; participant chooses the split; single-bet cap per placement; self-bet cap per tournament.)*
+**Target:** mid July · **Blockers:** Sprint 0. *(Q1–Q4 per PRD §12, revised by Pat: entry fee spans both rounds combined; the **5–10 bet count also spans both rounds combined**, not per round; participant chooses the split; single-bet cap per placement; self-bet cap per tournament.)*
 
 - [ ] Migration: `bet_placements` per `DATA_MODEL.md` §3.7, including `requires_admin_review boolean NOT NULL DEFAULT false`, `odds_at_placement int NOT NULL` (odds snapshot — PRD §7.1), and `deleted_at timestamptz` (soft delete — placements are never hard-deleted).
 - [ ] Same migration: add CHECK constraint on `bets`: `(status = 'resolved') = (outcome IS NOT NULL)` — makes the two Studio fat-fingers impossible (PRD §8).
 - [ ] Same migration: drop the hardcoded `entry_fee BETWEEN 20 AND 50` CHECK on `tournament_participants` (keep `> 0`); bounds move to validation per the rules-are-data convention.
+- [ ] Same migration: **rename `tournaments.min_bets_per_round` / `max_bets_per_round` → `min_bets_per_tournament` / `max_bets_per_tournament`** — the 5–10 count now spans both rounds combined (Q2), so the old names are misleading.
+- [ ] Same migration: add **`tournament_participants.betting_enabled boolean NOT NULL DEFAULT true`** (admin enable/disable betting for any user — Q14).
 - [ ] RLS: users insert/update/soft-delete own rows while the bet is `open`; others' placements visible only once the bet is `closed`/`resolved`; admins read all; all reads filter `deleted_at IS NULL`.
-- [ ] `lib/validation.ts`: pure functions for every rule in PRD §7 + §8.1, parameterized by the `tournaments` row (no hardcoded limits). Payout-relevant reads use `odds_at_placement`, not `bets.american_odds`. Budget math per PRD §12: wager total across **both rounds** ≤ entry fee (exact-equal checked at Round 2 close); self-bet cap totals across the tournament; single-bet cap per placement.
-- [ ] Unit-test the validation functions against the worked examples in PRD §5/§7 (including the $40-entry and $20-entry examples).
+- [ ] `lib/validation.ts`: pure functions for every rule in PRD §7 + §8.1, parameterized by the `tournaments` row (no hardcoded limits). Payout-relevant reads use `odds_at_placement`, not `bets.american_odds`. Budget math per PRD §12: wager total across **both rounds** ≤ entry fee (exact-equal checked at Round 2 close); **5–10 bet count across the tournament**; self-bet cap totals across the tournament; single-bet cap per placement; reject writes when `betting_enabled = false`. Non-player stricter max is stubbed pending its value (`OUTSTANDING_DECISIONS.md` #2).
+- [ ] Unit-test the validation functions against the worked examples in PRD §5/§7 (including the $40-entry and $20-entry examples, and a $0-in-one-round split).
 
 **Done when:** validation tests pass and the migration applies cleanly to prod.
 
@@ -105,7 +109,8 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 
 - [ ] `app/api/placements/route.ts`: POST/PATCH/DELETE, calling `lib/validation.ts` before any write; reject non-participants and closed bets. Every write snapshots the bet's current odds into `odds_at_placement`; DELETE sets `deleted_at` (soft delete).
 - [ ] Self-bet flagging: on write, if the user is in `bet_subjects` for the bet, set `requires_admin_review = true`.
-- [ ] Inline amount input on `/bets` for each `open` bet (participant's own placement shown pre-filled if it exists).
+- [ ] Inline amount input on `/bets` for each `open` bet (participant's own placement shown pre-filled if it exists). The menu must stay usable at **~70–100 bets per round** (Q8) — keep the round → category grouping tight; no pagination needed at this scale.
+- [ ] **Display-name capture on first login:** prompt a new user for their display name once, then lock it (users can't edit it later; admins can — Q13). Until entered it falls back to email.
 - [ ] Clear error surface: rule violations come back as human-readable messages ("Max single bet is $20 for your $40 entry").
 
 **Done when:** a participant can complete a legal placement end-to-end on the phone, and every §7 violation is rejected with a readable message.
@@ -118,9 +123,9 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 **Target:** late July · **Blockers:** Sprint 2. *(Q3/Q12 resolved: non-compliant bets stand as-is after the chase; full amounts visible after close.)*
 
 - [ ] "My Bets" view: current placements grouped by round, running total, remaining budget.
-- [ ] Personalized rules card: "Your entry: $40 · max single bet: $20 · max on yourself: $10 · 3 of 5 minimum bets placed" — computed from the `tournaments` row, kills the questions Pat gets by text today.
+- [ ] Personalized rules card: "Your entry: $40 · max single bet: $20 · max on yourself: $10 · 3 of 5 minimum bets placed (across the tournament)" — computed from the `tournaments` row, kills the questions Pat gets by text today.
 - [ ] Pool total on the dashboard (sum of participant entry fees).
-- [ ] Compliance banner per PRD §8.1: "incomplete" warning while under the 5-bet minimum or off the exact total.
+- [ ] Compliance banner per PRD §8.1: "incomplete" warning while under the 5-bet minimum (**counted across both rounds**) or off the exact total. The user can **always save the slip regardless**, and the warning **clears automatically once compliant** (Q3, Pat).
 - [ ] Admin compliance view (can be a simple page or a Studio SQL snippet documented in README): who is non-compliant per round, so admins can chase before closing (Q3 — after the chase, whatever stands, stands).
 - [ ] Other participants' placements become visible on bet close, including individual amounts (Q12).
 
@@ -145,9 +150,9 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 ### Sprint 5 — Theoretical Payouts (Phase 6) 🔲
 
 **Goal:** per-bet and total theoretical payouts, matching what Pat would compute by hand.
-**Target:** early–mid August · **Blockers:** Sprint 4. *(Q6/Q7 resolved: pushes/voids return the stake and count in the theoretical total; no adjustment when voids drop someone below the minimum.)*
+**Target:** early–mid August · **Blockers:** Sprint 4. *(Q6/Q7 revised by Pat: a **push** counts and returns its stake; a **void** does NOT count — its stake is refunded and removed from the pool. No adjustment when voids drop someone below the minimum.)*
 
-- [ ] Migration: `placement_payouts_view` as defined in `DATA_MODEL.md` §4 — computes from `odds_at_placement` (not `bets.american_odds`) and excludes soft-deleted rows.
+- [ ] Migration: `placement_payouts_view` as defined in `DATA_MODEL.md` §4 — computes from `odds_at_placement` (not `bets.american_odds`), excludes soft-deleted rows, gives a **push** its stake, and returns a **void** as `theoretical_payout = 0` with a `refund` column carrying the stake.
 - [ ] "My Bets": theoretical payout column per resolved placement + "Total theoretical payout" summary.
 - [ ] **Participant-facing "All Bets" page:** everyone's placements on closed/resolved bets — who bet what, for how much, and how it's going. This is the social heart of the pool (PRD §9); distinct from the admin view below.
 - [ ] Admin "view all" page: everyone's placements and payouts in one table, including still-open rounds and self-bet review flags (replicates the spreadsheet's `View` sheet).
@@ -160,27 +165,28 @@ One sprint = one sitting. Don't start a sprint while its blockers are open. Chec
 ### Sprint 6 — Final Pari-Mutuel Payouts (Phase 7) 🔲
 
 **Goal:** final actual-payout shares computed and displayed.
-**Target:** mid August · **Blockers:** Sprint 5. *(Q5 resolved: display cents.)*
+**Target:** mid August · **Blockers:** Sprint 5. *(Q5 revised by Pat: app rounds payouts to the nearest cent; Venmo paid exactly to the cent.)*
 
-- [ ] `lib/payouts.ts`: sum theoreticals, compute each share = `participant_total / sum_all × pool_total` (pool = sum of entry fees).
+- [ ] `lib/payouts.ts`: sum theoreticals, compute each share = `participant_total / sum_all × pool_total`, where **`pool_total = Σ(entry_fee) − Σ(void refunds)`** (voided dollars leave the pool — Q6); refund each void's stake to its bettor on top of their share. *(Confirm the void→pool math before building — `OUTSTANDING_DECISIONS.md` #3.)*
 - [ ] `/results` page: name, entry fee, theoretical payout, actual payout, profit/loss — visible only when `tournament.status = 'completed'`.
-- [ ] Amounts displayed to the cent (Q5); payment rounding stays the payer's business.
-- [ ] Cross-check the full 2026 worked example: pool $520, sum $279.57, Jake $21.87 → $40.67.
+- [ ] Amounts **rounded to the nearest cent** in the app (Q5); Venmo is paid exactly to the cent.
+- [ ] Cross-check the full 2026 worked example (no voids): pool $520, sum $279.57, Jake $21.87 → $40.67.
 
 **Done when:** final numbers match the spreadsheet's `View` sheet within rounding error.
 
 ---
 
-### Sprint 7 — Leaderboard Mirror (Phase 8) 🔲
+### Sprint 7 — Outcome-Data Import (Phase 8) 🔲
 
-**Goal:** live standings from the scoring workbook, read-only.
-**Target:** late August (feature freeze Aug 28) · **Blockers:** Pat creating the Sheets mirror. *(Q15 resolved: one "Leaderboard" tab — player, thru, score, position — updated after each day.)*
+**Goal:** get bet *outcomes* out of the scoring workbook and into the app efficiently — **no participant-facing leaderboard** (dropped per Pat, Q15/§9).
+**Target:** late August (feature freeze Aug 28) · **Blockers:** Pat creating the Sheets mirror. *(Q15 revised by Pat: dedicated Sportsbook tabs mirrored after Day 1 and Day 3, not live; manual entry is the fallback.)*
 
-- [ ] Pat mirrors the workbook to a Google Sheet with the agreed "Leaderboard" tab (his task; format settled in PRD §12 Q15).
+- [ ] Pat mirrors the workbook's **Sportsbook tabs** to a Google Sheet, refreshed **after Day 1 and Day 3** (his task; format per PRD §12 Q15).
 - [ ] Google Cloud service account with read-only Sheet access; creds in Vercel env vars.
-- [ ] `/leaderboard` page: fetch via Sheets API, cache 5 minutes, render the table.
+- [ ] Import path: read the Sheet to help admins mark bet outcomes (assist, not auto-resolve — admins still confirm in Studio). **Manual bet-result entry remains the fallback** if the mirror isn't ready.
+- [ ] Skip any `/leaderboard` participant page — out of scope now (Q15/§9).
 
-**Done when:** standings appear in the app within 5 minutes of Pat editing the workbook.
+**Done when:** an admin can pull the mirrored results after a scored day and mark that day's bet outcomes without hand-copying from Excel, with manual entry available if the mirror fails.
 
 ---
 
