@@ -1,13 +1,15 @@
 # Design System
 
 How the Ozark Open Sportsbook's visual system is wired into this Next.js app.
-The canonical **visual** reference lives in [`design-system/`](design-system/)
+The canonical **visual** reference lives in the `ozark-open-design` skill
+([`.claude/skills/ozark-open-design/`](../.claude/skills/ozark-open-design/))
 (HTML/JSX + CSS custom properties); this document describes the **ported**
 implementation you actually build against — TypeScript React + Tailwind v4 +
 shadcn/ui.
 
-> Source of truth for _design_ (color, type, spacing, component anatomy) is
-> `design-system/`. Source of truth for _code_ is `components/` + `app/globals.css`.
+> Source of truth for _design_ (color, type, spacing, component anatomy) is the
+> `ozark-open-design` skill (`.claude/skills/ozark-open-design/`). Source of truth
+> for _code_ is `components/` + `app/globals.css`.
 > When they disagree on a hex value or a variant, the design system wins; port
 > it, don't fork it.
 
@@ -15,13 +17,13 @@ shadcn/ui.
 
 ## 1. Token layers
 
-All tokens live in [`app/globals.css`](app/globals.css) as CSS custom
+All tokens live in [`app/globals.css`](../app/globals.css) as CSS custom
 properties, in two tiers, then are exposed to Tailwind through `@theme inline`.
 
 ### Tier 1 — raw scale (literal brand ramps)
 
 Never referenced directly in components except for washes/steps. Hex values are
-canonical (lifted verbatim from `design-system/tokens/colors.css`).
+canonical (lifted verbatim from `.claude/skills/ozark-open-design/tokens/colors.css`).
 
 | Ramp | Var prefix | Notes |
 |---|---|---|
@@ -90,11 +92,11 @@ Raw scale is always reachable via arbitrary values, e.g. `bg-[var(--indigo-50)]`
 
 ## 2. Fonts
 
-Wired with `next/font` in [`app/layout.tsx`](app/layout.tsx):
+Wired with `next/font` in [`app/layout.tsx`](../app/layout.tsx):
 
 - **Montserrat** (`next/font/google`) → `--font-montserrat` → `--font-sans`.
   Workhorse UI + body, weights 400/500/600/700.
-- **Azalea** (`next/font/local`, [`app/fonts/Azalea.otf`](app/fonts)) →
+- **Azalea** (`next/font/local`, [`app/fonts/Azalea.otf`](../app/fonts)) →
   `--font-azalea` → `--font-display` / `--font-heading`. **Display/brand
   only** — screen titles, card titles (`font-heading`), the wordmark. Never body.
 
@@ -142,15 +144,15 @@ nav with gold active pill, active via `usePathname`).
 
 ## 4. Using it
 
-- **Reference gallery:** [`/style-guide`](app/style-guide/page.tsx) renders every
+- **Reference gallery:** [`/style-guide`](../app/style-guide/page.tsx) renders every
   token and component variant — the living equivalent of the DS card gallery.
 - **Real screens** (`app/login`, `app/dashboard`, `app/bets`) use these
   components with live Supabase data and the `DATA_MODEL.md` schema — the
-  `design-system/ui_kits/sportsbook/` screens are layout reference only; nothing
-  is hardcoded from the demo data.
+  `.claude/skills/ozark-open-design/ui_kits/sportsbook/` screens are layout reference
+  only; nothing is hardcoded from the demo data.
 - **Adding a component:** reuse/extend the shadcn primitive if one fits;
   otherwise add under `components/betting|modules/` and bind classes to the
   semantic tokens above — don't reach past them to raw hex.
 - **Verify:** `npm run lint` and `npx tsc --noEmit` and `npm run build` must stay
-  green. The `design-system/` folder is vendored reference and is excluded from
-  linting.
+  green. The `ozark-open-design` skill (`.claude/skills/ozark-open-design/`) is
+  vendored reference and is excluded from linting.

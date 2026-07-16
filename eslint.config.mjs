@@ -12,9 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Vendored design-system reference sources (Babel-in-browser JSX + bundle).
-    // Kept as the canonical visual reference, but not part of this app's build.
-    "design-system/**",
+    // Design-system reference sources (Babel-in-browser JSX + bundle), now the
+    // ozark-open-design skill. Canonical visual reference, not part of this app's build.
+    ".claude/skills/ozark-open-design/**",
   ]),
 ]);
 

@@ -25,7 +25,7 @@ Everything else — tournament scoring, skins, the leaderboard math, and **bet r
 |---|---|
 | Auth (magic link), tournament/participant setup, initial bet menu (pre-ADR-0001 schema — rework scheduled) | Sprint 0: verify production deploy · Sprint 1: bet/pick schema rework · Sprint 2: spreadsheet ingestion · Sprints 3–5: bet placement · Sprints 6–9: results, payouts, leaderboard, dry run |
 
-`ROADMAP.md` is the live sprint tracker — status table, numbered sprints with checkboxes, blockers, and target dates. All product decisions are settled and logged in `PRD.md` §12 and `docs/adr/0001-bet-pick-architecture.md`; there are no open spec questions.
+`docs/ROADMAP.md` is the live sprint tracker — status table, numbered sprints with checkboxes, blockers, and target dates. All product decisions are settled and logged in `docs/PRD.md` §12 and `docs/adr/0001-bet-pick-architecture.md`; there are no open spec questions.
 
 ---
 
@@ -40,7 +40,7 @@ Everything else — tournament scoring, skins, the leaderboard math, and **bet r
 | Hosting | **Vercel** | One-click deploy from GitHub; free for hobby use |
 | External data | **Google Sheets API** (read-only) | Leaderboard data lives in the existing workbook |
 
-See `ARCHITECTURE.md` for the diagram and deeper rationale.
+See `docs/ARCHITECTURE.md` for the diagram and deeper rationale.
 
 ---
 
@@ -49,22 +49,26 @@ See `ARCHITECTURE.md` for the diagram and deeper rationale.
 ```
 ozark-open/
 ├── README.md              ← you are here
-├── PRD.md                 ← product requirements; bet rules; §12 decision log
-├── ARCHITECTURE.md        ← how the pieces fit together
-├── DATA_MODEL.md          ← database schema in detail; payout view
-├── ROADMAP.md             ← phase roadmap + live sprint tracker
-├── OUTSTANDING_DECISIONS.md ← open decisions still needing a stakeholder call
 ├── CLAUDE.md              ← instructions for AI-assisted sprint work
 ├── middleware.ts          ← session refresh + route protection
 ├── app/                   ← Next.js App Router pages (login, dashboard, bets, auth)
-├── components/            ← header + shadcn/ui components
+├── components/            ← the app's shipped React (betting/, modules/, ui/, nav)
 ├── lib/                   ← Supabase clients, odds math (validation & payouts to come)
 ├── supabase/
 │   └── migrations/        ← SQL migration files (the only way schema changes)
-├── docs/
+├── docs/                  ← all project docs
+│   ├── PRD.md             ← product requirements; bet rules; §12 decision log
+│   ├── ARCHITECTURE.md    ← how the pieces fit together
+│   ├── DATA_MODEL.md      ← database schema in detail; payout view
+│   ├── ROADMAP.md         ← phase roadmap + live sprint tracker
+│   ├── OUTSTANDING_DECISIONS.md ← open decisions still needing a stakeholder call
+│   ├── DESIGN_SYSTEM.md   ← how the brand visual system is wired into the app
+│   ├── sprints/           ← one self-contained file per sprint (sprint-0.md … sprint-9.md)
 │   ├── adr/               ← architecture decision records (0001: bet/pick structure)
 │   ├── import/            ← bets-sample.xlsx — the canonical spreadsheet format
 │   └── superpowers/       ← per-phase design specs and implementation plans
+├── .claude/skills/
+│   └── ozark-open-design/ ← design reference kit (tokens, brand assets, UI-kit); the visual source of truth
 ├── public/                ← static assets
 └── .env.local.example     ← environment variable template
 ```
@@ -86,11 +90,11 @@ ozark-open/
 
 ## Development Workflow (sprint-driven, AI-assisted)
 
-Work happens in the numbered sprints defined in `ROADMAP.md`, built with Claude Code:
+Work happens in the numbered sprints under `docs/sprints/` — one self-contained file each — with `docs/ROADMAP.md` as the dashboard that indexes them. Built with Claude Code:
 
-1. Tell Claude **"start sprint N"** (in plan mode). It reads the sprint's tasks and blockers, plans, and waits for approval.
+1. Tell Claude **"start sprint N"** (in plan mode). It reads `docs/sprints/sprint-N.md` for that sprint's tasks and blockers, plans, and waits for approval.
 2. Accept the plan; it builds task-by-task with the sprint's **"Done when"** line as the acceptance test.
-3. After shipping, it updates `ROADMAP.md` itself — checkboxes, status table, dates — so the tracker always matches reality.
+3. After shipping, it checks off the sprint file's tasks and flips that sprint's status in `docs/ROADMAP.md` — sprint index + phase table + dates — so the tracker always matches reality.
 4. Anything that can't be finished in code (bugs to fix later, manual steps in Supabase Studio / Vercel / Resend, questions for Pat or Jake) gets logged as a **GitHub issue** titled `Sprint N: …` — nothing lives only in chat history.
 
 The full protocol Claude follows is in `CLAUDE.md`.
