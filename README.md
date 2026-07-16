@@ -63,6 +63,7 @@ ozark-open/
 │   ├── ROADMAP.md         ← phase roadmap + live sprint tracker
 │   ├── OUTSTANDING_DECISIONS.md ← open decisions still needing a stakeholder call
 │   ├── DESIGN_SYSTEM.md   ← how the brand visual system is wired into the app
+│   ├── sprints/           ← one self-contained file per sprint (sprint-0.md … sprint-9.md)
 │   ├── adr/               ← architecture decision records (0001: bet/pick structure)
 │   ├── import/            ← bets-sample.xlsx — the canonical spreadsheet format
 │   └── superpowers/       ← per-phase design specs and implementation plans
@@ -89,11 +90,11 @@ ozark-open/
 
 ## Development Workflow (sprint-driven, AI-assisted)
 
-Work happens in the numbered sprints defined in `docs/ROADMAP.md`, built with Claude Code:
+Work happens in the numbered sprints under `docs/sprints/` — one self-contained file each — with `docs/ROADMAP.md` as the dashboard that indexes them. Built with Claude Code:
 
-1. Tell Claude **"start sprint N"** (in plan mode). It reads the sprint's tasks and blockers, plans, and waits for approval.
+1. Tell Claude **"start sprint N"** (in plan mode). It reads `docs/sprints/sprint-N.md` for that sprint's tasks and blockers, plans, and waits for approval.
 2. Accept the plan; it builds task-by-task with the sprint's **"Done when"** line as the acceptance test.
-3. After shipping, it updates `docs/ROADMAP.md` itself — checkboxes, status table, dates — so the tracker always matches reality.
+3. After shipping, it checks off the sprint file's tasks and flips that sprint's status in `docs/ROADMAP.md` — sprint index + phase table + dates — so the tracker always matches reality.
 4. Anything that can't be finished in code (bugs to fix later, manual steps in Supabase Studio / Vercel / Resend, questions for Pat or Jake) gets logged as a **GitHub issue** titled `Sprint N: …` — nothing lives only in chat history.
 
 The full protocol Claude follows is in `CLAUDE.md`.
