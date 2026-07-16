@@ -23,24 +23,26 @@ graph LR
     end
 
     subgraph "Google Workspace"
-        Sheets[Google Sheets<br/>scoring workbook mirror<br/>bet-outcome input]
+        Sheets[Google Sheets<br/>leaderboard + scoring]
     end
 
     Browser -->|HTTPS| NextJS
     NextJS -->|auth requests| Auth
     NextJS -->|SQL queries| DB
     NextJS -->|read-only via API key| Sheets
-    Admin[Admin user] -.->|edits bets and outcomes| Studio
+    Admin[Admin user] -->|uploads bets spreadsheet| NextJS
+    Admin -.->|data fixes, users, participants| Studio
     Studio --> DB
 ```
 
-**Three flows, three responsibilities:**
+**Four flows, four responsibilities:**
 
-1. **Read odds** — Browser asks Next.js for the active bet menu → Next.js queries Postgres → response rendered.
-2. **Write bets** — Browser sends bet placement to Next.js API route → Next.js validates constraints → Postgres insert/update → confirmation back to browser.
-3. **Import outcomes** — after a scored day, admins pull bet results from the Google Sheets mirror (refreshed after Day 1 and Day 3) to help mark outcomes in Studio; manual entry is the fallback. There is **no participant-facing leaderboard** (dropped per PRD §12 Q15).
+1. **Read odds** — Browser asks Next.js for the active bet menu → Next.js queries Postgres → bets, picks, odds, and results rendered.
+2. **Write wagers** — Browser sends a pick placement to Next.js API route → Next.js validates constraints → Postgres insert/update → confirmation back to browser.
+3. **Publish bets & results** — Admin uploads the bets spreadsheet to `/admin/import` → Next.js validates the column contract and upserts bets/picks/results keyed by the sheet's `bet_id`/`pick_id` → import report back to the admin. This same upload releases Phase 2 and delivers each round's results (ADR 0001 §7).
+4. **Read leaderboard** — Browser asks Next.js for tournament standings → Next.js fetches from Google Sheets API → response rendered.
 
-The "CMS" is not a separate system. **The CMS is Supabase Studio**, which is the admin dashboard that ships with every Supabase project. It looks like a spreadsheet, but it edits the actual Postgres database underneath. Pat, Jake, Steve, and Andrew log in and edit rows directly.
+The admin's own Excel workbook is the authoring tool for the bet menu — odds, statuses, and results are all computed there and land in the app via upload. **Supabase Studio remains the CMS for everything else**: users, participants, tournament parameters, and one-off data fixes. It looks like a spreadsheet, but it edits the actual Postgres database underneath.
 
 ---
 
@@ -85,15 +87,14 @@ The "CMS" is not a separate system. **The CMS is Supabase Studio**, which is the
 
 **Alternative considered: DigitalOcean App Platform.** Functionally equivalent and Steve could help. Slightly more configuration; not Next.js-native. Vercel wins on simplicity.
 
-### 2.4 Google Sheets (bet-outcome input, read-only)
+### 2.4 Google Sheets (leaderboard data source, read-only)
 
-**Choice:** The existing Excel workbook — which has dedicated Sportsbook tabs — gets mirrored into a Google Sheet **after Day 1 and Day 3** (not live). The app reads from the Sheet via the Google Sheets API to **help admins mark bet outcomes**; if the mirror isn't ready, admins enter results manually (PRD §12 Q15). There is no participant-facing leaderboard.
+**Choice:** The existing Excel workbook gets mirrored into a Google Sheet. The app reads from the Sheet via the Google Sheets API.
 
 **Why:**
 - Pat already maintains the workbook and trusts the math in it. We don't want to migrate that logic.
 - Google Sheets API is well-documented and free at this scale.
 - Read-only access via a service account: simple, safe, no risk of the app corrupting the workbook.
-- Manual entry stays available as a fallback, so a Sheets hiccup never blocks resolving bets.
 
 **Why not use Google Sheets as the bets database too?** Concurrent writes to a Sheet corrupt rows in confusing ways. There are no transactions, no constraints, no real querying. For a system where 8+ people might submit bets within the same minute, this is a real risk. **Sheets for read, Postgres for write.**
 
@@ -137,10 +138,10 @@ We enforce permissions at the database layer using Postgres Row-Level Security p
 **Two roles:** `participant` (default) and `admin` (`is_admin = true`).
 
 **Key policies:**
-- Anyone authenticated can read `bets` where `status` is `open`, `closed`, or `resolved` (not `draft`).
-- Authenticated users can insert / update / delete their own rows in `bet_placements`. They cannot touch anyone else's.
-- Only admins can insert / update rows in `bets`, `bet_categories`, `tournaments`.
-- Only admins can read `bet_placements` from other users while `status = open` (prevents herd behavior).
+- Anyone authenticated can read `bets` (and their `bet_picks`) where `status` is `open` or `closed` — never `hidden`.
+- Authenticated users can insert / update / soft-delete their own rows in `bet_placements`. They cannot touch anyone else's.
+- Only admins can insert / update rows in `bets`, `bet_picks`, `bet_categories`, `tournaments` (in practice, writes flow through the `/admin/import` route).
+- Only admins can read `bet_placements` from other users while the bet is `open` (prevents herd behavior); everyone can once it's `closed`.
 
 Full policy definitions live inline in each table's migration file under `supabase/migrations/`.
 
@@ -148,19 +149,23 @@ Full policy definitions live inline in each table's migration file under `supaba
 
 ## 5. Where the Math Lives
 
-Two pieces of math, two different homes:
+Three pieces of math, three different homes:
 
-### 5.1 Constraint validation (at submission time)
+### 5.1 Bet resolution (hit / miss / push / void)
+
+Lives in: **the admin's Excel workbook** — its helper columns adjudicate each pick, and the results arrive in the app via spreadsheet upload (ADR 0001 §3). The app has no resolution engine; if a result is wrong, the fix happens in Excel and gets re-uploaded, not patched in the database.
+
+### 5.2 Constraint validation (at submission time)
 
 Lives in: `lib/validation.ts` — invoked by the placement API route in `app/api/placements/route.ts`.
 
 Why server-side: a malicious user could bypass client-side checks. The validation runs on Vercel before any database write.
 
-### 5.2 Theoretical and actual payout calculation
+### 5.3 Theoretical and actual payout calculation
 
-Lives in: a Postgres view (`payouts_view`) plus a small TypeScript helper in `lib/payouts.ts` for the per-user roll-up.
+Lives in: a Postgres view (`placement_payouts_view`, computing from each pick's result and the placement's odds snapshot) plus a small TypeScript helper in `lib/payouts.ts` for the per-user roll-up.
 
-Why a view: the payout for any user is fully determined by their placements and the resolved bet outcomes. A view keeps it always-fresh and avoids stale cached values. The actual-payout proportional split runs in TypeScript at render time because it requires summing across all users (a single query result, not a per-row computation).
+Why a view: the payout for any user is fully determined by their placements and the uploaded pick results. A view keeps it always-fresh and avoids stale cached values. The actual-payout proportional split runs in TypeScript at render time because it requires summing across all users (a single query result, not a per-row computation) — including shrinking the pool by voided stakes (`pool = entry fees − voids`, ADR 0001 §9).
 
 ---
 
@@ -169,14 +174,16 @@ Why a view: the payout for any user is fully determined by their placements and 
 | Concern | Location |
 |---|---|
 | User accounts and auth | Supabase Auth (`auth.users`) + `public.users` mirror |
-| Bets (the menu) | Postgres `bets` table |
-| Bet outcomes | Postgres `bets.outcome` column |
+| Bets and picks (the menu) | Postgres `bets` + `bet_picks` tables, fed by spreadsheet upload |
+| Bet resolution math | Admin's Excel workbook (helper columns) — never the app |
+| Pick results | Postgres `bet_picks.result` column, from the uploaded sheet |
+| Menu publishing | `/admin/import` upload page → upsert by sheet `bet_id`/`pick_id` |
 | Individual placements | Postgres `bet_placements` table |
 | Constraint validation | `lib/validation.ts` (Next.js server) |
-| Theoretical payout | Postgres view (`payouts_view`) |
-| Actual payout split | TypeScript at render time (`lib/payouts.ts`) |
-| Admin "CMS" | Supabase Studio (web UI bundled with Supabase) |
-| Bet-outcome input | Google Sheets mirror of the workbook's Sportsbook tabs (after Day 1 & Day 3), read via API; manual entry fallback |
+| Theoretical payout | Postgres view (`placement_payouts_view`) |
+| Actual payout split | TypeScript at render time (`lib/payouts.ts`, void-adjusted pool) |
+| Admin "CMS" (users, participants, fixes) | Supabase Studio (web UI bundled with Supabase) |
+| Tournament leaderboard | Google Sheets (existing workbook), read via API |
 | Tournament scoring math | Excel workbook → Google Sheets mirror (unchanged) |
 | Hosting | Vercel |
 
@@ -186,9 +193,10 @@ Why a view: the payout for any user is fully determined by their placements and 
 
 - **A separate backend server.** Next.js API routes on Vercel are sufficient.
 - **A queue or background job system.** All work is request/response; there are no async jobs.
-- **A separate CMS (Sanity, Contentful, etc.).** Supabase Studio is the CMS.
+- **A bet resolution engine.** Results are computed in the admin's Excel workbook and uploaded per pick; the app displays them (ADR 0001 §3).
+- **A separate CMS (Sanity, Contentful, etc.).** Supabase Studio is the CMS for data; the bet menu arrives via the `/admin/import` spreadsheet upload — the only custom admin surface.
 - **Caching layer.** Postgres handles ~32 users without breaking a sweat. If we ever need it, Vercel has built-in Edge caching.
 - **Custom email server.** Supabase Auth handles the sending; only the SMTP relay is external (Resend free tier — see §3).
 - **CI/CD pipeline.** Vercel rebuilds and deploys on every `git push`.
 - **Real-time updates or websockets.** A page refresh is fine for ~32 users.
-- **Live odds movement / tote-board mechanics.** Odds are hand-set by Pat and Jake and snapshotted per placement (PRD §7.1); **the app never computes or suggests odds.** The pool is pari-mutuel *at settlement*, not a live tote. Parlays, in-play betting, and cash-out are equally out — permanently.
+- **Live odds movement / tote-board mechanics.** Odds are hand-set by admins and snapshotted per placement (PRD §7.1); the pool is pari-mutuel *at settlement*, not a live tote. Parlays, in-play betting, and cash-out are equally out — permanently.

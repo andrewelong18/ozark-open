@@ -6,11 +6,11 @@ The database schema for the Ozark Open Sportsbook. This is the most important fi
 
 ## 1. Design Principles
 
-1. **Generic bets, not hardcoded ones.** The seven bet categories from the original Sportsbook are stored as data, not code. Adding a new category requires inserting a row into `bet_categories`, not editing source files. *(Pat has proposed a category/subcategory/`group_id` restructure — see §3.5 "Proposed" note and PRD §6.1; it is pending a design meeting and not yet reflected in the live schema.)*
+1. **The spreadsheet is the source; the schema mirrors it.** Bets, picks, odds, statuses, and results all arrive from the admin's spreadsheet (ADR 0001) and are upserted by its stable IDs. The app never adjudicates a bet — there is no resolution engine to model.
 2. **Evergreen identity.** A user has one record forever. Tournaments are separate entities. A user joins a tournament via a join table.
-3. **Outcomes attach to bets, not placements.** A bet hits or misses once, globally. We don't store hit/miss per-placement.
-4. **Theoretical payout is computed, never stored.** It's a function of `placement.amount`, `placement.odds_at_placement`, and `bet.outcome`. A Postgres view derives it on demand. (Odds are snapshotted onto the placement at write time — see §3.7 and PRD §7.1.) **Voids are a special case:** a voided bet contributes nothing to the theoretical total, its stake is refunded, and those dollars leave the pool (PRD §5, Q6) — see §4.
-5. **Constraints in the right place.** Schema enforces things that are always true (a placement must have positive amount). App code enforces things that are contextual (you can't have more than 10 placements across the tournament).
+3. **Results attach to picks, not bets or placements.** A pick hits or misses once, globally (`bet_picks.result`). We don't store hit/miss per-placement, and a bet has no outcome of its own — "resolved" is derived from its picks.
+4. **Theoretical payout is computed, never stored.** It's a function of `placement.amount`, `placement.odds_at_placement`, and `pick.result`. A Postgres view derives it on demand. (Odds are snapshotted onto the placement at write time — see §3.7 and PRD §7.1.)
+5. **Constraints in the right place.** Schema enforces things that are always true (a placement must have positive amount). App code enforces things that are contextual (you can't have more than 10 placements in a phase).
 
 ---
 
@@ -23,9 +23,9 @@ erDiagram
     tournaments ||--o{ tournament_participants : "has"
     tournaments ||--o{ bets : "contains"
     bet_categories ||--o{ bets : "categorizes"
-    bets ||--o{ bet_placements : "receives"
-    bets ||--o{ bet_subjects : "names"
-    users ||--o{ bet_subjects : "is_subject_of"
+    bets ||--o{ bet_picks : "offers"
+    bet_picks ||--o{ bet_placements : "receives"
+    users |o--o{ bet_picks : "is_player_of"
 
     users {
         uuid id PK
@@ -42,8 +42,8 @@ erDiagram
         text status
         int entry_fee_min
         int entry_fee_max
-        int min_bets_per_round
-        int max_bets_per_round
+        int min_picks_per_phase
+        int max_picks_per_phase
         timestamptz created_at
     }
 
@@ -58,7 +58,8 @@ erDiagram
     bet_categories {
         uuid id PK
         text name
-        text resolution_type
+        text slug
+        boolean allows_multiple_picks
         text description
     }
 
@@ -66,24 +67,31 @@ erDiagram
         uuid id PK
         uuid tournament_id FK
         uuid category_id FK
-        int bet_number
-        text description
-        int american_odds
-        int round_number
+        int sheet_bet_id
+        text title
+        int phase
+        text round
         text status
-        text outcome
+        numeric total_probability
         timestamptz created_at
     }
 
-    bet_subjects {
+    bet_picks {
+        uuid id PK
         uuid bet_id FK
-        uuid user_id FK
+        int sheet_pick_id
+        text label
+        int american_odds
+        text fractional_odds
+        numeric probability
+        uuid player_user_id FK
+        text result
     }
 
     bet_placements {
         uuid id PK
         uuid user_id FK
-        uuid bet_id FK
+        uuid pick_id FK
         int amount
         int odds_at_placement
         boolean requires_admin_review
@@ -105,7 +113,7 @@ One row per person who ever logs in. Persists across tournaments forever.
 |---|---|---|
 | `id` | `uuid` PK | Matches `auth.users.id` from Supabase Auth |
 | `email` | `text` UNIQUE NOT NULL | Used for magic-link login |
-| `display_name` | `text` NOT NULL | E.g. "Dan Mercer" — what shows on bets. **User sets it at registration; immutable by the user thereafter. Admins can always edit it** and keep it matching the official tournament roster, since self-bet flagging relies on the name match (PRD §12 Q13). |
+| `display_name` | `text` NOT NULL | E.g. "Dan Mercer" — what shows on bets and leaderboards |
 | `is_admin` | `boolean` NOT NULL DEFAULT `false` | Admins are Pat, Jake, Steve, Andrew |
 | `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | |
 
@@ -127,8 +135,8 @@ One row per Ozark Open year. Holds the rule parameters that govern that year's p
 | `status` | `text` NOT NULL CHECK IN (`'upcoming'`, `'active'`, `'completed'`) | Controls visibility |
 | `entry_fee_min` | `int` NOT NULL DEFAULT 20 | Lower bound on entry |
 | `entry_fee_max` | `int` NOT NULL DEFAULT 50 | Upper bound on entry |
-| `min_bets_per_round` | `int` NOT NULL DEFAULT 5 | **Misnamed — semantics are now per *tournament*, not per round** (Pat, Q2: the 5–10 count spans both rounds combined). Rename to `min_bets_per_tournament` in the Sprint 1 migration. |
-| `max_bets_per_round` | `int` NOT NULL DEFAULT 10 | Likewise → `max_bets_per_tournament`. Counts across both rounds, not each round. |
+| `min_picks_per_phase` | `int` NOT NULL DEFAULT 5 | Renamed from `min_bets_per_round` (ADR 0001 §10) |
+| `max_picks_per_phase` | `int` NOT NULL DEFAULT 10 | Renamed from `max_bets_per_round` |
 | `max_single_bet_pct` | `numeric(3,2)` NOT NULL DEFAULT 0.50 | Half of entry, by default |
 | `max_single_bet_cap` | `int` NOT NULL DEFAULT 20 | Hard cap regardless of entry size |
 | `max_self_bet_pct` | `numeric(3,2)` NOT NULL DEFAULT 0.25 | Quarter of entry |
@@ -149,106 +157,104 @@ Join table connecting users to tournaments. A user is "in" a tournament for a gi
 | `user_id` | `uuid` NOT NULL FK → `users.id` | |
 | `tournament_id` | `uuid` NOT NULL FK → `tournaments.id` | |
 | `entry_fee` | `int` NOT NULL CHECK (`entry_fee BETWEEN 20 AND 50`) | The participant's chosen entry, $20–$50 |
-| `is_player` | `boolean` NOT NULL DEFAULT `true` | True if they're playing golf, false if they're only betting |
-| `betting_enabled` | `boolean` NOT NULL DEFAULT `true` | **Proposed (Sprint 1).** Admin toggle to enable/disable betting for any user, playing or not (PRD §12 Q14). |
+| `is_player` | `boolean` NOT NULL DEFAULT `true` | True if they're playing golf, false if they're only betting (rare) |
 
 **Constraint:** UNIQUE (`user_id`, `tournament_id`) — a user can only join a tournament once.
 
-**Why `is_player`:** the rules talk about "betting on yourself" — that only matters if the bettor is also a player. **Non-playing entrants are exempt from the self-bet rule and carry a stricter betting maximum** than players (the exact stricter cap is still open — see `OUTSTANDING_DECISIONS.md` #2; it will be a per-tournament param or a per-participant override once decided). Expect 0–5 non-players; the app supports any number (Q14).
+**Why `is_player`:** the rules talk about "betting on yourself" — that only matters if the bettor is also a player. Non-playing entrants (if any) are exempt from the self-bet rule.
 
 ---
 
 ### 3.4 `bet_categories`
 
-The seven categories from the original Sportsbook, stored as configurable data.
+The five categories from ADR 0001 §2, stored as configurable data. Since the app never adjudicates (results arrive per pick from the sheet), a category carries only what the app actually uses: display info and the one wagering constraint that differs by category.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` PK | |
-| `name` | `text` NOT NULL UNIQUE | E.g. "Top 4 Finish + Ties" |
-| `resolution_type` | `text` NOT NULL | Enum: `'single_winner'`, `'top_n_with_ties'`, `'head_to_head_strict'`, `'best_in_group_with_ties'`, `'head_to_head_void_on_tie'`, `'best_in_group_strict'`, `'prop'` |
-| `description` | `text` | Human-readable explanation |
+| `name` | `text` NOT NULL UNIQUE | E.g. "Top X Finisher" — must match the sheet's `category` column |
+| `slug` | `text` NOT NULL UNIQUE | E.g. `top_x_finisher` — stable key for code |
+| `allows_multiple_picks` | `boolean` NOT NULL | `true` for Top Finisher / Top X Finisher / Prop Bet; `false` for Match / Group Match (one pick per participant, PRD §7 rule 7) |
+| `description` | `text` | Human-readable explanation, incl. the informational tie rule (hit/push/manual) |
 
-**Seed data** (loaded by the initial migration): the seven categories listed in PRD §6.
+**Seed data** (re-seeded by the Sprint 1 rework migration): Top Finisher, Top X Finisher, Match, Group Match, Prop Bet.
 
-**Adding an eighth category later:** insert a row here. If the new `resolution_type` requires custom outcome logic, add a small case to `lib/payouts.ts` and ship it. This is the one piece that requires a code change, by design — payout math is too important to leave to runtime configuration.
+**Why no `resolution_type`:** resolution math lives in the admin's Excel workbook (helper columns); the app ingests each pick's result and never computes one. Tie behavior is documented in `description` for humans, not consumed by code.
+
+**Adding a sixth category later:** insert a row here and use its name in the sheet. If it needs a new wagering constraint beyond `allows_multiple_picks`, that's a code change — by design.
 
 ---
 
 ### 3.5 `bets`
 
-The bet menu. One row per bet number (#1, #2, …) per tournament.
+The bet menu headings. One row per bet in the admin's spreadsheet, upserted by the sheet's `bet_id` (ADR 0001 §7).
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` PK | |
 | `tournament_id` | `uuid` NOT NULL FK → `tournaments.id` | |
-| `category_id` | `uuid` NOT NULL FK → `bet_categories.id` | |
-| `bet_number` | `int` NOT NULL | Friendly identifier — the "#3" in "$3 on #3" |
-| `description` | `text` NOT NULL | E.g. "Dan Mercer to win tournament" |
-| `american_odds` | `int` NOT NULL | Positive or negative (e.g., `+150`, `-130`). Zero is invalid. |
-| `round_number` | `int` NOT NULL CHECK IN (1, 2) | Betting Round 1 (resolves after Day 1, Thursday) or Round 2 (resolves after Day 3, Saturday). Day 2 (Friday scramble) is **not** covered by the Sportsbook (Q9). *(Pat's §6.1 proposal would rename these to golf "Round 1" / "Round 3" — pending the design meeting.)* |
-| `status` | `text` NOT NULL CHECK IN (`'draft'`, `'open'`, `'closed'`, `'resolved'`) DEFAULT `'draft'` | |
-| `outcome` | `text` CHECK IN (`'hit'`, `'miss'`, `'push'`, `'void'`) | NULL until status = resolved |
+| `category_id` | `uuid` NOT NULL FK → `bet_categories.id` | Matched from the sheet's `category` column |
+| `sheet_bet_id` | `int` NOT NULL | The sheet's `bet_id` — the stable upsert key. Not displayed. |
+| `title` | `text` NOT NULL | The sheet's `bet` column, e.g. "Win Tournament". Not necessarily unique. |
+| `phase` | `int` NOT NULL CHECK IN (1, 2) | Which betting window the bet belongs to |
+| `round` | `text` NOT NULL CHECK IN (`'tournament'`, `'round_1'`, `'round_2'`, `'round_3'`) | Golf scope. `round_2` is allowed by schema but unused by policy — no Round 2 bets are released. |
+| `status` | `text` NOT NULL CHECK IN (`'hidden'`, `'open'`, `'closed'`) DEFAULT `'hidden'` | `hidden` = placeholder, app ignores (the old "draft") |
+| `total_probability` | `numeric` | Sum of pick probabilities, as calculated in the sheet. Displayed verbatim, informationally. |
 | `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | |
 
-**Constraint:** UNIQUE (`tournament_id`, `bet_number`) — bet numbers don't repeat within a tournament.
+**Constraint:** UNIQUE (`tournament_id`, `sheet_bet_id`) — the upsert key.
 
-**Constraint (added in Sprint 1):** CHECK `(status = 'resolved') = (outcome IS NOT NULL)` — a bet is resolved if and only if it has an outcome. Admins edit these columns directly in Studio; the database refuses the two plausible fat-fingers (outcome on an open bet, resolved with no outcome).
-
-**Why no `fractional_odds` column:** computed from `american_odds` at render time. Single source of truth.
-
-**Why no `implied_probability` column:** also computed from `american_odds`. Single source of truth.
-
-**Proposed schema changes (pending the §6.1 design meeting — do not build yet):** Pat's restructure (PRD §6.1) would add a **top-level category** (Final Tournament / Round 1 / Round 3), a **`subcategory`** (Winner-Top-Finisher / Top-X / Head-to-Head-2 / Head-to-Head-3+ / Prop), and a **`group_id`** (so a subcategory can hold multiple independent groups, e.g. several head-to-head matchups) to each bet, alongside the existing `bet_number`/`bet_id`. The per-subcategory selection rules (multi-select for winner/top-X; single-player for head-to-heads; one-per-group for props) would move into `lib/validation.ts`. This is recorded for the meeting only; the live table above and the seven `resolution_type` values are unchanged until it's finalized. See `OUTSTANDING_DECISIONS.md` #1.
+**Why no `american_odds` / `outcome` here:** odds and results are per-**pick** now (§3.6). A bet has no outcome of its own; "resolved" is derived (bet `closed` + pick results non-pending). No stored resolved status means uploads can't desynchronize two representations — the fat-finger class the old `resolved ⇔ outcome` CHECK guarded against no longer exists.
 
 ---
 
-### 3.6 `bet_subjects`
+### 3.6 `bet_picks`
 
-Which players a bet is "about." Used for self-bet detection. A bet can name zero, one, or many players.
+The options within a bet — one row per pick in the spreadsheet, upserted by the sheet's `pick_id`. **This is what participants wager on.**
 
 | Column | Type | Notes |
 |---|---|---|
-| `bet_id` | `uuid` NOT NULL FK → `bets.id` | |
-| `user_id` | `uuid` NOT NULL FK → `users.id` | The player named in the bet |
+| `id` | `uuid` PK | |
+| `bet_id` | `uuid` NOT NULL FK → `bets.id` ON DELETE CASCADE | |
+| `sheet_pick_id` | `int` NOT NULL | The sheet's `pick_id` — the stable upsert key. Not displayed. |
+| `label` | `text` NOT NULL | The sheet's `pick` column, incl. stroke notation: "Steve Jones (-5)", "Field", "Yes" |
+| `american_odds` | `int` NOT NULL | E.g. `+400`, `-130`. Zero invalid. **Source of truth for payout math** (snapshotted at placement, PRD §7.1). |
+| `fractional_odds` | `text` NOT NULL | As formatted in the sheet (e.g. "4/1"). Displayed verbatim — never recomputed. |
+| `probability` | `numeric` NOT NULL | Implied probability as calculated in the sheet. Displayed verbatim to 1 decimal place. |
+| `player_user_id` | `uuid` FK → `users.id` | The player this pick refers to, name-matched at import (stroke suffixes stripped). NULL for "Field", "Yes"/"No", and unmatched names (surfaced in the import report). Drives self-pick flagging and the opponent hard-block (PRD §7 rules 7–8). |
+| `result` | `text` NOT NULL CHECK IN (`'pending'`, `'hit'`, `'miss'`, `'push'`, `'void'`) DEFAULT `'pending'` | From the sheet's `result` column. Displayed only when not `pending`. |
 
-**Constraint:** PRIMARY KEY (`bet_id`, `user_id`).
+**Constraint:** UNIQUE (`bet_id`, `sheet_pick_id`). The sheet's `pick_id` is unique across the whole sheet; the importer verifies that before writing (the table can't express cross-bet uniqueness without denormalizing `tournament_id` — not worth it).
 
-**Examples:**
-- "Dan Mercer to win" → one row: (bet_id, Dan Mercer's user_id)
-- "Best Finisher among Jake Kohne / Steve Jones / Mike Yenzer" → three rows
-- "Most even-numbered scores" (a prop bet) → zero rows; not about any specific player
-
-**Self-bet detection** at submission time: if `user_id` of the placement matches any `user_id` in `bet_subjects` for that bet, flag for admin review.
+**Replaces `bet_subjects`** (dropped in the Sprint 1 rework migration): instead of a bet-level list of subject players, each pick links to its player. Self-pick = placing on a pick whose `player_user_id` is you. Opponent = you are a `player_user_id` of some pick in a Match/Group Match bet, and you place on a *different* pick of that bet.
 
 ---
 
 ### 3.7 `bet_placements`
 
-Each individual wager: one row per (user, bet) pair where money was placed.
+Each individual wager: one row per (user, pick) pair where money was placed.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` PK | |
 | `user_id` | `uuid` NOT NULL FK → `users.id` | The bettor |
-| `bet_id` | `uuid` NOT NULL FK → `bets.id` | The bet being placed |
+| `pick_id` | `uuid` NOT NULL FK → `bet_picks.id` | The pick being wagered on |
 | `amount` | `int` NOT NULL CHECK (`amount > 0`) | Whole dollars, $1 minimum |
-| `odds_at_placement` | `int` NOT NULL | Snapshot of `bets.american_odds` at write time. **Payouts compute from this, never from the live bet row** — admins can reprice an open bet without silently changing existing bettors' payouts (PRD §7.1). Added in Sprint 1. |
-| `requires_admin_review` | `boolean` NOT NULL DEFAULT `false` | Set on write when the bettor appears in `bet_subjects` for the bet (self-bet flag, PRD §7). Added in Sprint 1. |
-| `deleted_at` | `timestamptz` | Soft delete — removing a placement sets this instead of deleting the row. Money data keeps its history for dispute resolution. All reads filter `deleted_at IS NULL`. Added in Sprint 1. |
+| `odds_at_placement` | `int` NOT NULL | Snapshot of `bet_picks.american_odds` at write time. **Payouts compute from this, never from the live pick row** — a re-uploaded reprice can't silently change existing bettors' payouts (PRD §7.1). |
+| `requires_admin_review` | `boolean` NOT NULL DEFAULT `false` | Set on write when the pick's `player_user_id` is the bettor (self-pick flag, PRD §7). |
+| `deleted_at` | `timestamptz` | Soft delete — removing a placement sets this instead of deleting the row. Money data keeps its history for dispute resolution. All reads filter `deleted_at IS NULL`. |
 | `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | |
 | `updated_at` | `timestamptz` NOT NULL DEFAULT `now()` | Updated on edit |
 
-**Constraint:** UNIQUE (`user_id`, `bet_id`) — a user can only have one placement per bet. (Editing the placement updates `amount` rather than creating a second row. Re-placing after a soft delete revives the existing row — clears `deleted_at`, updates `amount`, and re-snapshots `odds_at_placement` — so the unique constraint holds.)
+**Constraint:** UNIQUE (`user_id`, `pick_id`) — one placement per pick per user. (Editing updates `amount` rather than creating a second row. Re-placing after a soft delete revives the existing row — clears `deleted_at`, updates `amount`, re-snapshots `odds_at_placement` — so the unique constraint holds.) Multiple placements across different picks of the same bet are allowed in the multi-pick categories, and blocked in app code for Match / Group Match.
 
-**Constraints NOT enforced at the schema level** (these live in app code because they require cross-row checks; semantics per PRD §7/§12):
-- Between 5 and 10 placements per user **across the tournament (both rounds combined)** — not per round (Q2, revised by Pat). A participant may place all of them in one round.
-- Sum of placements **across both rounds** ≤ entry fee; must equal it exactly by Round 2 close ("$40 across the board" — the entry fee funds the whole tournament, not each round).
-- Single placement amount ≤ `min(max_single_bet_pct × entry_fee, max_single_bet_cap)` — per placement, either round.
-- Sum of self-bet placements **across the tournament** ≤ `min(max_self_bet_pct × entry_fee, max_self_bet_cap)`.
-- Non-playing bettors carry a **stricter single/self max** than players (value TBD — `OUTSTANDING_DECISIONS.md` #2).
-- Per-subcategory selection limits once the §6.1 taxonomy lands (one player per head-to-head; one bet per prop group).
+**Constraints NOT enforced at the schema level** (these live in app code because they require cross-row checks; semantics per PRD §7/§12/ADR 0001):
+- Between 5 and 10 pick-placements per user in any phase they bet in — each wagered pick counts individually.
+- Sum of placements **across both phases** ≤ entry fee; must equal it exactly by Phase 2 close ("$40 across the board" — the entry fee funds the whole tournament, not each phase).
+- Single placement amount ≤ `min(max_single_bet_pct × entry_fee, max_single_bet_cap)` — per placement, either phase.
+- Sum of self-pick placements **across the tournament** ≤ `min(max_self_bet_pct × entry_fee, max_self_bet_cap)`.
+- One pick per Match / Group Match bet (`bet_categories.allows_multiple_picks = false`).
+- No placement on an opponent's pick in a Match / Group Match the bettor plays in — hard reject.
 
 ---
 
@@ -261,40 +267,45 @@ CREATE VIEW placement_payouts_view AS
 SELECT
     p.id                 AS placement_id,
     p.user_id,
-    p.bet_id,
+    pk.id                AS pick_id,
+    pk.bet_id,
     p.amount,
-    b.outcome,
+    pk.result,
     p.odds_at_placement,
     b.tournament_id,
     CASE
-        WHEN b.outcome = 'hit' AND p.odds_at_placement > 0
+        WHEN pk.result = 'hit' AND p.odds_at_placement > 0
             THEN p.amount + (p.amount * p.odds_at_placement / 100.0)
-        WHEN b.outcome = 'hit' AND p.odds_at_placement < 0
+        WHEN pk.result = 'hit' AND p.odds_at_placement < 0
             THEN p.amount + (p.amount * 100.0 / ABS(p.odds_at_placement))
-        WHEN b.outcome = 'push'
-            THEN p.amount            -- push counts; stake returned as its payout
-        WHEN b.outcome = 'miss'
+        WHEN pk.result = 'push'
+            THEN p.amount
+        WHEN pk.result IN ('miss', 'void')
             THEN 0
-        WHEN b.outcome = 'void'
-            THEN 0                   -- void does NOT count toward the theoretical total
-        ELSE NULL                    -- bet not yet resolved
+        WHEN pk.result = 'pending'
+            THEN NULL  -- not yet resolved
     END AS theoretical_payout,
-    CASE WHEN b.outcome = 'void' THEN p.amount ELSE 0 END AS refund
+    CASE
+        WHEN pk.result = 'void' THEN p.amount
+        ELSE 0
+    END AS refunded_stake
 FROM bet_placements p
-JOIN bets b ON b.id = p.bet_id
+JOIN bet_picks pk ON pk.id = p.pick_id
+JOIN bets b       ON b.id  = pk.bet_id
 WHERE p.deleted_at IS NULL;
 ```
 
-**Push vs void** *(revised by Pat, Jul 2026 — Q6)*: a **push** counts, contributing its stake as `theoretical_payout`. A **void** does **not** count — `theoretical_payout` is `0` and the stake surfaces in the new `refund` column instead. `lib/payouts.ts` then:
+Notes:
 
-- **refunds** each void's stake to its bettor (paid back directly, off the top), and
-- **reduces `pool_total`** by the sum of all refunds: `pool_total = Σ(entry_fee) − Σ(refund)`.
+- Computes from `p.odds_at_placement` (the snapshot taken when the wager was written, PRD §7.1) — never from `pk.american_odds`, which a re-upload may have repriced since — and excludes soft-deleted placements.
+- **Void ≠ push** (ADR 0001 §9): a push credits the stake as theoretical payout; a void contributes 0 to the theoretical total and instead surfaces the stake in `refunded_stake`, so the pool can shrink.
 
-So voided dollars leave the pool entirely; they neither inflate the denominator nor earn a proportional share. *(This pool-math handling is inferred from Pat's stated principle and is money-critical — confirm before Sprint 6; `OUTSTANDING_DECISIONS.md` #3.)*
+The actual-payout proportional split runs in TypeScript at render time (`lib/payouts.ts`), since it requires summing across all users (one query, then arithmetic):
 
-The view computes from `p.odds_at_placement` (the snapshot taken when the wager was written, PRD §7.1) — never from `b.american_odds`, which an admin may have repriced since — and excludes soft-deleted placements.
-
-The actual-payout proportional split runs in TypeScript at render time, since it requires summing across all users (one query, then arithmetic) and now subtracting refunds from the pool.
+```
+pool_total   = sum(entry fees) − sum(refunded_stake)
+actual(user) = theoretical(user) / sum(theoretical(all)) × pool_total
+```
 
 ---
 
@@ -302,10 +313,11 @@ The actual-payout proportional split runs in TypeScript at render time, since it
 
 Policies live inline in each table's migration file under `supabase/migrations/` (e.g., `20260507000000_users_table.sql`, `20260507000001_tournaments.sql`, `20260507000002_bets.sql`). Summary:
 
-- **`bets`**: anyone authenticated can `SELECT` rows where `status != 'draft'`. Only admins can `INSERT` / `UPDATE` / `DELETE`.
-- **`bet_placements`**: a user can `SELECT` / `INSERT` / `UPDATE` / `DELETE` their own rows. Other users' placements are visible only when the corresponding bet's status is `closed` or `resolved`. Admins can read all.
+- **`bets`**: anyone authenticated can `SELECT` rows where `status != 'hidden'`. Only admins can `INSERT` / `UPDATE` / `DELETE` (in practice: the import route, running as the admin).
+- **`bet_picks`**: readable whenever the parent bet is readable (not `hidden`). Write: admins only (the import route).
+- **`bet_placements`**: a user can `SELECT` / `INSERT` / `UPDATE` / soft-delete their own rows while the parent bet is `open`. Other users' placements are visible only when the bet is `closed`. Admins can read all.
 - **`tournament_participants`**: anyone authenticated can `SELECT`. Only admins can `INSERT` / `UPDATE`.
-- **`bet_categories`, `tournaments`, `bets`, `bet_subjects`**: read by all authenticated users; write by admins only.
+- **`bet_categories`, `tournaments`**: read by all authenticated users; write by admins only.
 - **`users`**: a user can read their own row. Admins can read all.
 
 ---
@@ -319,8 +331,10 @@ Policies live inline in each table's migration file under `supabase/migrations/`
 **Migrations shipped so far** (one per phase, each with its tables + RLS + seeds):
 - `20260507000000_users_table.sql` — `users`, `is_admin()` helper, new-user trigger
 - `20260507000001_tournaments.sql` — `tournaments`, `tournament_participants`, 2026 seed
-- `20260507000002_bets.sql` — `bet_categories`, `bets`, `bet_subjects`, seven-category seed
+- `20260507000002_bets.sql` — `bet_categories`, `bets`, `bet_subjects`, seven-category seed *(pre-ADR-0001 shape — superseded by the rework below)*
 
-**Still to come** (see `ROADMAP.md`): `bet_placements` (Sprint 1), `placement_payouts_view` (Sprint 5).
+**Still to come** (see `ROADMAP.md`):
+- **Bet/pick rework (Sprint 1):** restructure `bets` to the §3.5 shape, create `bet_picks`, drop `bet_subjects`, re-seed `bet_categories` with the five categories, rename the `tournaments` per-phase rule params. No production bet data exists yet, so this is a clean rebuild, not a data migration.
+- `bet_placements` (Sprint 3), `placement_payouts_view` (Sprint 7).
 
-**Known inconsistency to fix in the Sprint 1 migration:** `tournament_participants.entry_fee` currently has a hardcoded `CHECK (entry_fee BETWEEN 20 AND 50)`, but the entry-fee bounds are supposed to live on the `tournaments` row (`entry_fee_min` / `entry_fee_max`) per the "rules are data, not constants" convention. Fix: drop the hardcoded CHECK (keep `entry_fee > 0`) and enforce the per-tournament bounds in `lib/validation.ts` / at participant creation instead.
+**Known inconsistency to fix in the rework migration:** `tournament_participants.entry_fee` currently has a hardcoded `CHECK (entry_fee BETWEEN 20 AND 50)`, but the entry-fee bounds are supposed to live on the `tournaments` row (`entry_fee_min` / `entry_fee_max`) per the "rules are data, not constants" convention. Fix: drop the hardcoded CHECK (keep `entry_fee > 0`) and enforce the per-tournament bounds in `lib/validation.ts` / at participant creation instead.
