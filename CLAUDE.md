@@ -11,10 +11,11 @@ Next.js 15 (App Router) + TypeScript · Supabase (Postgres, magic-link auth, RLS
 | Doc | Read when |
 |---|---|
 | `ROADMAP.md` | **Always, for sprint work.** Status table + numbered sprint backlog. The single source of "where are we." |
-| `PRD.md` | Bet rules (§7, §8.1), pari-mutuel math (§5), lifecycle (§8), resolved stakeholder decisions (§12). |
+| `PRD.md` | Bet rules (§7, §8.1), pari-mutuel math (§5), lifecycle & ingestion (§8), resolved stakeholder decisions (§12). |
+| `docs/adr/0001-bet-pick-architecture.md` | The betting-structure decision record: bets→picks, phases, five categories, spreadsheet upload, void semantics. Read when a spec question smells architectural. |
 | `DATA_MODEL.md` | Touching schema, migrations, RLS, or the payout view. |
 | `ARCHITECTURE.md` | Auth flow, RLS strategy, where the math lives. |
-| `README.md` | Local setup, deploy, the admin Studio runbook. |
+| `README.md` | Local setup, deploy, the admin workflow (spreadsheet upload + Studio). |
 
 Do **not** re-read all foundation docs by default — each sprint in `ROADMAP.md` cites the sections it depends on; read those and start.
 
@@ -33,14 +34,16 @@ Do **not** re-read all foundation docs by default — each sprint in `ROADMAP.md
 ## Project Conventions
 
 - **Migrations only.** Schema changes are SQL files in `supabase/migrations/`; Supabase Studio edits data, never schema.
-- **Studio is the admin CMS.** No custom admin UI in v1.
+- **The bet menu arrives by spreadsheet upload** (`/admin/import`, upsert by the sheet's `bet_id`/`pick_id` — ADR 0001). Studio is the admin CMS for everything else; that upload page is the **only** custom admin UI in v1.
+- **The app never adjudicates a bet.** Results (hit/miss/push/void) are computed in the admin's Excel workbook and uploaded per pick. Don't build resolution logic.
+- **Odds display values come from the sheet** (`fractional_odds`, `probability`, `total_probability` — verbatim, never recomputed). `american_odds` is for payout math only.
 - **Validation is server-side** in `lib/validation.ts`, called from API routes. Client checks are UX, not security.
-- **Payout math:** `placement_payouts_view` computes theoretical payouts **from `odds_at_placement`** (snapshotted at write — never the live bet odds); `lib/payouts.ts` does the proportional split at render.
-- **Rule parameters live on the `tournaments` row** — never hardcode entry-fee bounds, bet counts, or caps.
+- **Payout math:** `placement_payouts_view` computes theoretical payouts **from `odds_at_placement`** (snapshotted at write — never the live pick odds) against each **pick's** result; `lib/payouts.ts` does the proportional split at render with a void-adjusted pool (pool = entry fees − voided stakes).
+- **Rule parameters live on the `tournaments` row** — never hardcode entry-fee bounds, pick counts, or caps.
 - **Placements are soft-deleted** (`deleted_at`) and odds-snapshotted; money rows keep their history.
-- **The seven bet rules (PRD §7) and the §12 decision log are settled.** Don't relax, reorder, or reinterpret them without asking.
+- **The PRD §7 bet rules, the five-category pick rules (PRD §6), and the §12 decision log (incl. ADR 0001's A1–A10) are settled.** Don't relax, reorder, or reinterpret them without asking.
 - **Docs beat code.** When they disagree, flag the drift — don't silently align to the code.
 
 ## Out of Scope (don't propose)
 
-Scoring/skins/leaderboard math (stays in the Excel workbook) · payments (Venmo, out of band) · public access, SEO · custom admin UI · notifications · multi-tenancy · parlays, live odds, cash-out, real-time updates · new `resolution_type` values without a code change (by design)
+Scoring/skins/leaderboard math (stays in the Excel workbook) · bet resolution logic (results come from the admin's workbook per pick — ADR 0001) · payments (Venmo, out of band) · public access, SEO · custom admin UI beyond `/admin/import` · notifications · multi-tenancy · parlays, live odds, cash-out, real-time updates · new bet categories without a code change (by design)

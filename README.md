@@ -10,10 +10,10 @@ A private fantasy-golf betting platform for the annual Ozark Open tournament. Pa
 
 A web application that lets:
 
-- **Participants** log in, view the active bet menu, place bets within the configured constraints, and see their outcomes and payouts.
-- **Admins** (Pat, Jake, Steve, Andrew) publish bets, mark outcomes (hit / miss / push / void) after each round of golf, and run final payout calculations.
+- **Participants** log in, view the active bet menu (bets with per-pick odds), place wagers on picks within the configured constraints, and see their results and payouts.
+- **Admins** (Pat, Jake, Steve, Andrew) publish the bet menu **by uploading the bets spreadsheet**, and deliver results (hit / miss / push / void, computed in that same workbook) by re-uploading it after each betting round. Final payouts are calculated in the app.
 
-Everything else — tournament scoring, skins, the leaderboard math — stays in the existing Excel workbook. The app reads from that workbook (or a Google Sheets mirror of it) for display purposes only.
+Everything else — tournament scoring, skins, the leaderboard math, and **bet resolution itself** — stays in the existing Excel workbooks. The app reads from them (via upload for bets, via a Google Sheets mirror for the leaderboard) and never adjudicates a bet. See `docs/adr/0001-bet-pick-architecture.md` for the full betting-architecture decision record.
 
 ---
 
@@ -23,9 +23,9 @@ Everything else — tournament scoring, skins, the leaderboard math — stays in
 
 | Built (code complete) | Up next |
 |---|---|
-| Auth (magic link), tournament/participant setup, bet menu with odds display, all migrations through `bets`/`bet_subjects` | Sprint 0: verify production deploy · Sprints 1–3: bet placement & validation · Sprints 4–8: outcomes, payouts, leaderboard, dry run |
+| Auth (magic link), tournament/participant setup, initial bet menu (pre-ADR-0001 schema — rework scheduled) | Sprint 0: verify production deploy · Sprint 1: bet/pick schema rework · Sprint 2: spreadsheet ingestion · Sprints 3–5: bet placement · Sprints 6–9: results, payouts, leaderboard, dry run |
 
-`ROADMAP.md` is the live sprint tracker — status table, numbered sprints with checkboxes, blockers, and target dates. All product decisions are settled and logged in `PRD.md` §12; there are no open spec questions.
+`ROADMAP.md` is the live sprint tracker — status table, numbered sprints with checkboxes, blockers, and target dates. All product decisions are settled and logged in `PRD.md` §12 and `docs/adr/0001-bet-pick-architecture.md`; there are no open spec questions.
 
 ---
 
@@ -60,7 +60,10 @@ ozark-open/
 ├── lib/                   ← Supabase clients, odds math (validation & payouts to come)
 ├── supabase/
 │   └── migrations/        ← SQL migration files (the only way schema changes)
-├── docs/superpowers/      ← per-phase design specs and implementation plans
+├── docs/
+│   ├── adr/               ← architecture decision records (0001: bet/pick structure)
+│   ├── import/            ← bets-sample.xlsx — the canonical spreadsheet format
+│   └── superpowers/       ← per-phase design specs and implementation plans
 ├── public/                ← static assets
 └── .env.local.example     ← environment variable template
 ```
@@ -100,20 +103,28 @@ The full protocol Claude follows is in `CLAUDE.md`.
 3. Add the same environment variables from your `.env.local` to Vercel's project settings.
 4. Click Deploy. Vercel auto-deploys every push to `main` from then on.
 
-No CI/CD pipeline to configure. No servers to manage. Updating odds, bet outcomes, and payouts is done in the Supabase Studio dashboard — **no code changes or redeployments required.**
+No CI/CD pipeline to configure. No servers to manage. Updating bets, odds, statuses, and results is done by re-uploading the bets spreadsheet — **no code changes or redeployments required.**
 
 ---
 
-## Updating Bets and Outcomes (the "CMS" workflow)
+## Updating Bets and Results (the admin workflow)
 
-The admin workflow happens entirely in Supabase Studio (https://supabase.com/dashboard → Project → Table Editor):
+Two tracks (full rationale in `docs/adr/0001-bet-pick-architecture.md`; the detailed runbook lands in Sprint 6):
 
-1. Open the `bets` table — it looks like a spreadsheet.
-2. Add a new row for each bet you want to release: number, description, category, odds, round, status = `open`.
-3. After each day of golf, find the bet rows and update `outcome` to `hit`, `miss`, `push`, or `void`.
-4. The app re-renders automatically the next time anyone loads it.
+**Track 1 — the bets spreadsheet → `/admin/import`.** The workbook Pat already maintains is the source of truth for the menu: bets, picks, odds, probabilities, statuses, and results (its helper columns compute hit/miss/push/void). The format is `docs/import/bets-sample.xlsx`. Upload it at each point in the tournament itinerary:
 
-That's the whole CMS. No deployments, no code, no Git.
+1. **Before the tournament** — Phase 1 bets `open` (Phase 2 rows ship `hidden`).
+2. **Thursday morning** — flip Phase 1 to `closed` in the sheet, re-upload.
+3. **Thursday night** — fill in Round 1 / Tournament-so-far results, re-upload.
+4. **Friday night** — flip Phase 2 rows to `open` (with updated odds), re-upload.
+5. **Saturday morning** — close Phase 2, re-upload.
+6. **Saturday night** — final results, re-upload. Payouts are now final.
+
+Uploads upsert by the sheet's `bet_id`/`pick_id` — re-uploading is always safe, and the app re-renders the next time anyone loads it. Uploads never touch anyone's placed wagers.
+
+**Track 2 — Supabase Studio** (https://supabase.com/dashboard → Project → Table Editor) for everything that isn't the menu: promoting admins, setting display names, registering tournament participants and entry fees, and one-off data fixes.
+
+No deployments, no code, no Git.
 
 ---
 
