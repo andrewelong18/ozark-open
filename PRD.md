@@ -2,15 +2,15 @@
 
 **Status:** Draft v4 · **Last updated:** July 15, 2026 · **Owners:** Andrew (lead), Pat / Jake / Steve (admins)
 
-> **Draft v4 note:** Pat and Jake delivered the new betting architecture (July 2026 memo + reference spreadsheet, `docs/import/bets-sample.xlsx`). Bets now have **picks**, betting windows are **phases**, results arrive **per pick from the admin's spreadsheet**, and the menu is published via **spreadsheet upload**. The full decision record is `docs/adr/0001-bet-pick-architecture.md`; §6–§8 below are rewritten around it, and §12 logs what it supersedes (Q6 in part, Q9). No open spec blockers.
+> **Draft v4 note:** Pat and Jake delivered the new betting architecture (July 2026 memo + reference spreadsheet, `docs/import/bets-sample.xlsx`). Bets now have **picks**, betting windows are **phases**, results arrive **per pick from the admin's spreadsheet**, and the menu is published via **spreadsheet upload**. The full decision record is `docs/adr/0001-bet-pick-architecture.md`; §6–§8 below are rewritten around it, and §12 logs what it supersedes. This memo is the design meeting Pat's July 11 review called for — his proposed §6.1 taxonomy became the five categories, and his void ruling is confirmed. The few genuinely open items live in `OUTSTANDING_DECISIONS.md`.
 >
-> *(Draft v3, July 9: all fifteen stakeholder questions answered by Jake — see §12.)*
+> *(Lineage: Draft v2 questions → Jake's answers Jul 9 → Pat's review revisions Jul 11 → this architecture rev Jul 15. §12 tracks all three.)*
 
 ---
 
 ## 1. Background
 
-The Ozark Open is an annual three-day golf tournament (three rounds: Thursday, Friday, Saturday) with roughly 24 participants. Since 2026, a private fantasy-golf pool ("Sig Tau Sportsbook") has run alongside the tournament — participants pay an entry fee ($20–$50, deducted from their tournament deposit), receive a menu of bets curated by the chairman, and place wagers across two betting phases.
+The Ozark Open is an annual three-day golf tournament (three rounds: Thursday, Friday, Saturday — Sept 24–26 in 2026) with roughly 32 participants (up from 24 in 2026's first pool). Since 2026, a private fantasy-golf pool ("Sig Tau Sportsbook") has run alongside the tournament — participants pay an entry fee ($20–$50), receive a menu of bets curated by the chairman, and place wagers across two betting phases. **Entry collection:** the $20 minimum is deducted from each participant's tournament deposit; anything above $20 is collected separately by Venmo or cash. *(Collection mechanic is Pat's working plan — see `OUTSTANDING_DECISIONS.md`.)*
 
 The pool is **pari-mutuel**: there is no house, no rake, no profit. Each bettor's "theoretical payout" (what they would have won at the published odds) determines their proportional share of the actual pool.
 
@@ -28,8 +28,8 @@ This works, but it's slow, error-prone, and gives no visibility into bets or sta
 
 ## 2. Goals
 
-1. **Eliminate text-message bet submission.** Participants place bets in the app, with constraint validation enforced at submission time.
-2. **Make bets and outcomes visible.** Everyone in the pool can see the bet menu, who bet on what, and how each bet resolved.
+1. **Eliminate text-message bet submission.** Participants place bets in the app, with constraint validation enforced at submission time. Every placement is **timestamped** (created/updated) so admins have an audit trail for governance.
+2. **Make bets and outcomes visible — on the admins' schedule.** Everyone in the pool can see the bet menu and, **once admins close a bet**, who bet on what and how each pick resolved. Nobody sees anyone else's wagers while the betting window is still open (§12 Q11/Q12).
 3. **Make admin updates a non-event.** Adding a bet, marking an outcome, and computing payouts should require zero code changes and zero deployments.
 4. **Persist across years.** A user who plays in 2026 and 2028 should have one account, with a history of their bets across both tournaments.
 
@@ -40,7 +40,8 @@ This works, but it's slow, error-prone, and gives no visibility into bets or sta
 - Public access — **strictly behind login.** No marketing, no SEO, no public landing page.
 - Real-money sportsbook regulatory compliance — this is a private pool among friends, not a commercial operation.
 - Bet *resolution* logic. The app never adjudicates a bet — results are computed in the admin's Excel workbook and uploaded per pick (see §6/§8.2, ADR 0001 §3). The five categories (see §6) exist for wagering constraints and display, not for outcome math.
-- **Commercial-sportsbook mechanics — asked and answered, permanently out:** parlays, live/in-play betting, cash-out, odds that move with pool weight (this is pari-mutuel *at settlement*, not a live tote board), and real-time page updates (a refresh is fine for 24 users). These are how a weekend project dies; don't reopen them.
+- **Odds computation or suggestion.** All odds are hand-set by Pat and Jake in the spreadsheet. The app never calculates, recommends, or moves odds — it only displays what the sheet says.
+- **Commercial-sportsbook mechanics — asked and answered, permanently out:** parlays, live/in-play betting, cash-out, odds that move with pool weight (this is pari-mutuel *at settlement*, not a live tote board), and real-time page updates (a refresh is fine for ~32 users). These are how a weekend project dies; don't reopen them.
 
 ---
 
@@ -256,7 +257,7 @@ See `ROADMAP.md` for the phased build plan and acceptance criteria. At a high le
 
 ## 11. Timeline
 
-- **Tournament:** September 24–27, 2026.
+- **Tournament:** September 24–26, 2026 (Round 1 Thu · Round 2 Fri · Round 3 Sat; end date pending final confirmation — `OUTSTANDING_DECISIONS.md`).
 - **Feature freeze:** ~August 28, 2026 — everything after is testing, bugs, and polish.
 - **Fully wrapped:** September 10, 2026 at the latest (two weeks before tee-off), with a group dry run before then.
 
@@ -270,6 +271,8 @@ Sprint-by-sprint dates live in `ROADMAP.md`.
 ---
 
 ## 12. Stakeholder Decision Log
+
+Three layers, newest governs: Jake's July 9 answers → Pat's July 11 PRD review → **the July 15 architecture rev (this section's A-block + ADR 0001), which is the current source of truth.** Pat's July 11 review anticipated much of the architecture rev (his §6.1 taxonomy proposal became the five categories; his void ruling is A7). The handful of his revisions the July 15 rev did *not* carry (per-tournament 5–10 span, leaderboard drop, user-set display names, betting_enabled/non-player max) are queued for confirmation in `OUTSTANDING_DECISIONS.md`, not silently adopted or discarded.
 
 ### Betting architecture rev (July 15, 2026 — ADR 0001)
 
@@ -288,9 +291,9 @@ Pat & Jake's new architecture memo, plus implementation decisions confirmed by A
 | A9 | **Match/Group Match:** one pick per participant; betting on your opponent **hard-blocked**; self-picks allowed but flagged — in every category. |
 | A10 | **Pick→player mapping by display-name matching at import** (stroke suffixes stripped); unmatched picks reported for admin follow-up. Replaces `bet_subjects`. |
 
-### Original fifteen questions (resolved July 9, 2026)
+### Original fifteen questions (Jake, July 9, 2026)
 
-All fifteen questions from Draft v2 were answered by Jake on July 9, 2026. Q1 and Q2 were answered explicitly; Q3–Q15 adopted the proposed defaults. Read "round" as **phase** throughout (A3/A8).
+All fifteen questions from Draft v2 were answered by Jake on July 9, 2026 (Q1/Q2 explicitly; Q3–Q15 adopting the proposed defaults); Pat's July 11 review then revised several — where a revision was carried forward it's noted on the row, and the unadopted ones are tracked in `OUTSTANDING_DECISIONS.md`. Read "round" as **phase** throughout (A3/A8).
 
 | # | Decision |
 |---|---|
@@ -299,11 +302,11 @@ All fifteen questions from Draft v2 were answered by Jake on July 9, 2026. Q1 an
 | Q3 | Under-minimum or off-total at close: **admins chase first; whatever stands, stands.** No voiding, no auto-adjustment. |
 | Q4 | Max single bet: **per placement**, either phase. Self-bet cap: **per tournament** (both phases combined). |
 | Q5 | App **displays cents**; payment rounding is the payer's business. |
-| Q6 | ~~Pushes and voids return the stake and count toward the theoretical total.~~ **Superseded in part by A7:** still true for pushes; voids now leave the pool. |
+| Q6 | ~~Pushes and voids return the stake and count toward the theoretical total.~~ **Superseded in part by A7** (first revised by Pat, Jul 11): still true for pushes; voids now leave the pool. |
 | Q7 | Voids that retroactively drop someone below the 5-pick minimum: **no adjustment.** |
 | Q8 | Menu sizing, re-scoped by A1: the reference sheet runs **~13 bets / ~57 picks in Phase 1** — build for that order of magnitude per phase. |
 | Q9 | ~~Round mapping: Round 1 → Day 1 + Day 2; Round 2 → Saturday.~~ **Superseded by A3:** phases are the windows; bets scope to Tournament / Round 1 / Round 3. |
-| Q10 | **"The field" picks exist**; displayed like any other pick, no player link. |
+| Q10 | **"The field" picks exist**; displayed like any other pick, no player link — so backing the field is never flagged as a self-pick, even if you're in the field *(Pat, Jul 11)*. |
 | Q11 | Aggregate money per bet is **hidden while the bet is open**; visible after close. |
 | Q12 | After close, **everyone's individual amounts are visible** — not just who bet on what. |
 | Q13 | Display names are **admin-set in Studio** for v1. |

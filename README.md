@@ -19,7 +19,7 @@ Everything else — tournament scoring, skins, the leaderboard math, and **bet r
 
 ## Current Status
 
-**Target: fully wrapped by September 10, 2026** (tournament is September 24–27).
+**Target: fully wrapped by September 10, 2026** (tournament is September 24–26).
 
 | Built (code complete) | Up next |
 |---|---|
@@ -53,6 +53,7 @@ ozark-open/
 ├── ARCHITECTURE.md        ← how the pieces fit together
 ├── DATA_MODEL.md          ← database schema in detail; payout view
 ├── ROADMAP.md             ← phase roadmap + live sprint tracker
+├── OUTSTANDING_DECISIONS.md ← open decisions still needing a stakeholder call
 ├── CLAUDE.md              ← instructions for AI-assisted sprint work
 ├── middleware.ts          ← session refresh + route protection
 ├── app/                   ← Next.js App Router pages (login, dashboard, bets, auth)

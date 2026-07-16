@@ -2,13 +2,13 @@
 
 The phased build plan **and** the live status tracker. Phases describe *what* gets built; sprints are the numbered, sitting-sized units of work we execute one at a time. Update the checkboxes and the status column here as work lands — this file is the single source of truth for "where are we?"
 
-> **Re-planned July 15, 2026** around Pat & Jake's new betting architecture (`docs/adr/0001-bet-pick-architecture.md`): bets now have picks, betting windows are phases, results arrive per pick from the admin's spreadsheet, and the menu is published via upload. The old Sprints 1–6 were renumbered and re-cut; two new sprints (schema rework, ingestion) were inserted up front.
+> **Re-planned July 15, 2026** around Pat & Jake's new betting architecture (`docs/adr/0001-bet-pick-architecture.md`): bets now have picks, betting windows are phases, results arrive per pick from the admin's spreadsheet, and the menu is published via upload. The old Sprints 1–6 were renumbered and re-cut; two new sprints (schema rework, ingestion) were inserted up front. The July 11 audit's **Spike A** (bet-taxonomy design meeting) is resolved — the memo *is* its outcome — and **Spike B** (void → pool math) was confirmed July 15 (PRD §12 A7). Remaining open calls live in `OUTSTANDING_DECISIONS.md`.
 
 ---
 
 ## Timeline
 
-- **Tournament:** September 24–27, 2026
+- **Tournament:** September 24–26, 2026
 - **Fully wrapped:** September 10, 2026 at the latest (two weeks before tee-off)
 - **Feature freeze:** ~August 28, 2026 — after this, only bugs, polish, and dry-run fixes
 - Coding is Claude-Code-assisted, so build time per sprint is short. The pacing constraints are **deploy verification and human testing** — not code. The schedule absorbed two extra sprints without moving the freeze; it's tighter than before, so don't let sprints sprawl.
@@ -21,7 +21,7 @@ The phased build plan **and** the live status tracker. Phases describe *what* ge
 | Mid August | Sprints 6–7 (results display, payouts) |
 | Late August | Sprint 8 (leaderboard) → **feature freeze Aug 28** |
 | Sept 1–10 | Sprint 9 (mobile pass, group dry run, fixes) |
-| Sept 24–27 | 🏌️ Ozark Open |
+| Sept 24–26 | 🏌️ Ozark Open |
 
 ---
 

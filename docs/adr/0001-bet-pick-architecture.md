@@ -13,7 +13,9 @@ The original PRD modeled each bet as a single row with one set of American odds 
 
 The spreadsheet is the admin's native tool — odds, probabilities, and results are all computed there (helper columns adjudicate outcomes). The app's job shifts from *adjudicating bets* to *collecting wagers and faithfully displaying what the spreadsheet says*.
 
-This ADR memorializes the resulting structure and the implementation decisions Andrew confirmed on July 15, 2026. It supersedes parts of PRD §6/§8 (Draft v3) and two entries in the §12 decision log (noted below).
+This memo is the design meeting that Pat's July 11 PRD review called for: his proposed category/subcategory/`group_id` taxonomy (old PRD §6.1, "Spike A") evolved into the structure below, and his void ruling is confirmed in §9. Pat's July 11 revisions that this rev did **not** carry forward (5–10 count span, leaderboard drop, user-set display names, `betting_enabled`) are queued in `OUTSTANDING_DECISIONS.md` #1 for explicit confirm-or-supersede.
+
+This ADR memorializes the resulting structure and the implementation decisions Andrew confirmed on July 15, 2026. It supersedes parts of PRD §6/§8 (Draft v3) and entries in the §12 decision log (noted below).
 
 ---
 
@@ -131,4 +133,5 @@ Each placement still snapshots odds at write time (`odds_at_placement`, now from
 - **The payout view** computes from `bet_picks.result` and `odds_at_placement`, with void stakes surfaced separately so `lib/payouts.ts` can shrink the pool.
 - **Sprints 1–6 of the July roadmap are re-planned**; the Phase 3 bet menu (built on the one-odds-per-bet schema) needs rework.
 - **PRD §12 decisions Q6 (void half) and Q9 (round mapping) are superseded**; Q8's menu sizing is re-scoped to bets-and-picks-per-phase.
+- **The July 11 roadmap spikes are closed:** Spike A (bet-taxonomy meeting) by this ADR; Spike B (void → pool math) by §9. `OUTSTANDING_DECISIONS.md` shrinks accordingly; its #1 now tracks the Pat-review items awaiting confirm-or-supersede.
 - The app never adjudicates a bet. If a result is wrong, the fix is in Excel and re-uploaded — not patched in the database.

@@ -1,6 +1,6 @@
 # Ozark Open Sportsbook — Context for Claude Code
 
-Private fantasy-golf betting platform for the annual Ozark Open (Sept 24–27, 2026; app wrapped by Sept 10). Pari-mutuel pool — no house, no rake, no profit. ~24 participants, strictly behind login. Vibe-coded weekend project: prefer the simplest thing that works; no abstraction layers or future-proofing the docs don't ask for.
+Private fantasy-golf betting platform for the annual Ozark Open (Sept 24–26, 2026; app wrapped by Sept 10). Pari-mutuel pool — no house, no rake, no profit. ~32 participants, strictly behind login. Vibe-coded weekend project: prefer the simplest thing that works; no abstraction layers or future-proofing the docs don't ask for.
 
 ## Stack (decided — don't relitigate; rationale in ARCHITECTURE.md §2)
 
@@ -15,6 +15,7 @@ Next.js 15 (App Router) + TypeScript · Supabase (Postgres, magic-link auth, RLS
 | `docs/adr/0001-bet-pick-architecture.md` | The betting-structure decision record: bets→picks, phases, five categories, spreadsheet upload, void semantics. Read when a spec question smells architectural. |
 | `DATA_MODEL.md` | Touching schema, migrations, RLS, or the payout view. |
 | `ARCHITECTURE.md` | Auth flow, RLS strategy, where the math lives. |
+| `OUTSTANDING_DECISIONS.md` | Before building anything touching non-player limits, entry collection, or the items Pat's Jul 11 review left open — the still-open calls live here. |
 | `README.md` | Local setup, deploy, the admin workflow (spreadsheet upload + Studio). |
 
 Do **not** re-read all foundation docs by default — each sprint in `ROADMAP.md` cites the sections it depends on; read those and start.

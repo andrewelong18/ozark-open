@@ -71,7 +71,7 @@ The admin's own Excel workbook is the authoring tool for the bet menu — odds, 
 - **Row-Level Security (RLS)** policies enforce who can see what at the database layer — even if there's a bug in the app code, a participant can't see admin-only data.
 - **Free tier:** 500MB database, 50K monthly active users, unlimited API requests. We will not come close to these limits.
 
-**Alternative considered: DigitalOcean Managed Postgres + custom auth + custom admin UI.** Steve works at DO and could provision this, but we'd need to build authentication and an admin UI from scratch — easily several weekends of work that Supabase gives us for free. Steve's expertise is better deployed for code review and incident response. Save the DO option for if/when Supabase free tier becomes insufficient (it won't, for 24 users).
+**Alternative considered: DigitalOcean Managed Postgres + custom auth + custom admin UI.** Steve works at DO and could provision this, but we'd need to build authentication and an admin UI from scratch — easily several weekends of work that Supabase gives us for free. Steve's expertise is better deployed for code review and incident response. Save the DO option for if/when Supabase free tier becomes insufficient (it won't, for ~32 users).
 
 **Alternative considered: Firebase.** Works, but the NoSQL document model is a poor fit for relational bet data, and AI tools currently produce better Supabase code than Firebase code.
 
@@ -122,7 +122,7 @@ sequenceDiagram
 ```
 
 **Implementation notes:**
-- **Magic-link emails must go through custom SMTP (Resend, free tier).** Supabase's built-in email service is for development only — it's rate-limited to a handful of messages per hour, which guarantees dropped logins when 24 people hit the app on tournament morning. Configured in Sprint 0.
+- **Magic-link emails must go through custom SMTP (Resend, free tier).** Supabase's built-in email service is for development only — it's rate-limited to a handful of messages per hour, which guarantees dropped logins when ~32 people hit the app on tournament morning. Configured in Sprint 0.
 - **Session duration is extended** (Supabase Auth settings) so a login during dry-run week survives through the tournament — the magic link is a fallback, not a daily ritual.
 - First time a new email logs in, Supabase auto-creates an `auth.users` row. We sync this to our `public.users` table via a database trigger.
 - New users default to `is_admin = false`. To promote someone to admin, edit the `is_admin` column in Supabase Studio.
@@ -195,8 +195,8 @@ Why a view: the payout for any user is fully determined by their placements and 
 - **A queue or background job system.** All work is request/response; there are no async jobs.
 - **A bet resolution engine.** Results are computed in the admin's Excel workbook and uploaded per pick; the app displays them (ADR 0001 §3).
 - **A separate CMS (Sanity, Contentful, etc.).** Supabase Studio is the CMS for data; the bet menu arrives via the `/admin/import` spreadsheet upload — the only custom admin surface.
-- **Caching layer.** Postgres handles 24 users without breaking a sweat. If we ever need it, Vercel has built-in Edge caching.
+- **Caching layer.** Postgres handles ~32 users without breaking a sweat. If we ever need it, Vercel has built-in Edge caching.
 - **Custom email server.** Supabase Auth handles the sending; only the SMTP relay is external (Resend free tier — see §3).
 - **CI/CD pipeline.** Vercel rebuilds and deploys on every `git push`.
-- **Real-time updates or websockets.** A page refresh is fine for 24 users.
+- **Real-time updates or websockets.** A page refresh is fine for ~32 users.
 - **Live odds movement / tote-board mechanics.** Odds are hand-set by admins and snapshotted per placement (PRD §7.1); the pool is pari-mutuel *at settlement*, not a live tote. Parlays, in-play betting, and cash-out are equally out — permanently.
