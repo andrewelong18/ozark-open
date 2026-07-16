@@ -30,9 +30,9 @@ Do **not** re-read all foundation docs by default — each `docs/sprints/sprint-
 4. **Ship & update status — same commit series, never skipped.** Check off completed tasks in `docs/sprints/sprint-N.md`, then in `docs/ROADMAP.md` flip the sprint's row in the Sprint Index **and** its phase row in the Status Summary (🔲 → 🔶 → ✅) with the date, adjusting target dates if the schedule moved. Both must reflect reality the moment a sprint ships.
 5. **Log leftovers as GitHub issues** — never as chat notes or code TODOs:
    ```
-   gh issue create -R riversteve/ozark-open --title "Sprint N: <thing>" --body "<context + exact steps>"
+   gh issue create -R andrewelong18/ozark-open --title "Sprint N: <thing>" --body "<context + exact steps>"
    ```
-   File one issue per item for: bugs found but not fixed, manual steps a human must do outside the repo (Supabase Studio data entry, Vercel/Supabase dashboard config, Resend setup, DNS, asking Pat/Jake something), and out-of-scope discoveries. Title prefix `Sprint N:`; body must be self-contained. *(If Issues are still disabled on `riversteve/ozark-open`, file against `-R andrewelong18/ozark-open` and say so in the body.)*
+   File one issue per item for: bugs found but not fixed, manual steps a human must do outside the repo (Supabase Studio data entry, Vercel/Supabase dashboard config, Resend setup, DNS, asking Pat/Jake something), and out-of-scope discoveries. Title prefix `Sprint N:`; body must be self-contained.
 
 ## Project Conventions
 
