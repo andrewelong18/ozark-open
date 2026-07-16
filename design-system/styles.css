@@ -1,0 +1,11 @@
+/* ===================================================================
+   Ozark Open Sportsbook — Design System entry point.
+   Consumers link THIS file only. Import order: fonts, then tokens.
+   =================================================================== */
+
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&display=swap");
+
+@import "./tokens/fonts.css";
+@import "./tokens/colors.css";
+@import "./tokens/typography.css";
+@import "./tokens/spacing.css";

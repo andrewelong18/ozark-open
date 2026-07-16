@@ -1,0 +1,25 @@
+<!-- @dsCard group="Type" viewport="700x180" name="Numbers — Tabular figures" subtitle="Odds & money always use tabular-nums so columns align" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; background: #fff; font-family: "Montserrat", system-ui, sans-serif; padding: 24px; color: #16172a; }
+  .tab { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1, "lnum" 1; }
+  table { border-collapse: collapse; }
+  td { padding: 3px 18px 3px 0; font-size: 18px; font-weight: 700; }
+  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: #6f7082; padding-bottom: 6px; }
+  .lbl { font-size: 11px; color: #6f7082; margin-top: 14px; }
+</style>
+</head>
+<body>
+  <table class="tab">
+    <tr><th>Odds</th><th>Payout</th><th>P/L</th></tr>
+    <tr><td style="color:#157347">+150</td><td>$21.87</td><td style="color:#157347">+$12.50</td></tr>
+    <tr><td style="color:#2b2c40">−130</td><td>$40.67</td><td style="color:#cc352b">−$6.50</td></tr>
+    <tr><td style="color:#157347">+250</td><td>$105.00</td><td style="color:#157347">+$3.10</td></tr>
+  </table>
+  <div class="lbl">All figures: Montserrat + <code>font-variant-numeric: tabular-nums</code> via <code>--numeric-tabular</code></div>
+</body>
+</html>
