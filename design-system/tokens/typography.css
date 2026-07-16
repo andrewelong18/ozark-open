@@ -1,0 +1,53 @@
+/* ===================================================================
+   Ozark Open Sportsbook — TYPOGRAPHY TOKENS
+   Display/brand: Azalea (headings ONLY).
+   Workhorse UI + body: Montserrat.
+   Numbers: Montserrat with tabular-nums (odds & money must align).
+   =================================================================== */
+
+:root {
+  /* Families */
+  --font-display: "Azalea", "Georgia", "Times New Roman", serif;
+  --font-sans: "Montserrat", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+  --font-number: "Montserrat", ui-sans-serif, system-ui, sans-serif; /* pair with --numeric-tabular */
+
+  /* Tabular figures helper — apply to any odds/money/stat display */
+  --numeric-tabular: "tnum" 1, "lnum" 1; /* @kind other */
+
+  /* Weights */
+  --fw-regular: 400; /* @kind other */
+  --fw-medium: 500; /* @kind other */
+  --fw-semibold: 600; /* @kind other */
+  --fw-bold: 700; /* @kind other */
+
+  /* Type scale (px) — mobile-first, min body 16 for sunlight readability */
+  --text-2xs: 11px;
+  --text-xs:  12px;
+  --text-sm:  14px;
+  --text-base:16px;
+  --text-md:  18px;
+  --text-lg:  20px;
+  --text-xl:  24px;
+  --text-2xl: 30px;
+  --text-3xl: 38px;
+  --text-4xl: 48px;
+  --text-5xl: 60px;
+
+  /* Line heights */
+  --leading-tight: 1.1;
+  --leading-snug: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* Letter spacing */
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
+  --tracking-wider: 0.09em; /* eyebrows / table headers */
+
+  /* Semantic roles */
+  --display-family: var(--font-display);
+  --heading-family: var(--font-display);
+  --body-family: var(--font-sans);
+}

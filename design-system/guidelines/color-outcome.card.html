@@ -1,0 +1,41 @@
+<!-- @dsCard group="Colors" viewport="700x170" name="Outcome Triad — Hit / Miss / Push" subtitle="Win green, loss red, neutral returns — paired with glyph + label" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; background: #faf8f2; font-family: "Montserrat", system-ui, sans-serif; padding: 20px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .cell { border-radius: 12px; overflow: hidden; border: 1px solid #e0dfd7; box-shadow: 0 1px 3px rgba(30,31,51,.08); }
+  .cap { height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 14px; font-weight: 700; font-size: 16px; }
+  .chips { display: flex; gap: 6px; padding: 10px 14px; background: #fff; }
+  .chip { font-size: 10px; font-variant-numeric: tabular-nums; padding: 3px 7px; border-radius: 5px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="cell">
+    <div class="cap" style="background:#edf9f2;color:#0f5c38"><span>✓</span> Hit — win</div>
+    <div class="chips">
+      <span class="chip" style="background:#1a8a54;color:#fff">win</span>
+      <span class="chip" style="background:#edf9f2;color:#0f5c38;border:1px solid #b6e6cf">surface</span>
+    </div>
+  </div>
+  <div class="cell">
+    <div class="cap" style="background:#fdeeec;color:#8f2019"><span>✕</span> Miss — loss</div>
+    <div class="chips">
+      <span class="chip" style="background:#cc352b;color:#fff">loss</span>
+      <span class="chip" style="background:#fdeeec;color:#8f2019;border:1px solid #f6c9c5">surface</span>
+    </div>
+  </div>
+  <div class="cell">
+    <div class="cap" style="background:#f4f2ea;color:#3d3e52"><span>=</span> Push / Void</div>
+    <div class="chips">
+      <span class="chip" style="background:#6f7082;color:#fff">neutral</span>
+      <span class="chip" style="background:#f4f2ea;color:#3d3e52;border:1px solid #e0dfd7">surface</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

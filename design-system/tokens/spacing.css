@@ -1,0 +1,57 @@
+/* ===================================================================
+   Ozark Open Sportsbook — SPACING, RADII, SHADOWS, LAYOUT
+   4px base grid. Mobile-first; touch targets >= 44px.
+   =================================================================== */
+
+:root {
+  /* Spacing scale (4px base) */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* Touch target floor */
+  --touch-min: 44px;
+
+  /* Radii — codebase base radius 10px; clubby but not pill-happy */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;   /* default card/input radius */
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* Border widths */
+  --border-hairline: 1px;
+  --border-thick: 2px;
+
+  /* Shadows — soft, low, clubby (never neon glow) */
+  --shadow-xs: 0 1px 2px rgba(30, 31, 51, 0.06);
+  --shadow-sm: 0 1px 3px rgba(30, 31, 51, 0.08), 0 1px 2px rgba(30, 31, 51, 0.04);
+  --shadow-md: 0 4px 12px rgba(30, 31, 51, 0.08), 0 1px 3px rgba(30, 31, 51, 0.05);
+  --shadow-lg: 0 12px 28px rgba(30, 31, 51, 0.12), 0 2px 6px rgba(30, 31, 51, 0.06);
+  /* Focus ring */
+  --shadow-focus: 0 0 0 3px rgba(82, 79, 192, 0.35);
+  /* Gold press glow — used sparingly on confirmation moments */
+  --shadow-gold: 0 0 0 3px rgba(253, 218, 0, 0.4);
+
+  /* Layout */
+  --container-max: 1120px;
+  --content-max: 640px; /* mobile-first single column */
+  --header-h: 56px;
+
+  /* Motion — subtle; confirmation moments only */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* @kind other */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* @kind other */
+  --dur-fast: 120ms; /* @kind other */
+  --dur-base: 180ms; /* @kind other */
+  --dur-slow: 260ms; /* @kind other */
+}

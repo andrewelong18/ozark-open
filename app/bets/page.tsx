@@ -1,10 +1,13 @@
 import { createClient } from "@/lib/supabase/server"
-import { Badge } from "@/components/ui/badge"
-import { toFractional, toImpliedProbability } from "@/lib/odds"
+import { Card } from "@/components/ui/card"
+import { StatusBadge, type BetStatus } from "@/components/betting/status-badge"
+import { BetRow } from "@/components/betting/bet-row"
+import { type Outcome } from "@/components/betting/outcome-badge"
+import { EmptyState } from "@/components/modules/empty-state"
 
 type BetCategory = { name: string }
 
-type BetRow = {
+type Bet = {
   id: string
   bet_number: number
   description: string
@@ -15,11 +18,11 @@ type BetRow = {
   bet_categories: BetCategory | null
 }
 
-type CategoryGroup = { name: string; bets: BetRow[] }
+type CategoryGroup = { name: string; bets: Bet[] }
 type RoundGroup = { round: number; categories: CategoryGroup[] }
 
-function groupBets(bets: BetRow[]): RoundGroup[] {
-  const rounds = new Map<number, Map<string, BetRow[]>>()
+function groupBets(bets: Bet[]): RoundGroup[] {
+  const rounds = new Map<number, Map<string, Bet[]>>()
   for (const bet of bets) {
     const catName = bet.bet_categories?.name ?? "Uncategorized"
     if (!rounds.has(bet.round_number)) rounds.set(bet.round_number, new Map())
@@ -37,20 +40,27 @@ function groupBets(bets: BetRow[]): RoundGroup[] {
     }))
 }
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline"> = {
-  open: "default",
-  closed: "secondary",
-  resolved: "outline",
+// A menu-wide status glance: resolved once nothing is open/closed, closed when
+// nothing is open, otherwise open.
+function menuStatus(bets: Bet[]): BetStatus {
+  if (bets.some((b) => b.status === "open")) return "open"
+  if (bets.some((b) => b.status === "closed")) return "closed"
+  return "resolved"
 }
 
-const OUTCOME_VARIANT: Record<
-  string,
-  "default" | "destructive" | "secondary"
-> = {
-  hit: "default",
-  miss: "destructive",
-  push: "secondary",
-  void: "secondary",
+const BET_STATUSES: BetStatus[] = ["open", "closed", "resolved"]
+const OUTCOMES: Outcome[] = ["hit", "miss", "push", "void"]
+
+function toBetStatus(status: string): BetStatus {
+  return (BET_STATUSES as string[]).includes(status)
+    ? (status as BetStatus)
+    : "closed"
+}
+
+function toOutcome(outcome: string | null): Outcome | null {
+  return outcome && (OUTCOMES as string[]).includes(outcome)
+    ? (outcome as Outcome)
+    : null
 }
 
 export default async function BetsPage() {
@@ -64,13 +74,16 @@ export default async function BetsPage() {
     .limit(1)
     .maybeSingle()
 
-  if (!tournament) {
-    return (
-      <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center">
-        <p className="text-muted-foreground">No bets have been published yet.</p>
-      </div>
-    )
-  }
+  const emptyState = (
+    <div className="mx-auto max-w-xl px-4 py-10">
+      <EmptyState
+        title="No bets published yet"
+        message="The book opens when an admin publishes the menu. Check back soon."
+      />
+    </div>
+  )
+
+  if (!tournament) return emptyState
 
   const { data: betsData } = await supabase
     .from("bets")
@@ -82,97 +95,52 @@ export default async function BetsPage() {
     .order("round_number")
     .order("bet_number")
 
-  const rawBets = betsData ?? []
-
-  const bets: BetRow[] = rawBets.map((bet) => ({
+  const bets: Bet[] = (betsData ?? []).map((bet) => ({
     ...bet,
     bet_categories: Array.isArray(bet.bet_categories)
       ? (bet.bet_categories[0] ?? null)
       : (bet.bet_categories as BetCategory | null),
   }))
 
-  if (bets.length === 0) {
-    return (
-      <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center">
-        <p className="text-muted-foreground">No bets have been published yet.</p>
-      </div>
-    )
-  }
+  if (bets.length === 0) return emptyState
 
   const rounds = groupBets(bets)
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-8 flex flex-col gap-8">
-      {rounds.map(({ round, categories }) => (
-        <section key={round}>
-          <h2 className="text-2xl font-bold mb-4">Round {round}</h2>
-          <div className="flex flex-col gap-6">
+    <div className="mx-auto max-w-xl px-4 py-6">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h1 className="font-heading text-3xl text-text-strong">Bet Menu</h1>
+        <StatusBadge status={menuStatus(bets)} />
+      </div>
+
+      <div className="mt-3 flex flex-col gap-6">
+        {rounds.map(({ round, categories }) => (
+          <section key={round} className="flex flex-col gap-4">
+            <h2 className="font-heading text-xl text-indigo-700">
+              Round {round}
+            </h2>
             {categories.map(({ name, bets }) => (
               <div key={name}>
-                <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                <h3 className="mb-2 text-[11px] font-bold tracking-wider text-text-muted uppercase">
                   {name}
                 </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className="pb-2 pr-4 font-medium">#</th>
-                        <th className="pb-2 pr-4 font-medium">Bet</th>
-                        <th className="pb-2 pr-4 font-medium">Odds</th>
-                        <th className="pb-2 pr-4 font-medium">Fractional</th>
-                        <th className="pb-2 pr-4 font-medium">Implied</th>
-                        <th className="pb-2 pr-4 font-medium">Status</th>
-                        <th className="pb-2 font-medium">Outcome</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {bets.map((bet) => (
-                        <tr key={bet.id} className="border-b last:border-0">
-                          <td className="py-2 pr-4 text-muted-foreground">
-                            {bet.bet_number}
-                          </td>
-                          <td className="py-2 pr-4">{bet.description}</td>
-                          <td className="py-2 pr-4 tabular-nums">
-                            {bet.american_odds > 0
-                              ? `+${bet.american_odds}`
-                              : `${bet.american_odds}`}
-                          </td>
-                          <td className="py-2 pr-4 tabular-nums">
-                            {toFractional(bet.american_odds)}
-                          </td>
-                          <td className="py-2 pr-4 tabular-nums">
-                            {toImpliedProbability(bet.american_odds)}
-                          </td>
-                          <td className="py-2 pr-4">
-                            <Badge
-                              variant={
-                                STATUS_VARIANT[bet.status] ?? "outline"
-                              }
-                            >
-                              {bet.status}
-                            </Badge>
-                          </td>
-                          <td className="py-2">
-                            {bet.outcome && (
-                              <Badge
-                                variant={
-                                  OUTCOME_VARIANT[bet.outcome] ?? "secondary"
-                                }
-                              >
-                                {bet.outcome}
-                              </Badge>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <Card className="gap-0 p-0">
+                  {bets.map((bet) => (
+                    <BetRow
+                      key={bet.id}
+                      number={bet.bet_number}
+                      description={bet.description}
+                      odds={bet.american_odds}
+                      status={toBetStatus(bet.status)}
+                      outcome={toOutcome(bet.outcome)}
+                    />
+                  ))}
+                </Card>
               </div>
             ))}
-          </div>
-        </section>
-      ))}
+          </section>
+        ))}
+      </div>
     </div>
   )
 }
