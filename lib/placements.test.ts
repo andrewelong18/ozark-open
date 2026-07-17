@@ -257,6 +257,155 @@ test("assembled context surfaces §7 violations verbatim", () => {
 })
 
 // ---------------------------------------------------------------------------
+// Error surface: every §7 hard-block violation, driven through the same
+// context assembly the route uses, produces the exact lib/validation.ts
+// message the client renders under the input.
+// ---------------------------------------------------------------------------
+
+test("every §7 violation surfaces its validation message verbatim", () => {
+  const me = { user_id: "user-me", entry_fee: 40, is_player: true }
+  const openBet = (over: Partial<typeof betJoin> = {}) => ({ ...betJoin, ...over })
+  const placementOn = (
+    pickId: string,
+    amount: number,
+    phase: 1 | 2 = 1,
+    playerUserId: string | null = null
+  ) => ({
+    pick_id: pickId,
+    bet_id: `bet-of-${pickId}`,
+    phase,
+    amount,
+    pick_player_user_id: playerUserId,
+  })
+
+  const cases: {
+    name: string
+    pick: PickQueryRow
+    amount: number
+    existing: ReturnType<typeof placementOn>[]
+    expected: string
+  }[] = [
+    {
+      name: "closed bet",
+      pick: {
+        id: "pick-1",
+        player_user_id: null,
+        american_odds: 110,
+        bets: openBet({ status: "closed", bet_categories: { allows_multiple_picks: true } }),
+      },
+      amount: 5,
+      existing: [],
+      expected: "This bet is not open for wagering.",
+    },
+    {
+      name: "fractional dollars",
+      pick: {
+        id: "pick-1",
+        player_user_id: null,
+        american_odds: 110,
+        bets: openBet({ bet_categories: { allows_multiple_picks: true } }),
+      },
+      amount: 2.5,
+      existing: [],
+      expected: "Bet amounts must be whole dollars.",
+    },
+    {
+      name: "over the single-bet max",
+      pick: {
+        id: "pick-1",
+        player_user_id: null,
+        american_odds: 110,
+        bets: openBet({ bet_categories: { allows_multiple_picks: true } }),
+      },
+      amount: 21,
+      existing: [],
+      expected: "Max single bet is $20 for your $40 entry.",
+    },
+    {
+      name: "over the phase pick count",
+      pick: {
+        id: "pick-new",
+        player_user_id: null,
+        american_odds: 110,
+        bets: openBet({ bet_categories: { allows_multiple_picks: true } }),
+      },
+      amount: 1,
+      existing: Array.from({ length: 10 }, (_, i) => placementOn(`p${i}`, 1)),
+      expected:
+        "You've already wagered on 10 picks in Phase 1 — the maximum is 10.",
+    },
+    {
+      name: "over the self-bet cap",
+      pick: {
+        id: "pick-1",
+        player_user_id: "user-me",
+        american_odds: 110,
+        bets: openBet({
+          bet_categories: { allows_multiple_picks: true },
+          bet_picks: [{ player_user_id: "user-me" }],
+        }),
+      },
+      amount: 6,
+      existing: [placementOn("p-other-self", 5, 1, "user-me")],
+      expected:
+        "Max total on yourself is $10 for your $40 entry — this would put you at $11.",
+    },
+    {
+      name: "over the running total",
+      pick: {
+        id: "pick-1",
+        player_user_id: null,
+        american_odds: 110,
+        bets: openBet({ bet_categories: { allows_multiple_picks: true } }),
+      },
+      amount: 20,
+      existing: [placementOn("p1", 15), placementOn("p2", 10, 2)],
+      expected:
+        "This would put your total wagered at $45 — your $40 entry is the most you can wager across both phases.",
+    },
+    {
+      name: "second pick in a single-pick bet",
+      pick: {
+        id: "pick-b",
+        player_user_id: null,
+        american_odds: 110,
+        bets: openBet({ bet_categories: { allows_multiple_picks: false } }),
+      },
+      amount: 5,
+      existing: [{ ...placementOn("pick-a", 5), bet_id: "bet-1" }],
+      expected: "This bet allows only one pick per participant.",
+    },
+    {
+      name: "betting on your opponent",
+      pick: {
+        id: "pick-opp",
+        player_user_id: "user-opponent",
+        american_odds: 110,
+        bets: openBet({
+          bet_categories: { allows_multiple_picks: false },
+          bet_picks: [
+            { player_user_id: "user-me" },
+            { player_user_id: "user-opponent" },
+          ],
+        }),
+      },
+      amount: 5,
+      existing: [],
+      expected: "You can't bet on your opponent in a match you're playing in.",
+    },
+  ]
+
+  for (const c of cases) {
+    const target = normalizeTargetPick(c.pick)
+    assert.ok(target, c.name)
+    const ctx = buildPlacementContext(me, target!, c.existing)
+    const verdict = validatePlacement(ctx, c.amount, seedRules)
+    assert.equal(verdict.ok, false, c.name)
+    if (!verdict.ok) assert.ok(verdict.errors.includes(c.expected), `${c.name}: got ${JSON.stringify(verdict.errors)}`)
+  }
+})
+
+// ---------------------------------------------------------------------------
 // Self-pick flagging (requires_admin_review) — computed by validation from
 // the assembled context, carried into the write by planWrite. Recomputed on
 // EVERY write: place, edit, and revive.
