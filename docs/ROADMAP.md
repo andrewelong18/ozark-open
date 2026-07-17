@@ -33,7 +33,7 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 
 | Sprint | Focus | Status | Blockers |
 |---|---|---|---|
-| [0](sprints/sprint-0.md) | Deploy & verify foundations | 🔲 | none |
+| [0](sprints/sprint-0.md) | Deploy & verify foundations | 🔶 | none |
 | [1](sprints/sprint-1.md) | Bet/pick schema rework & menu rebuild | 🔲 | 0 |
 | [2](sprints/sprint-2.md) | Spreadsheet ingestion (`/admin/import`) | 🔲 | 1 |
 | [3](sprints/sprint-3.md) | Placements schema & validation | 🔲 | 1 (after 2) |
@@ -50,9 +50,9 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 
 | Phase | What | Status | Sprint(s) | Target |
 |---|---|---|---|---|
-| 0 — Foundations | Skeleton, deploy pipeline | ✅ Code complete (May 7) — deploy unverified | 0 | Jul 18 |
-| 1 — Auth | Magic-link login, users table | ✅ Code complete (May 7) — prod unverified | 0 | Jul 18 |
-| 2 — Tournament setup | Tournaments, participants, dashboard | ✅ Code complete (May 7) — prod unverified | 0 | Jul 18 |
+| 0 — Foundations | Skeleton, deploy pipeline | ✅ **Verified in production Jul 16, 2026** | 0 | Jul 18 |
+| 1 — Auth | Magic-link login, users table | ✅ **Verified in production Jul 16, 2026** (magic-link login → dashboard) | 0 | Jul 18 |
+| 2 — Tournament setup | Tournaments, participants, dashboard | ✅ **Verified in production Jul 16, 2026** | 0 | Jul 18 |
 | 3 — Bet menu | Bets **and picks**, `/bets` page | ⚠️ Built May 7 on the pre-ADR-0001 schema — **rework required** | 1 | Jul 24 |
 | 3b — Spreadsheet ingestion | `/admin/import` upload pipeline | 🔲 Not started (new scope, ADR 0001 §7) | 2 | Jul 31 |
 | 4 — Placing bets | Placements, validation, My Bets | 🔲 Not started | 3, 4, 5 | Aug 12 |
@@ -73,7 +73,7 @@ Shipped May 7, 2026 (see git history and `docs/superpowers/` for the design spec
 - **Phase 2:** `tournaments` + `tournament_participants` tables with RLS and the 2026 seed row (`20260507000001_tournaments.sql`); `/dashboard` showing tournament + registration status.
 - **Phase 3:** `bet_categories` / `bets` / `bet_subjects` tables with RLS and the seven-category seed (`20260507000002_bets.sql`); `/bets` menu grouped by round → category with American/fractional/implied odds (`lib/odds.ts`). **⚠️ Superseded in part by ADR 0001** (July 15): the one-odds-per-bet schema, `bet_subjects`, the seven categories, and the computed odds display are all replaced by the bet/pick structure — Sprint 1 reworks this. Auth, tournaments, and the page scaffolding carry forward untouched.
 
-**"Code complete" is not "done"** — none of this is verified against a production deployment. That's Sprint 0.
+**Phases 0–2 are now verified in production** (Jul 16, 2026) — infra was rebuilt under Andrew's own Vercel + Supabase accounts, taking ownership back from the fork. Production: **https://ozark-open-sportsbook.vercel.app**. Phase 3 remains ⚠️ rework-required regardless (Sprint 1). See `sprints/sprint-0.md` for the infra facts and the env-var gotcha.
 
 ---
 
