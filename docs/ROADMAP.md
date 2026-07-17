@@ -34,8 +34,8 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | Sprint | Focus | Status | Blockers |
 |---|---|---|---|
 | [0](sprints/sprint-0.md) | Deploy & verify foundations | 🔶 | none |
-| [1](sprints/sprint-1.md) | Bet/pick schema rework & menu rebuild | 🔶 code complete Jul 17, 2026 — awaiting prod SQL + merge | 0 |
-| [2](sprints/sprint-2.md) | Spreadsheet ingestion (`/admin/import`) | 🔲 | 1 |
+| [1](sprints/sprint-1.md) | Bet/pick schema rework & menu rebuild | 🔶 merged Jul 17, 2026 (PR #10) — awaiting prod SQL (#12) | 0 |
+| [2](sprints/sprint-2.md) | Spreadsheet ingestion (`/admin/import`) | 🔶 code complete + local round-trip Jul 17, 2026 — prod verify blocked on #12/#15 | 1 |
 | [3](sprints/sprint-3.md) | Placements schema & validation | 🔲 | 1 (after 2) |
 | [4](sprints/sprint-4.md) | Placement API & place-bet UI | 🔲 | 3 |
 | [5](sprints/sprint-5.md) | My Bets & phase compliance | 🔲 | 4 |
@@ -53,8 +53,8 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | 0 — Foundations | Skeleton, deploy pipeline | ✅ **Verified in production Jul 16, 2026** | 0 | Jul 18 |
 | 1 — Auth | Magic-link login, users table | ✅ **Verified in production Jul 16, 2026** (magic-link login → dashboard) | 0 | Jul 18 |
 | 2 — Tournament setup | Tournaments, participants, dashboard | ✅ **Verified in production Jul 16, 2026** | 0 | Jul 18 |
-| 3 — Bet menu | Bets **and picks**, `/bets` page | 🔶 Reworked to ADR 0001 Jul 17, 2026 — awaiting prod SQL + merge | 1 | Jul 24 |
-| 3b — Spreadsheet ingestion | `/admin/import` upload pipeline | 🔲 Not started (new scope, ADR 0001 §7) | 2 | Jul 31 |
+| 3 — Bet menu | Bets **and picks**, `/bets` page | 🔶 Reworked to ADR 0001, merged Jul 17, 2026 — awaiting prod SQL (#12) | 1 | Jul 24 |
+| 3b — Spreadsheet ingestion | `/admin/import` upload pipeline | 🔶 Code complete + local round-trip Jul 17, 2026 — prod verify blocked on #12/#15 | 2 | Jul 31 |
 | 4 — Placing bets | Placements, validation, My Bets | 🔲 Not started | 3, 4, 5 | Aug 12 |
 | 5 — Results | Closed-bet views, per-pick results via re-upload | 🔲 Not started | 6 | Aug 16 |
 | 6 — Theoretical payouts | Payout view, per-placement display | 🔲 Not started | 7 | Aug 21 |
