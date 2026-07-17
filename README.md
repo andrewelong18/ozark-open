@@ -131,6 +131,8 @@ Uploads upsert by the sheet's `bet_id`/`pick_id` — re-uploading is always safe
 
 No deployments, no code, no Git.
 
+> **Until the Sprint 2 importer ships:** the sample Phase 1 menu is seeded by pasting `supabase/seed-sample-phase1.sql` into the Supabase SQL editor (after the migrations). It upserts by the same sheet IDs, so it's safe to re-run — including its trailing pick→player link `UPDATE`, which should be re-run whenever display names get fixed up in Studio.
+
 ---
 
 ## License & Disclaimer
