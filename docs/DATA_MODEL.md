@@ -318,7 +318,7 @@ Policies live inline in each table's migration file under `supabase/migrations/`
 - **`bet_placements`**: a user can `SELECT` / `INSERT` / `UPDATE` / soft-delete their own rows while the parent bet is `open`. Other users' placements are visible only when the bet is `closed`. Admins can read all.
 - **`tournament_participants`**: anyone authenticated can `SELECT`. Only admins can `INSERT` / `UPDATE`.
 - **`bet_categories`, `tournaments`**: read by all authenticated users; write by admins only.
-- **`users`**: a user can read their own row. Admins can read all.
+- **`users`**: readable by all authenticated users (`20260717000002_users_read_all.sql` — closed-bet views and payouts show everyone's `display_name`, PRD §12 Q12; fine for a private pool behind login). Writes still admin/trigger only.
 
 ---
 
@@ -332,9 +332,11 @@ Policies live inline in each table's migration file under `supabase/migrations/`
 - `20260507000000_users_table.sql` — `users`, `is_admin()` helper, new-user trigger
 - `20260507000001_tournaments.sql` — `tournaments`, `tournament_participants`, 2026 seed
 - `20260507000002_bets.sql` — `bet_categories`, `bets`, `bet_subjects`, seven-category seed *(pre-ADR-0001 shape — superseded by the rework below)*
+- `20260717000000_bet_pick_rework.sql` — Sprint 1: `bets` rebuilt to the §3.5 shape, `bet_picks`, `bet_subjects` dropped, five-category re-seed, per-phase rule params renamed
+- `20260717000001_bet_placements.sql` — Sprint 3: `bet_placements` with soft delete, odds snapshot, and the open/closed visibility policies
+- `20260717000002_users_read_all.sql` — Sprint 6: authenticated read-all policy on `users` (names on closed bets)
 
 **Still to come** (see `ROADMAP.md`):
-- **Bet/pick rework (Sprint 1):** restructure `bets` to the §3.5 shape, create `bet_picks`, drop `bet_subjects`, re-seed `bet_categories` with the five categories, rename the `tournaments` per-phase rule params. No production bet data exists yet, so this is a clean rebuild, not a data migration.
-- `bet_placements` (Sprint 3), `placement_payouts_view` (Sprint 7).
+- `placement_payouts_view` (Sprint 7).
 
 **Known inconsistency to fix in the rework migration:** `tournament_participants.entry_fee` currently has a hardcoded `CHECK (entry_fee BETWEEN 20 AND 50)`, but the entry-fee bounds are supposed to live on the `tournaments` row (`entry_fee_min` / `entry_fee_max`) per the "rules are data, not constants" convention. Fix: drop the hardcoded CHECK (keep `entry_fee > 0`) and enforce the per-tournament bounds in `lib/validation.ts` / at participant creation instead.
