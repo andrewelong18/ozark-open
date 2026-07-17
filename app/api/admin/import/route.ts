@@ -116,7 +116,7 @@ export async function POST(request: Request) {
     const { data: existingPicksData, error: picksError } = await supabase
       .from("bet_picks")
       .select(
-        "id, bet_id, sheet_pick_id, label, american_odds, fractional_odds, probability, result"
+        "id, bet_id, sheet_pick_id, label, american_odds, fractional_odds, probability, player_user_id, result"
       )
       .in(
         "bet_id",
@@ -131,7 +131,24 @@ export async function POST(request: Request) {
     existingPicks = (existingPicksData ?? []) as ExistingPick[]
   }
 
-  const plan = buildImportPlan(rows, existingBets, existingPicks, categories)
+  const { data: usersData, error: usersError } = await supabase
+    .from("users")
+    .select("id, display_name")
+  if (usersError) {
+    return NextResponse.json(
+      { error: `Couldn't load users for name-matching: ${usersError.message}` },
+      { status: 500 }
+    )
+  }
+  const users = (usersData ?? []) as { id: string; display_name: string }[]
+
+  const plan = buildImportPlan(
+    rows,
+    existingBets,
+    existingPicks,
+    categories,
+    users
+  )
 
   // Apply. Not one transaction (PostgREST doesn't span calls), but the
   // contract check above rejected bad files before any write, and the

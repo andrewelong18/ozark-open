@@ -429,10 +429,13 @@ export type ExistingPick = {
   american_odds: number
   fractional_odds: string
   probability: number | string
+  player_user_id: string | null
   result: string
 }
 
 export type CategoryRow = { id: string; name: string }
+
+export type UserRow = { id: string; display_name: string }
 
 export type BetWrite = {
   sheet_bet_id: number
@@ -453,6 +456,7 @@ export type PickWrite = {
   american_odds: number
   fractional_odds: string
   probability: number
+  player_user_id: string | null
   result: string
 }
 
@@ -467,6 +471,18 @@ export type ImportPlan = {
     update: (PickWrite & { id: string })[]
     unchanged: number
   }
+  /** Pick labels (stroke suffix stripped, deduped) that matched no
+   *  users.display_name — expected for "Field"/"Yes"/"No" and players who
+   *  haven't logged in yet; fixed up by the admin in Studio. */
+  unmatchedPickNames: string[]
+}
+
+/**
+ * Strip the stroke notation off a pick label: "Steve Jones (-5)" → "Steve
+ * Jones", "Mike Yenzer (E)" → "Mike Yenzer" (ADR 0001 §11).
+ */
+export function stripStrokeSuffix(label: string): string {
+  return label.replace(/\s*\((?:E|[+-]?\d+)\)\s*$/i, "").trim()
 }
 
 /** numeric columns come back from PostgREST as number or string; display
@@ -483,9 +499,13 @@ export function buildImportPlan(
   rows: SheetRow[],
   existingBets: ExistingBet[],
   existingPicks: ExistingPick[],
-  categories: CategoryRow[]
+  categories: CategoryRow[],
+  users: UserRow[]
 ): ImportPlan {
   const categoryIdByName = new Map(categories.map((c) => [c.name, c.id]))
+  const userIdByName = new Map(
+    users.map((u) => [u.display_name.trim().toLowerCase(), u.id])
+  )
   const existingBetBySheetId = new Map(
     existingBets.map((b) => [b.sheet_bet_id, b])
   )
@@ -499,7 +519,9 @@ export function buildImportPlan(
   const plan: ImportPlan = {
     bets: { create: [], update: [], unchanged: 0 },
     picks: { create: [], update: [], unchanged: 0 },
+    unmatchedPickNames: [],
   }
+  const unmatched = new Set<string>()
 
   // Bets: one write per distinct sheet bet_id (validation guaranteed all of
   // a bet's rows agree on the bet-level fields).
@@ -537,6 +559,18 @@ export function buildImportPlan(
 
   // Picks: keyed on the sheet-wide-unique pick_id.
   for (const row of rows) {
+    const existing = existingPickBySheetId.get(row.sheetPickId)
+
+    // Pick→player mapping (ADR 0001 §11): strip the stroke suffix, match
+    // against display names. Unmatched leaves NULL on a new pick but
+    // PRESERVES an existing link on update — admins hand-set links in
+    // Studio for players who haven't logged in, and a re-upload must not
+    // wipe that out.
+    const strippedName = stripStrokeSuffix(row.pickLabel)
+    const matchedUserId =
+      userIdByName.get(strippedName.toLowerCase()) ?? null
+    if (!matchedUserId) unmatched.add(strippedName)
+
     const write: PickWrite = {
       sheet_bet_id: row.sheetBetId,
       sheet_pick_id: row.sheetPickId,
@@ -544,10 +578,9 @@ export function buildImportPlan(
       american_odds: row.americanOdds,
       fractional_odds: row.fractionalOdds,
       probability: row.probability,
+      player_user_id: matchedUserId ?? existing?.player_user_id ?? null,
       result: row.result,
     }
-
-    const existing = existingPickBySheetId.get(row.sheetPickId)
     // A pick that somehow moved to a different bet is treated as an update
     // (its bet_id is rewritten at apply time).
     const movedBet =
@@ -562,6 +595,7 @@ export function buildImportPlan(
       existing.american_odds !== write.american_odds ||
       existing.fractional_odds !== write.fractional_odds ||
       !numbersEqual(existing.probability, write.probability) ||
+      existing.player_user_id !== write.player_user_id ||
       existing.result !== write.result
     ) {
       plan.picks.update.push({ ...write, id: existing.id })
@@ -570,5 +604,6 @@ export function buildImportPlan(
     }
   }
 
+  plan.unmatchedPickNames = [...unmatched].sort((a, b) => a.localeCompare(b))
   return plan
 }
