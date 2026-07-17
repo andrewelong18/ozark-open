@@ -38,7 +38,7 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | [2](sprints/sprint-2.md) | Spreadsheet ingestion (`/admin/import`) | 🔶 code complete + local round-trip Jul 17, 2026 — prod verify blocked on #12/#15 | 1 |
 | [3](sprints/sprint-3.md) | Placements schema & validation | 🔶 code complete + tested locally Jul 17, 2026 — awaiting prod migration | 1 (after 2) |
 | [4](sprints/sprint-4.md) | Placement API & place-bet UI | 🔶 code complete + tested locally Jul 17, 2026 (unit + local-Postgres RLS) — in-browser verify pending prod SQL (#12/#15/#22) | 3 |
-| [5](sprints/sprint-5.md) | My Bets & phase compliance | 🔲 | 4 |
+| [5](sprints/sprint-5.md) | My Bets & phase compliance | 🔶 code complete + tested locally Jul 17, 2026 — in-browser verify pending prod SQL (#12/#15/#22/#24) | 4 |
 | [6](sprints/sprint-6.md) | Results & closed-bet views | 🔲 | 2 + 4 |
 | [7](sprints/sprint-7.md) | Payouts: theoretical & final | 🔲 | 6 |
 | [8](sprints/sprint-8.md) | Leaderboard mirror | 🔲 | Pat's Sheets mirror |
@@ -55,7 +55,7 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | 2 — Tournament setup | Tournaments, participants, dashboard | ✅ **Verified in production Jul 16, 2026** | 0 | Jul 18 |
 | 3 — Bet menu | Bets **and picks**, `/bets` page | 🔶 Reworked to ADR 0001, merged Jul 17, 2026 — awaiting prod SQL (#12) | 1 | Jul 24 |
 | 3b — Spreadsheet ingestion | `/admin/import` upload pipeline | 🔶 Code complete + local round-trip Jul 17, 2026 — prod verify blocked on #12/#15 | 2 | Jul 31 |
-| 4 — Placing bets | Placements, validation, My Bets | 🔶 Sprints 3–4 code complete Jul 17, 2026 (schema, validation, placement API + `/bets` UI — verified locally, prod verify pending #12/#15/#22); Sprint 5 not started | 3, 4, 5 | Aug 12 |
+| 4 — Placing bets | Placements, validation, My Bets | 🔶 **Sprints 3–5 all code complete Jul 17, 2026** (schema, validation, placement API, `/bets` UI, `/my-bets`, compliance banners, dashboard rework, admin chase SQL — unit-tested + built locally); phase-wide in-browser verify pending prod SQL #12/#15/#22/#24 | 3, 4, 5 | Aug 12 |
 | 5 — Results | Closed-bet views, per-pick results via re-upload | 🔲 Not started | 6 | Aug 16 |
 | 6 — Theoretical payouts | Payout view, per-placement display | 🔲 Not started | 7 | Aug 21 |
 | 7 — Final payouts | Pari-mutuel split (void-adjusted pool), `/results` | 🔲 Not started | 7 | Aug 21 |
