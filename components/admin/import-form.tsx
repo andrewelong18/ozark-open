@@ -9,6 +9,7 @@ export function ImportForm() {
   const [fileName, setFileName] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [contractErrors, setContractErrors] = useState<string[]>([])
   const [message, setMessage] = useState<string | null>(null)
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -18,6 +19,7 @@ export function ImportForm() {
 
     setBusy(true)
     setError(null)
+    setContractErrors([])
     setMessage(null)
 
     try {
@@ -27,7 +29,12 @@ export function ImportForm() {
       const json = await res.json().catch(() => null)
 
       if (!res.ok) {
-        setError(json?.error ?? `Upload failed (${res.status})`)
+        if (Array.isArray(json?.errors)) {
+          setContractErrors(json.errors)
+          setError("The file was rejected — nothing was imported.")
+        } else {
+          setError(json?.error ?? `Upload failed (${res.status})`)
+        }
         return
       }
       setMessage(json?.message ?? "Upload received.")
@@ -67,6 +74,13 @@ export function ImportForm() {
           </Button>
           {error && (
             <p className="text-sm font-medium text-loss-strong">{error}</p>
+          )}
+          {contractErrors.length > 0 && (
+            <ul className="flex list-disc flex-col gap-1 rounded-lg border border-loss-border bg-loss-surface py-3 pr-3 pl-8 text-sm text-loss-strong">
+              {contractErrors.map((err) => (
+                <li key={err}>{err}</li>
+              ))}
+            </ul>
           )}
           {message && (
             <p className="text-sm font-medium text-text-strong">{message}</p>
