@@ -5,12 +5,17 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import {
+  buildRulesModel,
   groupByPhase,
   normalizeMyBets,
   type MyBetEntry,
   type MyBetsQueryRow,
 } from "./my-bets.ts"
-import { checkPhaseMinimums, checkTournamentTotal } from "./validation.ts"
+import {
+  checkPhaseMinimums,
+  checkTournamentTotal,
+  type TournamentRules,
+} from "./validation.ts"
 
 const T = "t-1"
 
@@ -178,6 +183,17 @@ test("groupByPhase orders entries round → sheet_bet_id → sheet_pick_id", () 
 // come from the same rows the page renders.
 // ---------------------------------------------------------------------------
 
+const RULES: TournamentRules = {
+  entry_fee_min: 20,
+  entry_fee_max: 50,
+  min_picks_per_phase: 5,
+  max_picks_per_phase: 10,
+  max_single_bet_pct: 0.5,
+  max_single_bet_cap: 20,
+  max_self_bet_pct: 0.25,
+  max_self_bet_cap: 10,
+}
+
 test("MyBetEntry rows satisfy the phase-close checks structurally", () => {
   const entries: MyBetEntry[] = normalizeMyBets(
     [
@@ -186,16 +202,7 @@ test("MyBetEntry rows satisfy the phase-close checks structurally", () => {
     ],
     T
   )
-  const rules = {
-    entry_fee_min: 20,
-    entry_fee_max: 50,
-    min_picks_per_phase: 5,
-    max_picks_per_phase: 10,
-    max_single_bet_pct: 0.5,
-    max_single_bet_cap: 20,
-    max_self_bet_pct: 0.25,
-    max_self_bet_cap: 10,
-  }
+  const rules = RULES
   const phases = checkPhaseMinimums(entries, rules)
   assert.deepEqual(
     phases.map((p) => [p.phase, p.pick_count, p.meets_minimum]),
@@ -205,4 +212,41 @@ test("MyBetEntry rows satisfy the phase-close checks structurally", () => {
   assert.equal(total.total, 23)
   assert.equal(total.remaining, 17)
   assert.equal(total.exact, false)
+})
+
+// ---------------------------------------------------------------------------
+// buildRulesModel — the personalized rules card's numbers
+// ---------------------------------------------------------------------------
+
+test("buildRulesModel derives caps via the validation helpers (floored)", () => {
+  // $25 entry at 50% floors to $12 — Math.round would say $13.
+  const model = buildRulesModel({ entry_fee: 25, is_player: true }, RULES)
+  assert.deepEqual(model, {
+    entry_fee: 25,
+    max_single_bet: 12,
+    max_self_bet: 6,
+    min_picks_per_phase: 5,
+    max_picks_per_phase: 10,
+  })
+})
+
+test("buildRulesModel applies the hard caps at higher entries", () => {
+  const model = buildRulesModel({ entry_fee: 50, is_player: true }, RULES)
+  assert.equal(model.max_single_bet, 20)
+  assert.equal(model.max_self_bet, 10)
+})
+
+test("buildRulesModel exempts non-players from the self-bet cap (Q14)", () => {
+  const model = buildRulesModel({ entry_fee: 40, is_player: false }, RULES)
+  assert.equal(model.max_self_bet, null)
+  assert.equal(model.max_single_bet, 20)
+})
+
+test("buildRulesModel coerces a string entry_fee from PostgREST", () => {
+  const model = buildRulesModel(
+    { entry_fee: "40" as unknown as number, is_player: true },
+    RULES
+  )
+  assert.equal(model.entry_fee, 40)
+  assert.equal(model.max_single_bet, 20)
 })

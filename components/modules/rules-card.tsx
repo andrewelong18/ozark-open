@@ -4,7 +4,9 @@ import { MoneyDisplay } from "@/components/betting/money-display"
 export type RulesCardProps = {
   entryFee?: number
   maxSingle?: number
-  maxSelf?: number
+  /** null hides the row — non-playing bettors are exempt from the self-bet
+   * cap (PRD §12 Q14). */
+  maxSelf?: number | null
   minBets?: number
   maxBets?: number
   className?: string
@@ -12,7 +14,7 @@ export type RulesCardProps = {
 
 /**
  * Personalized "house rules" reference card — entry fee, max single/self bet,
- * bet counts. Reference-card energy (clean rows), not legal-terms energy.
+ * pick counts. Reference-card energy (clean rows), not legal-terms energy.
  */
 export function RulesCard({
   entryFee = 40,
@@ -31,11 +33,15 @@ export function RulesCard({
       label: "Max single bet",
       node: <MoneyDisplay value={maxSingle} size="sm" weight="semibold" />,
     },
-    {
-      label: "Max bet on yourself",
-      node: <MoneyDisplay value={maxSelf} size="sm" weight="semibold" />,
-    },
-    { label: "Bets per round", node: `${minBets}–${maxBets}` },
+    ...(maxSelf !== null
+      ? [
+          {
+            label: "Max bet on yourself",
+            node: <MoneyDisplay value={maxSelf} size="sm" weight="semibold" />,
+          },
+        ]
+      : []),
+    { label: "Picks per phase", node: `${minBets}–${maxBets}` },
     {
       label: "Total must equal",
       node: <MoneyDisplay value={entryFee} size="sm" weight="semibold" />,

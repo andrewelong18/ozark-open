@@ -8,7 +8,9 @@ import { MoneyDisplay } from "@/components/betting/money-display"
 import { OddsChip } from "@/components/betting/odds-chip"
 import { checkTournamentTotal } from "@/lib/validation"
 import { toTournamentRules } from "@/lib/placements"
+import { RulesCard } from "@/components/modules/rules-card"
 import {
+  buildRulesModel,
   groupByPhase,
   normalizeMyBets,
   type MyBetsQueryRow,
@@ -101,6 +103,7 @@ export default async function MyBetsPage() {
   )
   const phases = groupByPhase(entries)
   const totals = checkTournamentTotal(entries, entryFee)
+  const myRules = buildRulesModel(participant, rules)
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
@@ -179,6 +182,14 @@ export default async function MyBetsPage() {
           </section>
         ))
       )}
+
+      <RulesCard
+        entryFee={myRules.entry_fee}
+        maxSingle={myRules.max_single_bet}
+        maxSelf={myRules.max_self_bet}
+        minBets={myRules.min_picks_per_phase}
+        maxBets={myRules.max_picks_per_phase}
+      />
     </div>
   )
 }

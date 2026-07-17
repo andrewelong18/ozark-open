@@ -9,6 +9,8 @@
 // checkTournamentTotal) run directly on the same rows the page renders —
 // the compliance numbers can never drift from the list.
 
+import { maxSelfBet, maxSingleBet, type TournamentRules } from "./validation.ts"
+
 // ---------------------------------------------------------------------------
 // Row normalization — supabase-js returns to-one joins as object OR
 // one-element array (same caveat as lib/placements.ts).
@@ -142,4 +144,33 @@ export function groupByPhase(entries: MyBetEntry[]): PhaseGroup[] {
       }
     })
     .filter((g) => g.pick_count > 0)
+}
+
+// ---------------------------------------------------------------------------
+// Personalized rules — every number derives from the tournaments row via the
+// validation helpers (floor semantics), never recomputed inline
+// ---------------------------------------------------------------------------
+
+export type RulesModel = {
+  entry_fee: number
+  max_single_bet: number
+  /** null for non-playing bettors — exempt from the self-bet cap (Q14), so
+   * the rules card shows no "max on yourself" line. */
+  max_self_bet: number | null
+  min_picks_per_phase: number
+  max_picks_per_phase: number
+}
+
+export function buildRulesModel(
+  participant: { entry_fee: number; is_player: boolean },
+  rules: TournamentRules
+): RulesModel {
+  const entryFee = Number(participant.entry_fee)
+  return {
+    entry_fee: entryFee,
+    max_single_bet: maxSingleBet(entryFee, rules),
+    max_self_bet: participant.is_player ? maxSelfBet(entryFee, rules) : null,
+    min_picks_per_phase: rules.min_picks_per_phase,
+    max_picks_per_phase: rules.max_picks_per_phase,
+  }
 }
