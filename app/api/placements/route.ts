@@ -9,6 +9,7 @@ import {
   parsePlacementBody,
   planWrite,
   toTournamentRules,
+  TOURNAMENT_RULE_COLUMNS,
   type OwnPlacementRow,
   type ParticipantRow,
   type PickQueryRow,
@@ -20,10 +21,6 @@ import {
 // limit comes from the tournaments row, nothing is hardcoded here. Writes run
 // under the bettor's own session; the bet_placements RLS policies are the
 // backstop (own rows only, parent bet open).
-
-const TOURNAMENT_RULE_COLUMNS =
-  "entry_fee_min, entry_fee_max, min_picks_per_phase, max_picks_per_phase, " +
-  "max_single_bet_pct, max_single_bet_cap, max_self_bet_pct, max_self_bet_cap"
 
 const PLACEMENT_RETURN_COLUMNS =
   "id, pick_id, amount, odds_at_placement, requires_admin_review, deleted_at"
