@@ -129,6 +129,8 @@ Uploads upsert by the sheet's `bet_id`/`pick_id` — re-uploading is always safe
 
 **Track 2 — Supabase Studio** (https://supabase.com/dashboard → Project → Table Editor) for everything that isn't the menu: promoting admins, setting display names, registering tournament participants and entry fees, and one-off data fixes.
 
+**Before closing each phase**, run [`docs/admin/phase-compliance.sql`](docs/admin/phase-compliance.sql) in the SQL editor — it lists every participant with their per-phase pick counts and wagered total, flagging who's under the phase minimum or off their exact entry-fee total (same rules the app's compliance banners show). Chase the flagged stragglers, then close; after the close, whatever stands, stands.
+
 No deployments, no code, no Git.
 
 > **The importer is built (Sprint 2)** — `/admin/import` requires a signed-in user with `is_admin = true`. Until the prod database steps land (rework migration + admin flag, issues #12/#15), the fallback remains pasting `supabase/seed-sample-phase1.sql` into the Supabase SQL editor (after the migrations). Seed and importer upsert by the same sheet IDs, so either can safely run over the other. The importer name-matches picks to players on every upload and never overwrites a link that was hand-set in Studio.
