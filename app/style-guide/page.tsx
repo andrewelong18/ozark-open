@@ -432,21 +432,30 @@ export default function StyleGuidePage() {
         </div>
       </Section>
 
-      <Section title="BudgetModule" subtitle="Wagered vs entry, with a min/max-bets indicator.">
+      <Section title="BudgetModule" subtitle="Wagered vs entry, with a per-phase pick-count line.">
         <div className="grid gap-6 sm:grid-cols-3">
           <Card>
             <CardContent>
-              <BudgetModule wagered={23} entryFee={40} betCount={3} />
+              <BudgetModule wagered={23} entryFee={40} picksLine="Phase 1: 3 picks" />
             </CardContent>
           </Card>
           <Card>
             <CardContent>
-              <BudgetModule wagered={40} entryFee={40} betCount={6} />
+              <BudgetModule
+                wagered={40}
+                entryFee={40}
+                picksLine="Phase 1: 6 picks"
+                balanced
+              />
             </CardContent>
           </Card>
           <Card>
             <CardContent>
-              <BudgetModule wagered={52} entryFee={40} betCount={7} />
+              <BudgetModule
+                wagered={52}
+                entryFee={40}
+                picksLine="Phase 1: 5 picks · Phase 2: 2 picks"
+              />
             </CardContent>
           </Card>
         </div>

@@ -7,25 +7,30 @@ import { BudgetModule } from "@/components/modules/budget-module"
 import { RulesCard } from "@/components/modules/rules-card"
 import { EmptyState } from "@/components/modules/empty-state"
 import Link from "next/link"
+import {
+  checkPhaseMinimums,
+  checkTournamentTotal,
+} from "@/lib/validation"
+import {
+  normalizeExistingPlacements,
+  toTournamentRules,
+  TOURNAMENT_RULE_COLUMNS,
+  type PlacementQueryRow,
+} from "@/lib/placements"
+import { buildRulesModel, picksLine } from "@/lib/my-bets"
+
+// Dashboard (reworked in Sprint 5, closing #23): pool total, the
+// participant's budget, and their personalized rules — every number derived
+// from the tournaments row through lib/validation.ts, never computed inline.
 
 type Tournament = {
   id: string
   name: string
   year: number
   status: "upcoming" | "active" | "completed"
-  min_bets_per_round: number
-  max_bets_per_round: number
-  max_single_bet_pct: number
-  max_single_bet_cap: number
-  max_self_bet_pct: number
-  max_self_bet_cap: number
 }
 
 type Participant = { entry_fee: number; is_player: boolean }
-
-function capped(entryFee: number, pct: number, cap: number): number {
-  return Math.min(Math.round(entryFee * pct), cap)
-}
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -35,9 +40,7 @@ export default async function DashboardPage() {
 
   const { data: tournamentData } = await supabase
     .from("tournaments")
-    .select(
-      "id, name, year, status, min_bets_per_round, max_bets_per_round, max_single_bet_pct, max_single_bet_cap, max_self_bet_pct, max_self_bet_cap"
-    )
+    .select(`id, name, year, status, ${TOURNAMENT_RULE_COLUMNS}`)
     .in("status", ["upcoming", "active"])
     .order("year", { ascending: false })
     .limit(1)
@@ -54,7 +57,10 @@ export default async function DashboardPage() {
     )
   }
 
-  const tournament = tournamentData as Tournament
+  const tournament = tournamentData as unknown as Tournament
+  const rules = toTournamentRules(
+    tournamentData as unknown as Record<string, unknown>
+  )
 
   // Pool total + player count from real registrations.
   const { data: poolData } = await supabase
@@ -63,7 +69,7 @@ export default async function DashboardPage() {
     .eq("tournament_id", tournament.id)
 
   const poolRows = (poolData as { entry_fee: number }[] | null) ?? []
-  const poolTotal = poolRows.reduce((sum, r) => sum + r.entry_fee, 0)
+  const poolTotal = poolRows.reduce((sum, r) => sum + Number(r.entry_fee), 0)
   const playerCount = poolRows.length
 
   // This user's registration.
@@ -78,20 +84,33 @@ export default async function DashboardPage() {
 
   const participant = participantData as Participant | null
 
-  // This user's actual wagers on this tournament's bets.
+  // This user's live wagers, joined through picks (placements reference
+  // bet_picks, not bets — ADR 0001) and scoped in normalization.
   const { data: placementData } = user
     ? await supabase
         .from("bet_placements")
-        .select("amount, bets!inner(tournament_id)")
+        .select(
+          "pick_id, amount, bet_picks ( player_user_id, bets ( id, phase, tournament_id ) )"
+        )
         .eq("user_id", user.id)
-        .eq("bets.tournament_id", tournament.id)
+        .is("deleted_at", null)
     : { data: null }
 
-  const placements = (placementData as { amount: number }[] | null) ?? []
-  const wagered = placements.reduce((sum, p) => sum + p.amount, 0)
-  const betCount = placements.length
+  const existing = normalizeExistingPlacements(
+    (placementData ?? []) as unknown as PlacementQueryRow[],
+    tournament.id
+  )
+  const totals = checkTournamentTotal(
+    existing,
+    Number(participant?.entry_fee ?? 0)
+  )
+  const balanced =
+    totals.exact &&
+    checkPhaseMinimums(existing, rules).every((p) => p.meets_minimum)
+  const betCount = existing.length
 
   const statusOpen = tournament.status === "active"
+  const myRules = participant ? buildRulesModel(participant, rules) : null
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
@@ -122,14 +141,14 @@ export default async function DashboardPage() {
         </div>
         <StatCard
           label="Your Entry"
-          value={participant?.entry_fee ?? 0}
+          value={Number(participant?.entry_fee ?? 0)}
           money
           caption={participant ? undefined : "Not registered"}
         />
         <StatCard label="Bets Placed" value={betCount} caption="This tournament" />
       </div>
 
-      {participant ? (
+      {participant && myRules ? (
         <>
           <Card>
             <CardContent className="flex flex-col gap-3.5">
@@ -142,29 +161,20 @@ export default async function DashboardPage() {
                 </Button>
               </div>
               <BudgetModule
-                wagered={wagered}
-                entryFee={participant.entry_fee}
-                betCount={betCount}
-                minBets={tournament.min_bets_per_round}
-                maxBets={tournament.max_bets_per_round}
+                wagered={totals.total}
+                entryFee={myRules.entry_fee}
+                picksLine={picksLine(existing)}
+                balanced={balanced}
               />
             </CardContent>
           </Card>
 
           <RulesCard
-            entryFee={participant.entry_fee}
-            maxSingle={capped(
-              participant.entry_fee,
-              tournament.max_single_bet_pct,
-              tournament.max_single_bet_cap
-            )}
-            maxSelf={capped(
-              participant.entry_fee,
-              tournament.max_self_bet_pct,
-              tournament.max_self_bet_cap
-            )}
-            minBets={tournament.min_bets_per_round}
-            maxBets={tournament.max_bets_per_round}
+            entryFee={myRules.entry_fee}
+            maxSingle={myRules.max_single_bet}
+            maxSelf={myRules.max_self_bet}
+            minBets={myRules.min_picks_per_phase}
+            maxBets={myRules.max_picks_per_phase}
           />
         </>
       ) : (

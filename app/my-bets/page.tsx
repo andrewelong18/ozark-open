@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/modules/empty-state"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import { OddsChip } from "@/components/betting/odds-chip"
 import { checkTournamentTotal } from "@/lib/validation"
-import { toTournamentRules } from "@/lib/placements"
+import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
 import { RulesCard } from "@/components/modules/rules-card"
 import {
   buildRulesModel,
@@ -21,10 +21,6 @@ import {
 // join normalization live in lib/my-bets.ts. Each row shows the wager's
 // odds_at_placement snapshot, never the pick's live odds (those are the bet
 // menu's job, sheet-verbatim).
-
-const TOURNAMENT_RULE_COLUMNS =
-  "entry_fee_min, entry_fee_max, min_picks_per_phase, max_picks_per_phase, " +
-  "max_single_bet_pct, max_single_bet_cap, max_self_bet_pct, max_self_bet_cap"
 
 const ROUND_LABEL: Record<string, string> = {
   tournament: "Tournament",

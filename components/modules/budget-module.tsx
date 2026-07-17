@@ -4,29 +4,32 @@ import { MoneyDisplay } from "@/components/betting/money-display"
 export type BudgetModuleProps = {
   wagered?: number
   entryFee?: number
-  betCount?: number
-  minBets?: number
-  maxBets?: number
+  /** Short per-phase pick-count line, e.g. "Phase 1: 6 picks · Phase 2: 2
+   * picks". Counts only — rule spans belong to the rules card, and
+   * shortfalls to the compliance banner. */
+  picksLine?: string
+  /** Fully balanced per §8.1 (exact total + phase minimums met) — turns the
+   * bar green. Defaults to wagered === entryFee. */
+  balanced?: boolean
   compact?: boolean
   className?: string
 }
 
 /**
- * "Wagered $X of $Y" budget module with a progress bar and a min/max-bets
- * indicator. Turns amber when over-committed, green when exactly balanced.
+ * "Wagered $X of $Y" budget module with a progress bar and a per-phase
+ * pick-count line. Turns amber when over-committed, green when balanced.
  */
 export function BudgetModule({
   wagered = 0,
   entryFee = 40,
-  betCount = 0,
-  minBets = 5,
-  maxBets = 10,
+  picksLine,
+  balanced,
   compact = false,
   className,
 }: BudgetModuleProps) {
   const pct = Math.min(100, entryFee ? (wagered / entryFee) * 100 : 0)
   const over = wagered > entryFee
-  const exact = wagered === entryFee && betCount >= minBets
+  const exact = balanced ?? wagered === entryFee
   const remaining = entryFee - wagered
 
   const barColor = over ? "bg-caution" : exact ? "bg-win" : "bg-primary"
@@ -50,9 +53,7 @@ export function BudgetModule({
 
       {!compact && (
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-text-muted">
-            {betCount}/{minBets} min bets · {maxBets} max
-          </span>
+          <span className="text-xs text-text-muted">{picksLine}</span>
           <span
             className={cn(
               "text-xs font-semibold",

@@ -8,6 +8,7 @@ import {
   buildRulesModel,
   groupByPhase,
   normalizeMyBets,
+  picksLine,
   type MyBetEntry,
   type MyBetsQueryRow,
 } from "./my-bets.ts"
@@ -212,6 +213,16 @@ test("MyBetEntry rows satisfy the phase-close checks structurally", () => {
   assert.equal(total.total, 23)
   assert.equal(total.remaining, 17)
   assert.equal(total.exact, false)
+})
+
+test("picksLine shows only phases bet in, with singular/plural", () => {
+  assert.equal(picksLine([]), "No picks yet")
+  assert.equal(picksLine([{ phase: 1 }, { phase: 1 }]), "Phase 1: 2 picks")
+  assert.equal(picksLine([{ phase: 2 }]), "Phase 2: 1 pick")
+  assert.equal(
+    picksLine([{ phase: 1 }, { phase: 2 }, { phase: 1 }]),
+    "Phase 1: 2 picks · Phase 2: 1 pick"
+  )
 })
 
 // ---------------------------------------------------------------------------

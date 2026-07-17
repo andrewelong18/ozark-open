@@ -146,6 +146,18 @@ export function groupByPhase(entries: MyBetEntry[]): PhaseGroup[] {
     .filter((g) => g.pick_count > 0)
 }
 
+/** Short pick-count line for the budget module — counts per phase bet in
+ * (phases without placements are simply absent, Q2). Counts only: rule spans
+ * live on the rules card, shortfalls on the compliance banner. */
+export function picksLine(entries: { phase: 1 | 2 }[]): string {
+  const parts = ([1, 2] as const)
+    .map((phase) => entries.filter((e) => e.phase === phase).length)
+    .map((count, i) => ({ phase: i + 1, count }))
+    .filter((p) => p.count > 0)
+    .map((p) => `Phase ${p.phase}: ${p.count} ${p.count === 1 ? "pick" : "picks"}`)
+  return parts.length > 0 ? parts.join(" · ") : "No picks yet"
+}
+
 // ---------------------------------------------------------------------------
 // Personalized rules — every number derives from the tournaments row via the
 // validation helpers (floor semantics), never recomputed inline
