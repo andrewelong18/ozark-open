@@ -257,6 +257,98 @@ test("assembled context surfaces §7 violations verbatim", () => {
 })
 
 // ---------------------------------------------------------------------------
+// Self-pick flagging (requires_admin_review) — computed by validation from
+// the assembled context, carried into the write by planWrite. Recomputed on
+// EVERY write: place, edit, and revive.
+// ---------------------------------------------------------------------------
+
+test("a self-pick within the cap validates ok with requires_admin_review", () => {
+  const target = normalizeTargetPick({
+    id: "pick-1",
+    player_user_id: "user-me",
+    american_odds: 200,
+    bets: {
+      ...betJoin,
+      bet_categories: { allows_multiple_picks: true },
+      bet_picks: [{ player_user_id: "user-me" }, { player_user_id: null }],
+    },
+  })!
+  const ctx = buildPlacementContext(
+    { user_id: "user-me", entry_fee: 40, is_player: true },
+    target,
+    []
+  )
+  const verdict = validatePlacement(ctx, 10, seedRules) // maxSelfBet($40) = $10
+  assert.deepEqual(verdict, { ok: true, requires_admin_review: true })
+
+  // The flag lands on the write, whether it's a fresh place…
+  const insert = planWrite(null, 10, target.current_american_odds, true)
+  assert.equal(insert.fields.requires_admin_review, true)
+  // …an edit of a live row, or a revive of a soft-deleted one.
+  const revive = planWrite(
+    { id: "row-1", deleted_at: "2026-07-17T00:00:00Z" },
+    10,
+    target.current_american_odds,
+    true
+  )
+  assert.equal(revive.fields.requires_admin_review, true)
+})
+
+test("unlinked picks (Field / Yes / No) are never flagged for review", () => {
+  const target = normalizeTargetPick({
+    id: "pick-field",
+    player_user_id: null,
+    american_odds: 300,
+    bets: {
+      ...betJoin,
+      bet_categories: { allows_multiple_picks: true },
+      bet_picks: [{ player_user_id: null }],
+    },
+  })!
+  const ctx = buildPlacementContext(
+    { user_id: "user-me", entry_fee: 40, is_player: true },
+    target,
+    []
+  )
+  const verdict = validatePlacement(ctx, 10, seedRules)
+  assert.deepEqual(verdict, { ok: true, requires_admin_review: false })
+})
+
+test("recompute on edit: flag follows the pick's CURRENT player link", () => {
+  // The bettor's row was flagged when placed; since then the admin fixed the
+  // pick's player link in Studio to a different user. Editing the amount
+  // recomputes the flag from today's context — it comes off.
+  const target = normalizeTargetPick({
+    id: "pick-1",
+    player_user_id: "user-other",
+    american_odds: 200,
+    bets: {
+      ...betJoin,
+      bet_categories: { allows_multiple_picks: true },
+      bet_picks: [{ player_user_id: "user-other" }],
+    },
+  })!
+  const ctx = buildPlacementContext(
+    { user_id: "user-me", entry_fee: 40, is_player: true },
+    target,
+    [
+      {
+        pick_id: "pick-1",
+        bet_id: "bet-1",
+        phase: 1,
+        amount: 10,
+        pick_player_user_id: "user-other",
+      },
+    ]
+  )
+  const verdict = validatePlacement(ctx, 12, seedRules)
+  assert.deepEqual(verdict, { ok: true, requires_admin_review: false })
+  const plan = planWrite({ id: "row-1", deleted_at: null }, 12, 200, false)
+  assert.equal(plan.kind, "update")
+  assert.equal(plan.fields.requires_admin_review, false)
+})
+
+// ---------------------------------------------------------------------------
 // planWrite — insert vs update-by-key vs revive
 // ---------------------------------------------------------------------------
 
