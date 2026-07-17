@@ -399,3 +399,176 @@ export function validateSheet(
   if (errors.length > 0) return { ok: false, errors }
   return { ok: true, rows }
 }
+
+// ---------------------------------------------------------------------------
+// Import plan: field-level diff against the DB (ADR 0001 §7)
+//
+// Upserts are keyed on the sheet's stable IDs — (tournament_id, sheet_bet_id)
+// for bets, (bet_id, sheet_pick_id) for picks. Rows that match the DB
+// field-for-field produce no write at all, so re-uploading an identical
+// sheet is a true no-op and the report can honestly say "no changes".
+// Placements are never touched (uploads only write bets/bet_picks).
+// ---------------------------------------------------------------------------
+
+export type ExistingBet = {
+  id: string
+  sheet_bet_id: number
+  category_id: string
+  title: string
+  phase: number
+  round: string
+  status: string
+  total_probability: number | string | null
+}
+
+export type ExistingPick = {
+  id: string
+  bet_id: string
+  sheet_pick_id: number
+  label: string
+  american_odds: number
+  fractional_odds: string
+  probability: number | string
+  result: string
+}
+
+export type CategoryRow = { id: string; name: string }
+
+export type BetWrite = {
+  sheet_bet_id: number
+  category_id: string
+  title: string
+  phase: number
+  round: string
+  status: string
+  total_probability: number | null
+}
+
+export type PickWrite = {
+  /** Which bet this pick belongs to, by sheet ID — resolved to the bets.id
+   *  uuid at apply time (new bets don't have uuids until inserted). */
+  sheet_bet_id: number
+  sheet_pick_id: number
+  label: string
+  american_odds: number
+  fractional_odds: string
+  probability: number
+  result: string
+}
+
+export type ImportPlan = {
+  bets: {
+    create: BetWrite[]
+    update: (BetWrite & { id: string })[]
+    unchanged: number
+  }
+  picks: {
+    create: PickWrite[]
+    update: (PickWrite & { id: string })[]
+    unchanged: number
+  }
+}
+
+/** numeric columns come back from PostgREST as number or string; display
+ *  strings are compared verbatim, numbers numerically. */
+function numbersEqual(
+  a: number | string | null,
+  b: number | string | null
+): boolean {
+  if (a === null || b === null) return a === b
+  return Number(a) === Number(b)
+}
+
+export function buildImportPlan(
+  rows: SheetRow[],
+  existingBets: ExistingBet[],
+  existingPicks: ExistingPick[],
+  categories: CategoryRow[]
+): ImportPlan {
+  const categoryIdByName = new Map(categories.map((c) => [c.name, c.id]))
+  const existingBetBySheetId = new Map(
+    existingBets.map((b) => [b.sheet_bet_id, b])
+  )
+  const existingPickBySheetId = new Map(
+    existingPicks.map((p) => [p.sheet_pick_id, p])
+  )
+  const betUuidToSheetId = new Map(
+    existingBets.map((b) => [b.id, b.sheet_bet_id])
+  )
+
+  const plan: ImportPlan = {
+    bets: { create: [], update: [], unchanged: 0 },
+    picks: { create: [], update: [], unchanged: 0 },
+  }
+
+  // Bets: one write per distinct sheet bet_id (validation guaranteed all of
+  // a bet's rows agree on the bet-level fields).
+  const seenBetIds = new Set<number>()
+  for (const row of rows) {
+    if (seenBetIds.has(row.sheetBetId)) continue
+    seenBetIds.add(row.sheetBetId)
+
+    const write: BetWrite = {
+      sheet_bet_id: row.sheetBetId,
+      category_id: categoryIdByName.get(row.category)!,
+      title: row.betTitle,
+      phase: row.phase,
+      round: row.round,
+      status: row.status,
+      total_probability: row.totalProbability,
+    }
+
+    const existing = existingBetBySheetId.get(row.sheetBetId)
+    if (!existing) {
+      plan.bets.create.push(write)
+    } else if (
+      existing.category_id !== write.category_id ||
+      existing.title !== write.title ||
+      existing.phase !== write.phase ||
+      existing.round !== write.round ||
+      existing.status !== write.status ||
+      !numbersEqual(existing.total_probability, write.total_probability)
+    ) {
+      plan.bets.update.push({ ...write, id: existing.id })
+    } else {
+      plan.bets.unchanged++
+    }
+  }
+
+  // Picks: keyed on the sheet-wide-unique pick_id.
+  for (const row of rows) {
+    const write: PickWrite = {
+      sheet_bet_id: row.sheetBetId,
+      sheet_pick_id: row.sheetPickId,
+      label: row.pickLabel,
+      american_odds: row.americanOdds,
+      fractional_odds: row.fractionalOdds,
+      probability: row.probability,
+      result: row.result,
+    }
+
+    const existing = existingPickBySheetId.get(row.sheetPickId)
+    // A pick that somehow moved to a different bet is treated as an update
+    // (its bet_id is rewritten at apply time).
+    const movedBet =
+      existing !== undefined &&
+      betUuidToSheetId.get(existing.bet_id) !== row.sheetBetId
+
+    if (!existing) {
+      plan.picks.create.push(write)
+    } else if (
+      movedBet ||
+      existing.label !== write.label ||
+      existing.american_odds !== write.american_odds ||
+      existing.fractional_odds !== write.fractional_odds ||
+      !numbersEqual(existing.probability, write.probability) ||
+      existing.result !== write.result
+    ) {
+      plan.picks.update.push({ ...write, id: existing.id })
+    } else {
+      plan.picks.unchanged++
+    }
+  }
+
+  return plan
+}
