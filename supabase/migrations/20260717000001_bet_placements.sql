@@ -41,14 +41,19 @@ CREATE TRIGGER bet_placements_touch_updated_at
 
 -- RLS (DATA_MODEL §5): own rows readable/writable while the parent bet is
 -- open; everyone's placements become visible once the bet closes (PRD §12
--- Q11/Q12); admins read everything. Participant-facing reads filter
+-- Q11/Q12); admins read everything. Other users' reads filter
 -- deleted_at IS NULL; the admin read deliberately does not — soft-deleted
 -- money rows exist for dispute resolution (§3.7), which is admin work.
 ALTER TABLE public.bet_placements ENABLE ROW LEVEL SECURITY;
 
+-- No deleted_at filter here, on purpose: Postgres also checks the NEW row of
+-- an UPDATE against SELECT policies whenever the statement reads columns
+-- (any WHERE clause does), so filtering soft-deleted rows from their owner
+-- would reject the soft delete itself — and hide the row from the revive
+-- path. Own queries filter deleted_at IS NULL in app code (§3.7).
 CREATE POLICY "Users can read own placements"
   ON public.bet_placements FOR SELECT TO authenticated
-  USING (user_id = auth.uid() AND deleted_at IS NULL);
+  USING (user_id = auth.uid());
 
 CREATE POLICY "Placements are visible to all once the bet closes"
   ON public.bet_placements FOR SELECT TO authenticated
