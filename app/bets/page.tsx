@@ -1,66 +1,106 @@
 import { createClient } from "@/lib/supabase/server"
 import { Card } from "@/components/ui/card"
 import { StatusBadge, type BetStatus } from "@/components/betting/status-badge"
-import { BetRow } from "@/components/betting/bet-row"
-import { type Outcome } from "@/components/betting/outcome-badge"
+import { PickRow, type PickResult } from "@/components/betting/pick-row"
 import { EmptyState } from "@/components/modules/empty-state"
+import { formatProbability } from "@/lib/format"
 
-type BetCategory = { name: string }
+type BetCategory = { name: string; slug: string }
+
+type Pick = {
+  id: string
+  sheet_pick_id: number
+  label: string
+  american_odds: number
+  fractional_odds: string
+  probability: number
+  result: string
+}
 
 type Bet = {
   id: string
-  bet_number: number
-  description: string
-  american_odds: number
-  round_number: number
+  sheet_bet_id: number
+  title: string
+  phase: number
+  round: string
   status: string
-  outcome: string | null
+  total_probability: number | null
   bet_categories: BetCategory | null
+  bet_picks: Pick[]
 }
 
-type CategoryGroup = { name: string; bets: Bet[] }
-type RoundGroup = { round: number; categories: CategoryGroup[] }
+const ROUND_ORDER = ["tournament", "round_1", "round_2", "round_3"] as const
+const ROUND_LABEL: Record<string, string> = {
+  tournament: "Tournament",
+  round_1: "Round 1",
+  round_2: "Round 2",
+  round_3: "Round 3",
+}
+const CATEGORY_ORDER = [
+  "Top Finisher",
+  "Top X Finisher",
+  "Match",
+  "Group Match",
+  "Prop Bet",
+]
 
-function groupBets(bets: Bet[]): RoundGroup[] {
-  const rounds = new Map<number, Map<string, Bet[]>>()
+type CategoryGroup = { name: string; bets: Bet[] }
+type RoundGroup = { round: string; categories: CategoryGroup[] }
+type PhaseGroup = { phase: number; rounds: RoundGroup[] }
+
+// The sheet arrives unsorted; the menu orders phase → round → category
+// (ADR 0001 §7), bets and picks by their stable sheet IDs.
+function groupBets(bets: Bet[]): PhaseGroup[] {
+  const phases = new Map<number, Map<string, Map<string, Bet[]>>>()
   for (const bet of bets) {
     const catName = bet.bet_categories?.name ?? "Uncategorized"
-    if (!rounds.has(bet.round_number)) rounds.set(bet.round_number, new Map())
-    const cats = rounds.get(bet.round_number)!
+    if (!phases.has(bet.phase)) phases.set(bet.phase, new Map())
+    const rounds = phases.get(bet.phase)!
+    if (!rounds.has(bet.round)) rounds.set(bet.round, new Map())
+    const cats = rounds.get(bet.round)!
     if (!cats.has(catName)) cats.set(catName, [])
     cats.get(catName)!.push(bet)
   }
-  return Array.from(rounds.entries())
+
+  const roundRank = (r: string) => {
+    const i = (ROUND_ORDER as readonly string[]).indexOf(r)
+    return i === -1 ? ROUND_ORDER.length : i
+  }
+  const catRank = (c: string) => {
+    const i = CATEGORY_ORDER.indexOf(c)
+    return i === -1 ? CATEGORY_ORDER.length : i
+  }
+
+  return Array.from(phases.entries())
     .sort(([a], [b]) => a - b)
-    .map(([round, cats]) => ({
-      round,
-      categories: Array.from(cats.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, bets]) => ({ name, bets })),
+    .map(([phase, rounds]) => ({
+      phase,
+      rounds: Array.from(rounds.entries())
+        .sort(([a], [b]) => roundRank(a) - roundRank(b))
+        .map(([round, cats]) => ({
+          round,
+          categories: Array.from(cats.entries())
+            .sort(([a], [b]) => catRank(a) - catRank(b))
+            .map(([name, bets]) => ({
+              name,
+              bets: bets.sort((a, b) => a.sheet_bet_id - b.sheet_bet_id),
+            })),
+        })),
     }))
 }
 
-// A menu-wide status glance: resolved once nothing is open/closed, closed when
-// nothing is open, otherwise open.
+// Menu-wide glance: open while anything is still open, closed otherwise.
+// (Hidden bets never reach the page; "resolved" lives per pick now.)
 function menuStatus(bets: Bet[]): BetStatus {
-  if (bets.some((b) => b.status === "open")) return "open"
-  if (bets.some((b) => b.status === "closed")) return "closed"
-  return "resolved"
+  return bets.some((b) => b.status === "open") ? "open" : "closed"
 }
 
-const BET_STATUSES: BetStatus[] = ["open", "closed", "resolved"]
-const OUTCOMES: Outcome[] = ["hit", "miss", "push", "void"]
+const RESULTS: PickResult[] = ["pending", "hit", "miss", "push", "void"]
 
-function toBetStatus(status: string): BetStatus {
-  return (BET_STATUSES as string[]).includes(status)
-    ? (status as BetStatus)
-    : "closed"
-}
-
-function toOutcome(outcome: string | null): Outcome | null {
-  return outcome && (OUTCOMES as string[]).includes(outcome)
-    ? (outcome as Outcome)
-    : null
+function toResult(result: string): PickResult {
+  return (RESULTS as string[]).includes(result)
+    ? (result as PickResult)
+    : "pending"
 }
 
 export default async function BetsPage() {
@@ -88,23 +128,22 @@ export default async function BetsPage() {
   const { data: betsData } = await supabase
     .from("bets")
     .select(
-      "id, bet_number, description, american_odds, round_number, status, outcome, bet_categories ( name )"
+      "id, sheet_bet_id, title, phase, round, status, total_probability, bet_categories ( name, slug ), bet_picks ( id, sheet_pick_id, label, american_odds, fractional_odds, probability, result )"
     )
     .eq("tournament_id", (tournament as { id: string }).id)
-    .neq("status", "draft")
-    .order("round_number")
-    .order("bet_number")
+    .neq("status", "hidden")
 
   const bets: Bet[] = (betsData ?? []).map((bet) => ({
     ...bet,
     bet_categories: Array.isArray(bet.bet_categories)
       ? (bet.bet_categories[0] ?? null)
       : (bet.bet_categories as BetCategory | null),
+    bet_picks: (bet.bet_picks ?? []) as Pick[],
   }))
 
   if (bets.length === 0) return emptyState
 
-  const rounds = groupBets(bets)
+  const phases = groupBets(bets)
 
   return (
     <div className="mx-auto max-w-xl px-4 py-6">
@@ -113,29 +152,58 @@ export default async function BetsPage() {
         <StatusBadge status={menuStatus(bets)} />
       </div>
 
-      <div className="mt-3 flex flex-col gap-6">
-        {rounds.map(({ round, categories }) => (
-          <section key={round} className="flex flex-col gap-4">
-            <h2 className="font-heading text-xl text-indigo-700">
-              Round {round}
+      <div className="mt-3 flex flex-col gap-8">
+        {phases.map(({ phase, rounds }) => (
+          <section key={phase} className="flex flex-col gap-5">
+            <h2 className="font-heading text-2xl text-indigo-700">
+              Phase {phase}
             </h2>
-            {categories.map(({ name, bets }) => (
-              <div key={name}>
-                <h3 className="mb-2 text-[11px] font-bold tracking-wider text-text-muted uppercase">
-                  {name}
+            {rounds.map(({ round, categories }) => (
+              <div key={round} className="flex flex-col gap-4">
+                <h3 className="font-heading text-lg text-text-strong">
+                  {ROUND_LABEL[round] ?? round}
                 </h3>
-                <Card className="gap-0 p-0">
-                  {bets.map((bet) => (
-                    <BetRow
-                      key={bet.id}
-                      number={bet.bet_number}
-                      description={bet.description}
-                      odds={bet.american_odds}
-                      status={toBetStatus(bet.status)}
-                      outcome={toOutcome(bet.outcome)}
-                    />
-                  ))}
-                </Card>
+                {categories.map(({ name, bets }) => (
+                  <div key={name} className="flex flex-col gap-3">
+                    <div className="text-[11px] font-bold tracking-wider text-text-muted uppercase">
+                      {name}
+                    </div>
+                    {bets.map((bet) => (
+                      <Card key={bet.id} className="gap-0 p-0">
+                        <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-base leading-snug font-semibold text-pretty text-text-strong">
+                              {bet.title}
+                            </div>
+                            {bet.total_probability != null && (
+                              <div className="tabular mt-0.5 text-[11px] text-text-muted">
+                                Total probability{" "}
+                                {formatProbability(Number(bet.total_probability))}
+                              </div>
+                            )}
+                          </div>
+                          {bet.status !== "open" && (
+                            <StatusBadge status="closed" />
+                          )}
+                        </div>
+                        {bet.bet_picks
+                          .sort((a, b) => a.sheet_pick_id - b.sheet_pick_id)
+                          .map((pick) => (
+                            <PickRow
+                              key={pick.id}
+                              label={pick.label}
+                              americanOdds={pick.american_odds}
+                              fractionalOdds={pick.fractional_odds}
+                              probability={formatProbability(
+                                Number(pick.probability)
+                              )}
+                              result={toResult(pick.result)}
+                            />
+                          ))}
+                      </Card>
+                    ))}
+                  </div>
+                ))}
               </div>
             ))}
           </section>
