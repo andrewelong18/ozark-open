@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils"
-import { toFractional, toImpliedProbability } from "@/lib/odds"
 
 type OddsSize = "sm" | "md" | "lg"
 
@@ -13,19 +12,24 @@ export type OddsChipProps = {
   /** American odds — positive or negative. */
   odds: number
   size?: OddsSize
-  /** Reveal fractional + implied probability alongside the chip. */
-  detail?: boolean
+  /** Sheet-supplied fractional odds string (e.g. "11/10"), shown verbatim. */
+  fractional?: string
+  /** Pre-formatted implied probability (e.g. "47.6%"), shown verbatim. */
+  probability?: string
   className?: string
 }
 
 /**
  * The primary betting token: American odds (+150 / −130). Positive reads
- * fairway-green, negative reads ink. `detail` reveals fractional + implied.
+ * fairway-green, negative reads ink. Pass `fractional` / `probability` to
+ * reveal the detail column — both are sheet-supplied strings (ADR 0001 §8),
+ * never computed here.
  */
 export function OddsChip({
   odds,
   size = "md",
-  detail = false,
+  fractional,
+  probability,
   className,
 }: OddsChipProps) {
   const positive = odds > 0
@@ -45,14 +49,14 @@ export function OddsChip({
     </span>
   )
 
-  if (!detail) return <span className={className}>{chip}</span>
+  if (!fractional && !probability) return <span className={className}>{chip}</span>
 
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
       {chip}
       <span className="tabular inline-flex flex-col text-[11px] leading-[1.2] text-text-muted">
-        <span>{toFractional(odds)}</span>
-        <span>{toImpliedProbability(odds)}</span>
+        {fractional && <span>{fractional}</span>}
+        {probability && <span>{probability}</span>}
       </span>
     </span>
   )

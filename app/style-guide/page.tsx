@@ -18,7 +18,7 @@ import { MoneyDisplay } from "@/components/betting/money-display"
 import { OutcomeBadge } from "@/components/betting/outcome-badge"
 import { StatusBadge } from "@/components/betting/status-badge"
 import { StakeInput } from "@/components/betting/stake-input"
-import { BetRow } from "@/components/betting/bet-row"
+import { PickRow } from "@/components/betting/pick-row"
 import { StatCard } from "@/components/modules/stat-card"
 import { BudgetModule } from "@/components/modules/budget-module"
 import { ComplianceBanner } from "@/components/modules/compliance-banner"
@@ -142,8 +142,6 @@ const TYPE_SCALE: { name: string; className: string }[] = [
 export default function StyleGuidePage() {
   const [stake, setStake] = React.useState("")
   const [placed, setPlaced] = React.useState(false)
-  const [rowStake, setRowStake] = React.useState("10")
-  const [rowPlaced, setRowPlaced] = React.useState(false)
 
   return (
     <div className="mx-auto flex max-w-[var(--container-max,1120px)] flex-col gap-14 px-4 py-10">
@@ -330,7 +328,7 @@ export default function StyleGuidePage() {
       </Section>
 
       {/* --------------------------- BETTING TOKENS ------------------------- */}
-      <Section title="OddsChip" subtitle="American odds. Positive reads green, negative reads ink. Detail reveals fractional + implied.">
+      <Section title="OddsChip" subtitle="American odds. Positive reads green, negative reads ink. Fractional + implied are sheet-supplied strings, shown verbatim.">
         <Row label="Polarity / size">
           <OddsChip odds={150} size="sm" />
           <OddsChip odds={150} />
@@ -339,8 +337,8 @@ export default function StyleGuidePage() {
           <OddsChip odds={-200} size="lg" />
         </Row>
         <Row label="Detail">
-          <OddsChip odds={150} detail />
-          <OddsChip odds={-130} detail />
+          <OddsChip odds={150} fractional="3/2" probability="40.0%" />
+          <OddsChip odds={-130} fractional="10/13" probability="56.5%" />
         </Row>
       </Section>
 
@@ -393,43 +391,34 @@ export default function StyleGuidePage() {
         </Row>
       </Section>
 
-      {/* ------------------------------ BET ROW ----------------------------- */}
-      <Section title="BetRow" subtitle="The workhorse row. Action zone adapts to status.">
+      {/* ------------------------------ PICK ROW ---------------------------- */}
+      <Section title="PickRow" subtitle="The workhorse row: a pick inside a bet card. Odds display values come verbatim from the sheet; the result badge appears only once a result is in.">
         <Card className="overflow-hidden p-0">
-          <BetRow
-            number={3}
-            description="Dan Mercer to win the tournament"
-            odds={450}
-            status="open"
-            stake={rowStake}
-            placed={rowPlaced}
-            onStakeChange={(v) => {
-              setRowStake(v)
-              setRowPlaced(false)
-            }}
-            onPlace={() => setRowPlaced(true)}
+          <PickRow
+            label="Dan Mercer"
+            americanOdds={110}
+            fractionalOdds="11/10"
+            probability="47.6%"
           />
-          <BetRow
-            number={7}
-            description="Best finisher: Jake Kohne / Steve Jones / Mike Yenzer"
-            odds={-120}
-            status="closed"
-            stake="15"
-            placed
+          <PickRow
+            label="Steve Jones (-5)"
+            americanOdds={-120}
+            fractionalOdds="5/6"
+            probability="54.5%"
           />
-          <BetRow
-            number={12}
-            description="Most even-numbered scores in Round 1"
-            odds={200}
-            status="resolved"
-            outcome="hit"
+          <PickRow
+            label="Garrett Klenke"
+            americanOdds={200}
+            fractionalOdds="2/1"
+            probability="33.3%"
+            result="hit"
           />
-          <BetRow
-            number={14}
-            description="Pat Ryan to miss the cut"
-            odds={-150}
-            status="resolved"
-            outcome="miss"
+          <PickRow
+            label="Field"
+            americanOdds={-150}
+            fractionalOdds="2/3"
+            probability="60.0%"
+            result="miss"
           />
         </Card>
       </Section>
