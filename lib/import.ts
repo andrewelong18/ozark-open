@@ -475,6 +475,18 @@ export type ImportPlan = {
    *  users.display_name — expected for "Field"/"Yes"/"No" and players who
    *  haven't logged in yet; fixed up by the admin in Studio. */
   unmatchedPickNames: string[]
+  /** Picks whose odds differ from the DB. The route warns about the ones
+   *  with live placements (harmless for payouts — placements snapshot odds
+   *  at write time, PRD §7.1 — but the admin should know). */
+  oddsChanges: OddsChange[]
+}
+
+export type OddsChange = {
+  sheetPickId: number
+  pickLabel: string
+  betTitle: string
+  from: { americanOdds: number; fractionalOdds: string }
+  to: { americanOdds: number; fractionalOdds: string }
 }
 
 /**
@@ -520,6 +532,7 @@ export function buildImportPlan(
     bets: { create: [], update: [], unchanged: 0 },
     picks: { create: [], update: [], unchanged: 0 },
     unmatchedPickNames: [],
+    oddsChanges: [],
   }
   const unmatched = new Set<string>()
 
@@ -586,6 +599,26 @@ export function buildImportPlan(
     const movedBet =
       existing !== undefined &&
       betUuidToSheetId.get(existing.bet_id) !== row.sheetBetId
+
+    if (
+      existing &&
+      (existing.american_odds !== write.american_odds ||
+        existing.fractional_odds !== write.fractional_odds)
+    ) {
+      plan.oddsChanges.push({
+        sheetPickId: row.sheetPickId,
+        pickLabel: row.pickLabel,
+        betTitle: row.betTitle,
+        from: {
+          americanOdds: existing.american_odds,
+          fractionalOdds: existing.fractional_odds,
+        },
+        to: {
+          americanOdds: write.american_odds,
+          fractionalOdds: write.fractional_odds,
+        },
+      })
+    }
 
     if (!existing) {
       plan.picks.create.push(write)

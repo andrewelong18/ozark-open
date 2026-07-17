@@ -217,10 +217,33 @@ export async function POST(request: Request) {
     }
   }
 
+  // Odds-changed-with-live-placements warning. Placements don't exist until
+  // Sprint 3 — the set below gets wired to bet_placements then; until that
+  // lands, no pick has placements and no warning fires.
+  const pickIdsWithPlacements = new Set<number>()
+  const warnings = plan.oddsChanges
+    .filter((change) => pickIdsWithPlacements.has(change.sheetPickId))
+    .map(
+      (change) =>
+        `Odds changed on "${change.pickLabel}" (${change.betTitle}) while it has live placements: ` +
+        `${change.from.fractionalOdds} → ${change.to.fractionalOdds}. Existing placements keep ` +
+        `their snapshotted odds; only future placements get the new price.`
+    )
+
   return NextResponse.json({
-    message:
-      `Bets: ${plan.bets.create.length} created, ${plan.bets.update.length} updated, ` +
-      `${plan.bets.unchanged} unchanged. Picks: ${plan.picks.create.length} created, ` +
-      `${plan.picks.update.length} updated, ${plan.picks.unchanged} unchanged.`,
+    report: {
+      bets: {
+        created: plan.bets.create.length,
+        updated: plan.bets.update.length,
+        unchanged: plan.bets.unchanged,
+      },
+      picks: {
+        created: plan.picks.create.length,
+        updated: plan.picks.update.length,
+        unchanged: plan.picks.unchanged,
+      },
+      unmatchedPickNames: plan.unmatchedPickNames,
+      warnings,
+    },
   })
 }
