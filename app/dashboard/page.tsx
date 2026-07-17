@@ -17,7 +17,12 @@ import {
   TOURNAMENT_RULE_COLUMNS,
   type PlacementQueryRow,
 } from "@/lib/placements"
-import { buildRulesModel, picksLine } from "@/lib/my-bets"
+import { ComplianceBanner } from "@/components/modules/compliance-banner"
+import {
+  buildComplianceSummary,
+  buildRulesModel,
+  picksLine,
+} from "@/lib/my-bets"
 
 // Dashboard (reworked in Sprint 5, closing #23): pool total, the
 // participant's budget, and their personalized rules — every number derived
@@ -150,6 +155,17 @@ export default async function DashboardPage() {
 
       {participant && myRules ? (
         <>
+          {buildComplianceSummary(existing, myRules.entry_fee, rules).map(
+            (item) => (
+              <ComplianceBanner
+                key={item.title}
+                tone={item.tone}
+                title={item.title}
+              >
+                {item.message}
+              </ComplianceBanner>
+            )
+          )}
           <Card>
             <CardContent className="flex flex-col gap-3.5">
               <div className="flex items-center justify-between gap-3">

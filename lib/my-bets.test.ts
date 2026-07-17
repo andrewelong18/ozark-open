@@ -5,6 +5,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import {
+  buildComplianceSummary,
   buildRulesModel,
   groupByPhase,
   normalizeMyBets,
@@ -260,4 +261,63 @@ test("buildRulesModel coerces a string entry_fee from PostgREST", () => {
   )
   assert.equal(model.entry_fee, 40)
   assert.equal(model.max_single_bet, 20)
+})
+
+// ---------------------------------------------------------------------------
+// buildComplianceSummary — banners assembled from the §8.1 checks
+// ---------------------------------------------------------------------------
+
+function placement(phase: 1 | 2, amount: number, n: number) {
+  return {
+    pick_id: `p-${phase}-${n}`,
+    bet_id: `b-${phase}-${n}`,
+    phase,
+    amount,
+    pick_player_user_id: null,
+  }
+}
+
+test("compliance: no placements means no banners (the empty state talks)", () => {
+  assert.deepEqual(buildComplianceSummary([], 40, RULES), [])
+})
+
+test("compliance: under-minimum phase warns with validation's message verbatim", () => {
+  const existing = [placement(1, 20, 1), placement(1, 20, 2)]
+  const items = buildComplianceSummary(existing, 40, RULES)
+  assert.deepEqual(
+    items.map((i) => [i.tone, i.title]),
+    [["warning", "Phase 1 incomplete"]]
+  )
+  assert.equal(items[0].message, "Only 2 of the 5 minimum picks in Phase 1.")
+})
+
+test("compliance: off-exact total warns; phases without placements are fine (Q2)", () => {
+  const existing = [1, 2, 3, 4, 5].map((n) => placement(1, 4, n))
+  const items = buildComplianceSummary(existing, 40, RULES)
+  assert.deepEqual(
+    items.map((i) => [i.tone, i.title]),
+    [["warning", "Not balanced yet"]]
+  )
+  assert.equal(
+    items[0].message,
+    "You've wagered $20 of $40 — Phase 2 must bring you to exactly $40."
+  )
+})
+
+test("compliance: both shortfalls stack as separate warnings", () => {
+  const existing = [placement(1, 10, 1), placement(2, 13, 1)]
+  const items = buildComplianceSummary(existing, 40, RULES)
+  assert.deepEqual(
+    items.map((i) => i.title),
+    ["Phase 1 incomplete", "Phase 2 incomplete", "Not balanced yet"]
+  )
+})
+
+test("compliance: everything passing yields a single success banner", () => {
+  const existing = [1, 2, 3, 4, 5].map((n) => placement(1, 8, n))
+  const items = buildComplianceSummary(existing, 40, RULES)
+  assert.deepEqual(
+    items.map((i) => [i.tone, i.title]),
+    [["success", "You're balanced"]]
+  )
 })

@@ -9,7 +9,14 @@
 // checkTournamentTotal) run directly on the same rows the page renders —
 // the compliance numbers can never drift from the list.
 
-import { maxSelfBet, maxSingleBet, type TournamentRules } from "./validation.ts"
+import {
+  checkPhaseMinimums,
+  checkTournamentTotal,
+  maxSelfBet,
+  maxSingleBet,
+  type ExistingPlacement,
+  type TournamentRules,
+} from "./validation.ts"
 
 // ---------------------------------------------------------------------------
 // Row normalization — supabase-js returns to-one joins as object OR
@@ -185,4 +192,50 @@ export function buildRulesModel(
     min_picks_per_phase: rules.min_picks_per_phase,
     max_picks_per_phase: rules.max_picks_per_phase,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Compliance banners — assembled from validation's §8.1 phase-close checks,
+// messages verbatim. Informational only, never blocking (Q3: admins chase;
+// whatever stands, stands).
+// ---------------------------------------------------------------------------
+
+export type ComplianceItem = {
+  tone: "warning" | "success"
+  title: string
+  message: string
+}
+
+/**
+ * Banner items for the participant's current standing. With no placements at
+ * all there is nothing to warn about yet — the empty state carries that
+ * message. Once they've bet: one warning per under-minimum phase (Q2: phases
+ * without placements are fine), one for an off-exact total, or a single
+ * success banner when every check passes.
+ */
+export function buildComplianceSummary(
+  existing: ExistingPlacement[],
+  entryFee: number,
+  rules: TournamentRules
+): ComplianceItem[] {
+  if (existing.length === 0) return []
+  const items: ComplianceItem[] = []
+  for (const phase of checkPhaseMinimums(existing, rules)) {
+    if (!phase.meets_minimum && phase.message)
+      items.push({
+        tone: "warning",
+        title: `Phase ${phase.phase} incomplete`,
+        message: phase.message,
+      })
+  }
+  const total = checkTournamentTotal(existing, entryFee)
+  if (!total.exact && total.message)
+    items.push({ tone: "warning", title: "Not balanced yet", message: total.message })
+  if (items.length === 0)
+    items.push({
+      tone: "success",
+      title: "You're balanced",
+      message: `You've wagered your full $${entryFee} and met every phase minimum. You're locked in.`,
+    })
+  return items
 }

@@ -9,7 +9,9 @@ import { OddsChip } from "@/components/betting/odds-chip"
 import { checkTournamentTotal } from "@/lib/validation"
 import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
 import { RulesCard } from "@/components/modules/rules-card"
+import { ComplianceBanner } from "@/components/modules/compliance-banner"
 import {
+  buildComplianceSummary,
   buildRulesModel,
   groupByPhase,
   normalizeMyBets,
@@ -100,6 +102,7 @@ export default async function MyBetsPage() {
   const phases = groupByPhase(entries)
   const totals = checkTournamentTotal(entries, entryFee)
   const myRules = buildRulesModel(participant, rules)
+  const compliance = buildComplianceSummary(entries, entryFee, rules)
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
@@ -124,6 +127,12 @@ export default async function MyBetsPage() {
           caption="Across both phases"
         />
       </div>
+
+      {compliance.map((item) => (
+        <ComplianceBanner key={item.title} tone={item.tone} title={item.title}>
+          {item.message}
+        </ComplianceBanner>
+      ))}
 
       {entries.length === 0 ? (
         <EmptyState
