@@ -38,3 +38,65 @@ $$;
 CREATE TRIGGER bet_placements_touch_updated_at
   BEFORE UPDATE ON public.bet_placements
   FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+
+-- RLS (DATA_MODEL §5): own rows readable/writable while the parent bet is
+-- open; everyone's placements become visible once the bet closes (PRD §12
+-- Q11/Q12); admins read everything. Participant-facing reads filter
+-- deleted_at IS NULL; the admin read deliberately does not — soft-deleted
+-- money rows exist for dispute resolution (§3.7), which is admin work.
+ALTER TABLE public.bet_placements ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read own placements"
+  ON public.bet_placements FOR SELECT TO authenticated
+  USING (user_id = auth.uid() AND deleted_at IS NULL);
+
+CREATE POLICY "Placements are visible to all once the bet closes"
+  ON public.bet_placements FOR SELECT TO authenticated
+  USING (
+    deleted_at IS NULL
+    AND EXISTS (
+      SELECT 1 FROM public.bet_picks pk
+      JOIN public.bets b ON b.id = pk.bet_id
+      WHERE pk.id = pick_id AND b.status = 'closed'
+    )
+  );
+
+CREATE POLICY "Admins can read all placements"
+  ON public.bet_placements FOR SELECT TO authenticated
+  USING (public.is_admin());
+
+CREATE POLICY "Users can place on picks of open bets"
+  ON public.bet_placements FOR INSERT TO authenticated
+  WITH CHECK (
+    user_id = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM public.bet_picks pk
+      JOIN public.bets b ON b.id = pk.bet_id
+      WHERE pk.id = pick_id AND b.status = 'open'
+    )
+  );
+
+-- One UPDATE policy covers edit, soft delete, and revive: no deleted_at
+-- filter in USING, so re-placing can clear deleted_at on an existing row
+-- while the bet is still open.
+CREATE POLICY "Users can edit own placements while the bet is open"
+  ON public.bet_placements FOR UPDATE TO authenticated
+  USING (
+    user_id = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM public.bet_picks pk
+      JOIN public.bets b ON b.id = pk.bet_id
+      WHERE pk.id = pick_id AND b.status = 'open'
+    )
+  )
+  WITH CHECK (
+    user_id = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM public.bet_picks pk
+      JOIN public.bets b ON b.id = pk.bet_id
+      WHERE pk.id = pick_id AND b.status = 'open'
+    )
+  );
+
+-- No DELETE policy: hard deletes are blocked for everyone — removal is the
+-- soft delete above.
