@@ -217,10 +217,30 @@ export async function POST(request: Request) {
     }
   }
 
-  // Odds-changed-with-live-placements warning. Placements don't exist until
-  // Sprint 3 — the set below gets wired to bet_placements then; until that
-  // lands, no pick has placements and no warning fires.
+  // Odds-changed-with-live-placements warning. Harmless for payouts —
+  // placements snapshot odds at write time (PRD §7.1) — but the admin should
+  // know. Warning only; the upload has already been applied above. A lookup
+  // failure degrades to no warning rather than failing the import.
   const pickIdsWithPlacements = new Set<number>()
+  if (plan.oddsChanges.length > 0) {
+    const sheetIdByUuid = new Map(
+      existingPicks.map((p) => [p.id, p.sheet_pick_id])
+    )
+    const changedUuids = existingPicks
+      .filter((p) =>
+        plan.oddsChanges.some((c) => c.sheetPickId === p.sheet_pick_id)
+      )
+      .map((p) => p.id)
+    const { data: livePlacements } = await supabase
+      .from("bet_placements")
+      .select("pick_id")
+      .in("pick_id", changedUuids)
+      .is("deleted_at", null)
+    for (const row of (livePlacements ?? []) as { pick_id: string }[]) {
+      const sheetPickId = sheetIdByUuid.get(row.pick_id)
+      if (sheetPickId !== undefined) pickIdsWithPlacements.add(sheetPickId)
+    }
+  }
   const warnings = plan.oddsChanges
     .filter((change) => pickIdsWithPlacements.has(change.sheetPickId))
     .map(

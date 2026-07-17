@@ -2,10 +2,11 @@ import { createClient } from "@/lib/supabase/server"
 import { Card } from "@/components/ui/card"
 import { StatusBadge, type BetStatus } from "@/components/betting/status-badge"
 import { PickRow, type PickResult } from "@/components/betting/pick-row"
+import { BetPlacementCard } from "@/components/betting/bet-placement-card"
 import { EmptyState } from "@/components/modules/empty-state"
 import { formatProbability } from "@/lib/format"
 
-type BetCategory = { name: string; slug: string }
+type BetCategory = { name: string; slug: string; allows_multiple_picks: boolean }
 
 type Pick = {
   id: string
@@ -124,14 +125,45 @@ export default async function BetsPage() {
   )
 
   if (!tournament) return emptyState
+  const tournamentId = (tournament as { id: string }).id
 
   const { data: betsData } = await supabase
     .from("bets")
     .select(
-      "id, sheet_bet_id, title, phase, round, status, total_probability, bet_categories ( name, slug ), bet_picks ( id, sheet_pick_id, label, american_odds, fractional_odds, probability, result )"
+      "id, sheet_bet_id, title, phase, round, status, total_probability, bet_categories ( name, slug, allows_multiple_picks ), bet_picks ( id, sheet_pick_id, label, american_odds, fractional_odds, probability, result )"
     )
-    .eq("tournament_id", (tournament as { id: string }).id)
+    .eq("tournament_id", tournamentId)
     .neq("status", "hidden")
+
+  // Wagering context: only participants get the inline stake inputs, and
+  // their live placements pre-fill them. Everything below is UX — the
+  // placements API re-validates every write server-side.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  let isParticipant = false
+  let placements: Record<string, number> = {}
+  if (user) {
+    const { data: participant } = await supabase
+      .from("tournament_participants")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("tournament_id", tournamentId)
+      .maybeSingle()
+    isParticipant = participant !== null
+  }
+  if (user && isParticipant) {
+    const { data: placementRows } = await supabase
+      .from("bet_placements")
+      .select("pick_id, amount")
+      .eq("user_id", user.id)
+      .is("deleted_at", null)
+    placements = Object.fromEntries(
+      ((placementRows ?? []) as { pick_id: string; amount: number }[]).map(
+        (p) => [p.pick_id, Number(p.amount)]
+      )
+    )
+  }
 
   const bets: Bet[] = (betsData ?? []).map((bet) => ({
     ...bet,
@@ -152,6 +184,13 @@ export default async function BetsPage() {
         <StatusBadge status={menuStatus(bets)} />
       </div>
 
+      {user && !isParticipant && (
+        <p className="mb-4 rounded-lg border border-border bg-surface-sunken px-4 py-3 text-sm text-text-muted">
+          You&apos;re browsing the menu — betting is for registered
+          participants. Ask an admin to add you to the pool.
+        </p>
+      )}
+
       <div className="mt-3 flex flex-col gap-8">
         {phases.map(({ phase, rounds }) => (
           <section key={phase} className="flex flex-col gap-5">
@@ -168,40 +207,69 @@ export default async function BetsPage() {
                     <div className="text-[11px] font-bold tracking-wider text-text-muted uppercase">
                       {name}
                     </div>
-                    {bets.map((bet) => (
-                      <Card key={bet.id} className="gap-0 p-0">
-                        <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="text-base leading-snug font-semibold text-pretty text-text-strong">
-                              {bet.title}
-                            </div>
-                            {bet.total_probability != null && (
-                              <div className="tabular mt-0.5 text-[11px] text-text-muted">
-                                Total probability{" "}
-                                {formatProbability(Number(bet.total_probability))}
+                    {bets.map((bet) =>
+                      bet.status === "open" && isParticipant ? (
+                        <BetPlacementCard
+                          key={bet.id}
+                          title={bet.title}
+                          totalProbability={
+                            bet.total_probability != null
+                              ? `Total probability ${formatProbability(Number(bet.total_probability))}`
+                              : null
+                          }
+                          allowsMultiplePicks={
+                            bet.bet_categories?.allows_multiple_picks ?? true
+                          }
+                          picks={bet.bet_picks
+                            .sort((a, b) => a.sheet_pick_id - b.sheet_pick_id)
+                            .map((pick) => ({
+                              id: pick.id,
+                              label: pick.label,
+                              american_odds: pick.american_odds,
+                              fractional_odds: pick.fractional_odds,
+                              probability: formatProbability(
+                                Number(pick.probability)
+                              ),
+                            }))}
+                          placements={placements}
+                        />
+                      ) : (
+                        <Card key={bet.id} className="gap-0 p-0">
+                          <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-base leading-snug font-semibold text-pretty text-text-strong">
+                                {bet.title}
                               </div>
+                              {bet.total_probability != null && (
+                                <div className="tabular mt-0.5 text-[11px] text-text-muted">
+                                  Total probability{" "}
+                                  {formatProbability(
+                                    Number(bet.total_probability)
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            {bet.status !== "open" && (
+                              <StatusBadge status="closed" />
                             )}
                           </div>
-                          {bet.status !== "open" && (
-                            <StatusBadge status="closed" />
-                          )}
-                        </div>
-                        {bet.bet_picks
-                          .sort((a, b) => a.sheet_pick_id - b.sheet_pick_id)
-                          .map((pick) => (
-                            <PickRow
-                              key={pick.id}
-                              label={pick.label}
-                              americanOdds={pick.american_odds}
-                              fractionalOdds={pick.fractional_odds}
-                              probability={formatProbability(
-                                Number(pick.probability)
-                              )}
-                              result={toResult(pick.result)}
-                            />
-                          ))}
-                      </Card>
-                    ))}
+                          {bet.bet_picks
+                            .sort((a, b) => a.sheet_pick_id - b.sheet_pick_id)
+                            .map((pick) => (
+                              <PickRow
+                                key={pick.id}
+                                label={pick.label}
+                                americanOdds={pick.american_odds}
+                                fractionalOdds={pick.fractional_odds}
+                                probability={formatProbability(
+                                  Number(pick.probability)
+                                )}
+                                result={toResult(pick.result)}
+                              />
+                            ))}
+                        </Card>
+                      )
+                    )}
                   </div>
                 ))}
               </div>
