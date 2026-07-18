@@ -43,6 +43,13 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | [7](sprints/sprint-7.md) | Payouts: theoretical & final | 🔶 code complete + tested locally Jul 18, 2026 (unit tests incl. the 2026 worked example, PG16 round trip for the view) — view migration + full chain applied Jul 18, 2026 (#34); prod verify pending (numbers vs Pat's hand-math; `tournament.status` flip) | 6 |
 | [8](sprints/sprint-8.md) | Leaderboard mirror | 🔲 | Pat's Sheets mirror |
 | [9](sprints/sprint-9.md) | Polish & group dry run | 🔲 | 0–7 (8 nice-to-have) |
+| [10](sprints/sprint-10.md) | ★ Admin roster & registration status | 🔲 | none hard (bonus) |
+| [11](sprints/sprint-11.md) | ★ Bet-state snapshots & rollback | 🔲 | 3 in prod (bonus) |
+| [12](sprints/sprint-12.md) | ★ Animation & delight pass + Jake celebration | 🔲 | Jake photo + sound from Andrew (bonus) |
+| [13](sprints/sprint-13.md) | ★ Funny ad slots (dashboard + landing) | 🔲 | ≥1 finished creative from Andrew (bonus) |
+| [14](sprints/sprint-14.md) | ★ Announcement banner (admin-toggled, dismissible) | 🔲 | none (bonus) |
+
+> **★ Sprints 10–14 are the bonus wish list** (Andrew, Jul 18, 2026): enhancements, never MVP blockers. Work them only when no MVP sprint (0–9) is waiting on you; they must land before the Aug 28 feature freeze or be cut without ceremony — the tournament runs fine without them.
 
 ---
 
@@ -61,6 +68,7 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | 7 — Final payouts | Pari-mutuel split (void-adjusted pool), `/results` | 🔶 Code complete + tested locally Jul 18, 2026 (`lib/payouts.ts` split, `/results` gated on `completed`, 2026 worked example + void case unit-tested) — view + chain applied Jul 18, 2026 (#34); prod verify pending, incl. flipping `tournament.status` at tournament end | 7 | Aug 21 |
 | 8 — Leaderboard | Google Sheets mirror | 🔲 Not started | 8 | Aug 28 |
 | 9 — Polish & dry run | Mobile pass, group test | 🔲 Not started | 9 | Sep 10 |
+| ★ Bonus wish list | Admin roster · bet-state snapshots · animation & Jake celebration · funny ads · announcement banner | 🔲 Not started (never blocks MVP) | 10–14 | as time allows, before Aug 28 |
 
 ---
 
@@ -79,7 +87,7 @@ Shipped May 7, 2026 (see git history and `docs/superpowers/` for the design spec
 
 ## What Is Explicitly Not on the Roadmap
 
-- A custom admin UI beyond `/admin/import` and the read-only `/admin/view` View-sheet replica (Sprint 7) — Studio is the admin UI for everything else (ADR 0001 §7).
+- A custom admin UI beyond `/admin/import` and the read-only `/admin/view` View-sheet replica (Sprint 7) — Studio is the admin UI for everything else (ADR 0001 §7). *(One bonus exception on the wish list: the read-only `/admin/roster` page, Sprint 10.)*
 - A bet resolution engine (results are computed in the admin's workbook and uploaded — ADR 0001 §3).
 - Notifications, email digests, or push notifications (out of scope for v1).
 - A mobile app (it's a mobile-responsive web app — no native build).

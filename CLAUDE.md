@@ -37,7 +37,7 @@ Do **not** re-read all foundation docs by default — each `docs/sprints/sprint-
 ## Project Conventions
 
 - **Migrations only.** Schema changes are SQL files in `supabase/migrations/`; Supabase Studio edits data, never schema.
-- **The bet menu arrives by spreadsheet upload** (`/admin/import`, upsert by the sheet's `bet_id`/`pick_id` — ADR 0001). Studio is the admin CMS for everything else; the only custom admin UI in v1 is that upload page plus the read-only `/admin/view` View-sheet replica (Sprint 7).
+- **The bet menu arrives by spreadsheet upload** (`/admin/import`, upsert by the sheet's `bet_id`/`pick_id` — ADR 0001). Studio is the admin CMS for everything else; the only custom admin UI in v1 is that upload page plus the read-only `/admin/view` View-sheet replica (Sprint 7) — and, if the bonus wish list happens, the read-only `/admin/roster` page (Sprint 10).
 - **The app never adjudicates a bet.** Results (hit/miss/push/void) are computed in the admin's Excel workbook and uploaded per pick. Don't build resolution logic.
 - **Odds display values come from the sheet** (`fractional_odds`, `probability`, `total_probability` — verbatim, never recomputed). `american_odds` is for payout math only.
 - **Validation is server-side** in `lib/validation.ts`, called from API routes. Client checks are UX, not security.
