@@ -112,28 +112,72 @@ No CI/CD pipeline to configure. No servers to manage. Updating bets, odds, statu
 
 ---
 
-## Updating Bets and Results (the admin workflow)
+## The Admin Runbook (updating bets, statuses, and results)
 
-Two tracks (full rationale in `docs/adr/0001-bet-pick-architecture.md`; the detailed runbook lands in Sprint 6):
+Everything an admin does during tournament week runs on **two tracks** (full rationale in `docs/adr/0001-bet-pick-architecture.md`):
 
-**Track 1 — the bets spreadsheet → `/admin/import`.** The workbook Pat already maintains is the source of truth for the menu: bets, picks, odds, probabilities, statuses, and results (its helper columns compute hit/miss/push/void). The format is `docs/import/bets-sample.xlsx`. Upload it at each point in the tournament itinerary:
+| Track | Tool | Owns |
+|---|---|---|
+| 1 | The bets spreadsheet → **`/admin/import`** | The entire menu: bets, picks, odds, probabilities, **statuses** (`hidden`/`open`/`closed`), **results** (`hit`/`miss`/`push`/`void`) |
+| 2 | **Supabase Studio** (Table Editor) | People and fixes: admins, display names, participants, entry fees, pick→player links |
 
-1. **Before the tournament** — Phase 1 bets `open` (Phase 2 rows ship `hidden`).
-2. **Thursday morning** — flip Phase 1 to `closed` in the sheet, re-upload.
-3. **Thursday night** — fill in Round 1 / Tournament-so-far results, re-upload.
-4. **Friday night** — flip Phase 2 rows to `open` (with updated odds), re-upload.
-5. **Saturday morning** — close Phase 2, re-upload.
-6. **Saturday night** — final results, re-upload. Payouts are now final.
+Three rules make the whole thing safe:
 
-Uploads upsert by the sheet's `bet_id`/`pick_id` — re-uploading is always safe, and the app re-renders the next time anyone loads it. Uploads never touch anyone's placed wagers.
+- **The sheet is the source of truth.** The workbook Pat already maintains (format: `docs/import/bets-sample.xlsx` — 13 contract columns; helper columns to the right are ignored) drives everything the menu shows. The app never adjudicates a bet; the workbook's helper columns compute hit/miss/push/void and the `result` column carries the verdicts in.
+- **Re-uploading is the normal workflow, not a recovery step.** Uploads upsert by the sheet's stable `bet_id`/`pick_id`. Re-uploading an identical sheet is a true no-op; a changed sheet writes only the changed fields; an upload interrupted halfway is healed by uploading again.
+- **Uploads never touch anyone's placed wagers.** Only `bets` and `bet_picks` are written. Placements snapshot their odds at write time, so even repricing a pick can't change money already on the board.
 
-**Track 2 — Supabase Studio** (https://supabase.com/dashboard → Project → Table Editor) for everything that isn't the menu: promoting admins, setting display names, registering tournament participants and entry fees, and one-off data fixes.
+No deployments, no code, no Git — the app re-renders on the next page load.
 
-**Before closing each phase**, run [`docs/admin/phase-compliance.sql`](docs/admin/phase-compliance.sql) in the SQL editor — it lists every participant with their per-phase pick counts and wagered total, flagging who's under the phase minimum or off their exact entry-fee total (same rules the app's compliance banners show). Chase the flagged stragglers, then close; after the close, whatever stands, stands.
+### How to upload
 
-No deployments, no code, no Git.
+1. Log in as an admin (`is_admin = true` — non-admins get a 404 on this page) and go to **`/admin/import`**.
+2. Choose the workbook (`.xlsx` or `.csv`) and upload. Bad files are rejected **before any write** — a missing column or an invalid status/result value fails the whole upload with per-row errors, so a typo can't half-apply.
+3. Read the **import report**:
+   - **Created / updated / unchanged counts** for bets and picks. Sanity-check them against what you meant to change — a routine status flip should show updates roughly equal to the phase's row count and create nothing.
+   - **Unmatched pick names** — pick labels that matched no `users.display_name` (expected for "Field"/"Yes"/"No" and players who haven't logged in yet). These picks carry no player link until you set one in Studio (Track 2); the importer never overwrites a link that was hand-set there.
+   - **Warnings** — flagged when odds changed on a pick that already has live placements. Harmless for payouts (existing placements keep their snapshotted odds; only future placements get the new price), but you should know you did it.
 
-> **The importer is built (Sprint 2)** — `/admin/import` requires a signed-in user with `is_admin = true`. Until the prod database steps land (rework migration + admin flag, issues #12/#15), the fallback remains pasting `supabase/seed-sample-phase1.sql` into the Supabase SQL editor (after the migrations). Seed and importer upsert by the same sheet IDs, so either can safely run over the other. The importer name-matches picks to players on every upload and never overwrites a link that was hand-set in Studio.
+### Recipe: close a phase (Thursday morning / Saturday morning)
+
+1. **First**, run [`docs/admin/phase-compliance.sql`](docs/admin/phase-compliance.sql) in the Supabase SQL editor. It lists every participant's per-phase pick counts and wagered total, flagging who's under the phase minimum or off their exact entry-fee total (the same rules the app's compliance banners show). Chase the flagged stragglers. After the close, whatever stands, stands.
+2. In the sheet, flip the phase's rows from `open` to `closed` in the `status` column.
+3. Re-upload.
+4. **What the app now shows:** stake inputs are gone from those bets, and **everyone's placements go public** — each pick lists every bettor's name and amount, with a per-pick total. (While a bet is open, nobody sees anyone else's wagers; the close is the reveal.)
+
+### Recipe: enter results (Thursday night / Saturday night)
+
+1. In the sheet, let the workbook's helper columns settle each pick, then fill the `result` column: `hit`, `miss`, `push`, or `void`. Leave picks that aren't settled yet as `pending` — partial results are fine; you can re-upload as many times as verdicts come in.
+2. Re-upload.
+3. **What the app now shows:** every non-pending pick gets a color-coded result badge (✓ hit / ✕ miss / = push / ∅ void), and a bet whose picks are all settled reads as **Resolved** instead of Closed. Got a verdict wrong? Fix the cell and re-upload — same as everything else.
+
+### Recipe: open Phase 2 (Friday night)
+
+1. Flip the Phase 2 rows from `hidden` to `open` — updating their odds in the same pass is fine and expected.
+2. Re-upload. Hidden bets were never visible to participants; they appear for the first time now.
+
+### The tournament itinerary
+
+| When | Upload |
+|---|---|
+| Before the tournament | Phase 1 rows `open`, Phase 2 rows `hidden` |
+| Thursday morning | Close Phase 1 (compliance check → flip `status` → re-upload) |
+| Thursday night | Round 1 / tournament-so-far results in `result` → re-upload |
+| Friday night | Phase 2 rows `hidden` → `open`, updated odds → re-upload |
+| Saturday morning | Close Phase 2 |
+| Saturday night | Final results → re-upload. Payouts are now final. |
+
+### Track 2 — Supabase Studio
+
+Studio (https://supabase.com/dashboard → Project → Table Editor) is the admin UI for everything that isn't the menu — **data only, never schema**:
+
+- **Promote an admin:** `users` → set `is_admin = true`.
+- **Fix a display name:** `users` → `display_name` (new accounts default to their email address). Names matter twice: they're what everyone sees on closed bets, and the importer matches pick labels against them.
+- **Register a participant:** add a row to `tournament_participants` with their `entry_fee` (and `is_player` if they're in the field).
+- **Link an unmatched pick to a player:** `bet_picks` → set `player_user_id` (this powers self-pick flagging). The importer respects hand-set links on every future upload.
+- **One-off data fixes** as needed.
+
+> **Until the prod database steps land** (rework migration + admin flag, issues #12/#15), the fallback remains pasting `supabase/seed-sample-phase1.sql` into the Supabase SQL editor (after the migrations). Seed and importer upsert by the same sheet IDs, so either can safely run over the other.
 
 ---
 
