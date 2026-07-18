@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/modules/empty-state"
 import { formatProbability } from "@/lib/format"
 import {
   groupPlacementsByPick,
+  isBetSettled,
   normalizeClosedPlacements,
   toResult,
   type ClosedPlacementQueryRow,
@@ -304,7 +305,15 @@ export default async function BetsPage() {
                               )}
                             </div>
                             {bet.status !== "open" && (
-                              <StatusBadge status="closed" />
+                              <StatusBadge
+                                status={
+                                  // Settled is derived at render — every
+                                  // pick resolved — never stored.
+                                  isBetSettled(bet.bet_picks)
+                                    ? "resolved"
+                                    : "closed"
+                                }
+                              />
                             )}
                           </div>
                           {bet.bet_picks
