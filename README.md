@@ -86,6 +86,14 @@ ozark-open/
 5. Start the dev server: `npm run dev`
 6. Visit http://localhost:3000
 
+### Tests & verification
+
+- `npm run test` — unit tests (every `lib/*.test.ts`: validation, placements, my-bets, closed-bets, payouts, admin view).
+- `npm run lint` · `npx tsc --noEmit` · `npm run build` — the rest of the gate.
+- `bash scripts/local-db-verify.sh` — the database half: spins up a throwaway local Postgres (no Supabase creds, no ports), applies every migration + the Phase 1 seed, runs the three round-trip harnesses (import idempotency, placement lifecycle under RLS, the payout view), and smoke-tests `docs/admin/phase-compliance.sql`. Needs `postgresql-16` server binaries installed.
+
+Every PR runs the first four checks via GitHub Actions (`.github/workflows/ci.yml`); `main` auto-deploys to Vercel, so keep the gate green.
+
 ---
 
 ## Development Workflow (sprint-driven, AI-assisted)
