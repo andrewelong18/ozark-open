@@ -14,4 +14,4 @@
 - [x] Round-trip test: upload `bets-sample.xlsx` → DB matches the sheet; upload it again → report shows zero changes (idempotent). *(Verified Jul 17, 2026 on a local Postgres via `scripts/import-roundtrip.ts`, importing over the Phase 1 seed: 6 bets / 30 picks created, 13/57 seeded rows unchanged, re-import zero changes.)*
 
 **Done when:** an admin uploads the sample sheet twice from the browser — first upload creates the full menu, second reports no changes — and `/bets` reflects it without a redeploy.
-**Status (Jul 17, 2026): code complete, round-trip verified locally — the in-browser Done when is pending** the prod database steps: rework migration + seed (#12) and an `is_admin` flag (#15). Tracked in the follow-up issue for prod verification.
+**Status (Jul 18, 2026): code complete, round-trip verified locally; prod SQL applied Jul 18, 2026 (#12 — migration + seed, 13 bets / 57 picks). The in-browser Done when is pending** the browser upload test (#19) — nothing blocks it on the database side now; #15 (admin flags) is partial (only Andrew so far, which is enough to run it).

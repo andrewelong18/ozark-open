@@ -19,6 +19,7 @@
 > insert / edit / soft delete / revive, hard-delete block, post-close visibility —
 > holds under RLS on a throwaway local Postgres 16 (`scripts/placement-roundtrip.ts`).
 > `npm run build` and `npm run lint` clean. The **in-browser half of "Done when"
-> (a legal placement end-to-end on the phone) is pending prod** — it runs after the
-> prod SQL steps land (#12 → #15 → #22) and this sprint's PR merges; tracked as its
-> own issue ("Sprint 4: verify placement flow end-to-end in the prod browser").
+> (a legal placement end-to-end on the phone) is pending prod** — the prod SQL
+> chain landed Jul 18, 2026 (#12/#22) and the PR is merged, so only the browser
+> pass itself remains; tracked in #24 ("Sprint 4: verify placement flow end-to-end
+> in the prod browser").

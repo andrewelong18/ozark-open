@@ -13,4 +13,4 @@
 
 **Done when:** the full Phase 4 definition-of-done holds — a participant can complete a betting phase without breaking any §7 rule, and knows it.
 
-> **Status (Jul 17, 2026): code complete, verified locally** — unit tests (`npm run test`, incl. the new `lib/my-bets.test.ts`), `npm run build`, `npm run lint`. The in-browser half of "Done when" (the Phase 4 definition-of-done against live Supabase) is **pending the prod SQL chain** #12 → #15 → #22 → #24 — tracked as its own issue ("Sprint 5: verify My Bets & compliance end-to-end in the prod browser").
+> **Status (Jul 17, 2026): code complete, verified locally** — unit tests (`npm run test`, incl. the new `lib/my-bets.test.ts`), `npm run build`, `npm run lint`. The in-browser half of "Done when" (the Phase 4 definition-of-done against live Supabase) is **pending only the browser passes** — the prod SQL chain landed Jul 18, 2026 (#12/#22); the sequence is now #24 (Sprint 4 browser verify) → #26 ("Sprint 5: verify My Bets & compliance end-to-end in the prod browser").

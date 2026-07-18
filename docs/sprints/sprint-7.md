@@ -6,7 +6,7 @@
 **Reads:** PRD §5 · DATA_MODEL §4 · ADR 0001 §9.
 **Target:** ~Aug 21 · **Blockers:** Sprint 6. *(Q5 resolved: display cents. Q6-as-amended: push returns stake in the math; void leaves the pool.)*
 
-- [x] Migration: `placement_payouts_view` per DATA_MODEL §4 — computes from `odds_at_placement` + `bet_picks.result`, excludes soft-deleted rows, surfaces `refunded_stake` for voids. *(`security_invoker` added so the view honors RLS; SQL proven against a throwaway local PG16 by `scripts/payout-view-roundtrip.ts`. Prod SQL run pending — see the Sprint 7 issues.)*
+- [x] Migration: `placement_payouts_view` per DATA_MODEL §4 — computes from `odds_at_placement` + `bet_picks.result`, excludes soft-deleted rows, surfaces `refunded_stake` for voids. *(`security_invoker` added so the view honors RLS; SQL proven against a throwaway local PG16 by `scripts/payout-view-roundtrip.ts`. Applied in prod Jul 18, 2026 (#34 — `security_invoker = on` confirmed).)*
 - [x] "My Bets": theoretical payout per resolved placement + "Total theoretical payout" summary (pushes count, voids show as refunded).
 - [x] Admin "view all" page: everyone's placements and payouts in one table, including still-open phases and self-pick review flags (replicates the spreadsheet's `View` sheet). *(Shipped as `/admin/view` with an admin-only nav link — flat rows grouped by bettor, per-bettor wagered/theoretical/actual-as-it-stands.)*
 - [x] `lib/payouts.ts`: pool = sum(entry fees) − sum(refunded voided stakes); share = `user_theoretical / sum_all × pool`.
