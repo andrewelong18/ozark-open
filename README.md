@@ -23,7 +23,7 @@ Everything else — tournament scoring, skins, the leaderboard math, and **bet r
 
 | Built (code complete) | Up next |
 |---|---|
-| Auth (magic link), tournament/participant setup, initial bet menu (pre-ADR-0001 schema — rework scheduled) | Sprint 0: verify production deploy · Sprint 1: bet/pick schema rework · Sprint 2: spreadsheet ingestion · Sprints 3–5: bet placement · Sprints 6–9: results, payouts, leaderboard, dry run |
+| Auth + tournament/participant setup (**verified in prod**); Sprints 1–6: bet/pick schema (ADR 0001), spreadsheet ingestion (`/admin/import`), placements + validation, My Bets + compliance, closed-bet views with everyone's placements + result badges, the admin runbook — all unit-tested and built locally, awaiting the manual prod SQL chain (#12 → #15 → #22 → #28) and in-browser verification | Sprint 7: payouts (theoretical + final) · Sprint 8: leaderboard mirror · Sprint 9: mobile pass + group dry run |
 
 `docs/ROADMAP.md` is the live sprint tracker — status table, numbered sprints with checkboxes, blockers, and target dates. All product decisions are settled and logged in `docs/PRD.md` §12 and `docs/adr/0001-bet-pick-architecture.md`; there are no open spec questions.
 
