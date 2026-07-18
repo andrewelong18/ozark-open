@@ -1,0 +1,27 @@
+# The pre-merge gate. `main` auto-deploys to Vercel, so every PR runs the
+# same four checks the sprint workflow runs locally: unit tests, lint,
+# a full-project typecheck (test files included — `next build` skips them),
+# and the production build. No secrets needed: the build doesn't require
+# Supabase env vars, and the DB round-trip scripts stay local-only
+# (see scripts/local-db-verify.sh).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run build
