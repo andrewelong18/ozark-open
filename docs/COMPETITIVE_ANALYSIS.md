@@ -42,12 +42,12 @@ staying that way.
 | Theme | What DK / FanDuel do | Ozark today |
 |---|---|---|
 | **Onboarding & account** | Guided first bet, KYC, self-serve profile, preferences | **None** — no profile page; display name + registration set in Studio |
-| **Bet-slip & placement UX** | Persistent slip, add-then-review, confirm step, payout preview | **Partial** — inline per-pick placement, immediate write, running total on dashboard; no review/confirm step, no receipt |
+| **Bet-slip & placement UX** | Persistent slip, add-then-review, confirm step, payout preview | **Partial → improving** — inline per-pick placement, immediate write; a sticky review/balance bar + locked-odds receipt now on `/bets` (Sprint 17); no draft slip by design |
 | **Discovery & menu** | Search, filters, favorites, featured/boosted, "popular" | **Partial** — grouped phase→round→category; no search/filter/jump |
 | **My bets & tracking** | Open vs. settled tabs, live tracking, history | **Have** — `/my-bets` with running total + theoretical payout; no open/settled split, no cross-year history |
 | **Notifications & reminders** | Push + email: market open, bet settled, promos | **None** — no notifications of any kind |
 | **Social & engagement** | Public leaderboards, share, consensus %, contests | **Partial** — everyone's bets reveal at close (built-in transparency); no consensus, feed, or share |
-| **Trust & transparency** | Bet receipts, transaction history, clear rules surfaced | **Partial** — odds snapshotted at placement; personalized rules card; no receipt / confirmation artifact |
+| **Trust & transparency** | Bet receipts, transaction history, clear rules surfaced | **Partial → improving** — odds snapshotted at placement; personalized rules card; locked-odds receipt on place/edit (Sprint 17) |
 | **Delight & gamification** | Streaks, badges, celebration animations | **Planned** — Jake celebration + motion vocabulary (Sprint 12); nothing shipped |
 | **Home / dashboard** | Personalized, countdowns, quick actions, next-best-action | **Have** — pool total, budget module, compliance banners; no countdown or next-action prompt |
 
@@ -77,7 +77,7 @@ requires a new bet type.
 - **DK/FanDuel:** add picks to a slip, *then* review the whole thing and confirm.
 - **Ozark:** placement is inline and immediate — easy to lose track of whether you've hit exactly your entry across 5–10 picks and two phases. A lightweight review step — "here are your N picks totaling $X of your $Y entry; you're balanced / $Z short — confirm" — reinforces the exact-total rule (`lib/validation.ts`) at the moment it matters. **Not** a real bet slip with new wager types; a review/confirm surface over the placements already in `lib/validation.ts` and `/api/placements`.
 - **Impact:** High · **Effort:** M · **Scope-fit:** ✅ — reuses existing validation; no rule change.
-- **Slot:** new Sprint 17 stub (§5).
+- **Slot:** ✅ **built as [Sprint 17](sprints/sprint-17.md)** (Jul 18, 2026) — a sticky review/balance bar on `/bets` over `checkTournamentTotal` + `buildComplianceSummary`, plus the §1.5 receipt below.
 
 ### 1.4 Phase-close countdown + email reminders
 - **DK/FanDuel:** push + email for "market closing," "you have an unplaced entry."
@@ -89,7 +89,7 @@ requires a new bet type.
 - **DK/FanDuel:** every placed bet produces a receipt with locked odds — a trust artifact.
 - **Ozark:** odds *are* snapshotted into `odds_at_placement`, but the user never sees a confirmation of it. Surface a per-placement confirmation ("You're on **Jake Kohne to win R1** at +450, $5 — odds locked") on place/edit. Cheap trust win that also makes the odds-snapshot behavior visible and defends against "but the odds changed!" disputes.
 - **Impact:** Med · **Effort:** S · **Scope-fit:** ✅ — surfaces existing data.
-- **Slot:** fold into §1.3's review/confirm sprint (they're the same surface).
+- **Slot:** ✅ **built with §1.3 in [Sprint 17](sprints/sprint-17.md)** (Jul 18, 2026) — a locked-odds receipt under each placed pick on `/bets`, from the write's own `odds_at_placement` snapshot.
 
 ---
 
@@ -178,6 +178,8 @@ Numbers are suggestions; renumber to whatever's next.
 **Done when:** a first-time user reads the walkthrough, dismisses it, and can re-open the explainer anytime.
 
 ### Sprint 17 — Bet-Slip Review & Confirmation (Bonus)
+
+> ✅ **Cut into [`docs/sprints/sprint-17.md`](sprints/sprint-17.md) and built** (Jul 18, 2026): sticky review bar on `/bets` + per-placement locked-odds receipt. The stub below is kept for provenance.
 
 **Goal:** a review-before-commit surface over existing placements — "your N picks total $X of your $Y entry; balanced / $Z short — confirm" — plus a per-placement receipt with locked odds.
 **Target:** before the group dry run (Sprint 9) if possible · **Blockers:** none hard; builds on Sprint 4 (placement API) and `lib/validation.ts`.
