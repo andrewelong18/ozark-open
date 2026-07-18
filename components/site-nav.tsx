@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 
 import { cn } from "@/lib/utils"
 
-type NavItem = { label: string; href: string }
+export type NavItem = { label: string; href: string }
 
 // Only real routes are listed here — no dead links to unbuilt screens.
 const NAV: NavItem[] = [
@@ -16,10 +16,14 @@ const NAV: NavItem[] = [
 
 /**
  * The clubhouse pill nav — a dark inset rail with a gold active pill. Scrolls
- * horizontally under the brand bar on small screens.
+ * horizontally under the brand bar on small screens. `extraItems` appends
+ * conditional links the server Header decides on (Results once the
+ * tournament completes, Admin for admins) — the base list stays static so
+ * there are never dead links.
  */
-export function SiteNav() {
+export function SiteNav({ extraItems = [] }: { extraItems?: NavItem[] }) {
   const pathname = usePathname()
+  const items = [...NAV, ...extraItems]
 
   return (
     <nav
@@ -29,7 +33,7 @@ export function SiteNav() {
         "[background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,0.09)_0_2px,rgba(255,255,255,0)_2px_9px)]"
       )}
     >
-      {NAV.map((item) => {
+      {items.map((item) => {
         const active =
           pathname === item.href || pathname.startsWith(item.href + "/")
         return (
