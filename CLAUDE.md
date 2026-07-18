@@ -37,7 +37,7 @@ Do **not** re-read all foundation docs by default — each `docs/sprints/sprint-
 ## Project Conventions
 
 - **Migrations only.** Schema changes are SQL files in `supabase/migrations/`; Supabase Studio edits data, never schema.
-- **The bet menu arrives by spreadsheet upload** (`/admin/import`, upsert by the sheet's `bet_id`/`pick_id` — ADR 0001). Studio is the admin CMS for everything else; that upload page is the **only** custom admin UI in v1.
+- **The bet menu arrives by spreadsheet upload** (`/admin/import`, upsert by the sheet's `bet_id`/`pick_id` — ADR 0001). Studio is the admin CMS for everything else; the only custom admin UI in v1 is that upload page plus the read-only `/admin/view` View-sheet replica (Sprint 7).
 - **The app never adjudicates a bet.** Results (hit/miss/push/void) are computed in the admin's Excel workbook and uploaded per pick. Don't build resolution logic.
 - **Odds display values come from the sheet** (`fractional_odds`, `probability`, `total_probability` — verbatim, never recomputed). `american_odds` is for payout math only.
 - **Validation is server-side** in `lib/validation.ts`, called from API routes. Client checks are UX, not security.
@@ -49,4 +49,4 @@ Do **not** re-read all foundation docs by default — each `docs/sprints/sprint-
 
 ## Out of Scope (don't propose)
 
-Scoring/skins/leaderboard math (stays in the Excel workbook) · bet resolution logic (results come from the admin's workbook per pick — ADR 0001) · payments (Venmo, out of band) · public access, SEO · custom admin UI beyond `/admin/import` · notifications · multi-tenancy · parlays, live odds, cash-out, real-time updates · new bet categories without a code change (by design)
+Scoring/skins/leaderboard math (stays in the Excel workbook) · bet resolution logic (results come from the admin's workbook per pick — ADR 0001) · payments (Venmo, out of band) · public access, SEO · custom admin UI beyond `/admin/import` + `/admin/view` · notifications · multi-tenancy · parlays, live odds, cash-out, real-time updates · new bet categories without a code change (by design)
