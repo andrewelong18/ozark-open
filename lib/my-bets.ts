@@ -17,6 +17,13 @@ import {
   type ExistingPlacement,
   type TournamentRules,
 } from "./validation.ts"
+import { toResult, type PickResult } from "./closed-bets.ts"
+import {
+  aggregatePayouts,
+  refundedStake,
+  theoreticalPayout,
+  type PayoutTotals,
+} from "./payouts.ts"
 
 // ---------------------------------------------------------------------------
 // Row normalization — supabase-js returns to-one joins as object OR
@@ -42,6 +49,7 @@ type MyBetsPickJoin = {
   label: string
   sheet_pick_id: number
   player_user_id: string | null
+  result: string
   bets: MyBetsBetJoin | MyBetsBetJoin[] | null
 }
 
@@ -70,6 +78,9 @@ export type MyBetEntry = {
   amount: number
   /** The write-time American-odds snapshot — never the pick's live odds. */
   odds_at_placement: number
+  /** The pick's uploaded result — displayed (and paying out) only when not
+   * pending (ADR 0001 §6). */
+  result: PickResult
 }
 
 /**
@@ -102,9 +113,35 @@ export function normalizeMyBets(
       pick_player_user_id: pick.player_user_id,
       amount: Number(row.amount),
       odds_at_placement: Number(row.odds_at_placement),
+      result: toResult(pick.result),
     })
   }
   return out
+}
+
+// ---------------------------------------------------------------------------
+// Payouts — per-entry theoretical (from the odds snapshot) and the rollup
+// the "Theoretical Payout" stat shows
+// ---------------------------------------------------------------------------
+
+/** One entry's theoretical payout — null while pending. Push credits the
+ * stake; void credits nothing (the stake comes back via entryRefund). */
+export function entryPayout(entry: MyBetEntry): number | null {
+  return theoreticalPayout(entry.amount, entry.odds_at_placement, entry.result)
+}
+
+/** The stake a void hands back (out of band); 0 otherwise. */
+export function entryRefund(entry: MyBetEntry): number {
+  return refundedStake(entry.amount, entry.result)
+}
+
+/** Roll the bettor's entries up for the summary stat: resolved theoretical
+ * total (pushes count, voids contribute 0), refunded void stakes, and how
+ * many picks are still waiting on results. */
+export function payoutSummary(entries: MyBetEntry[]): PayoutTotals {
+  return aggregatePayouts(
+    entries.map((e) => ({ theoretical: entryPayout(e), refunded: entryRefund(e) }))
+  )
 }
 
 // ---------------------------------------------------------------------------

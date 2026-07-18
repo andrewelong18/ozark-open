@@ -7,8 +7,11 @@ import assert from "node:assert/strict"
 import {
   buildComplianceSummary,
   buildRulesModel,
+  entryPayout,
+  entryRefund,
   groupByPhase,
   normalizeMyBets,
+  payoutSummary,
   picksLine,
   type MyBetEntry,
   type MyBetsQueryRow,
@@ -34,6 +37,7 @@ function row(overrides: {
   pick_label?: string
   sheet_pick_id?: number
   player_user_id?: string | null
+  result?: string
   tournament_id?: string
   asArrays?: boolean
 }): MyBetsQueryRow {
@@ -50,6 +54,7 @@ function row(overrides: {
     label: overrides.pick_label ?? "Jake",
     sheet_pick_id: overrides.sheet_pick_id ?? 1,
     player_user_id: overrides.player_user_id ?? null,
+    result: overrides.result ?? "pending",
     bets: overrides.asArrays ? [bet] : bet,
   }
   return {
@@ -121,7 +126,13 @@ test("normalizeMyBets drops unreadable joins instead of crashing", () => {
     pick_id: "p-2",
     amount: 5,
     odds_at_placement: 150,
-    bet_picks: { label: "Jake", sheet_pick_id: 1, player_user_id: null, bets: null },
+    bet_picks: {
+      label: "Jake",
+      sheet_pick_id: 1,
+      player_user_id: null,
+      result: "pending",
+      bets: null,
+    },
   }
   const badPhase = row({ pick_id: "p-3", amount: 5, phase: 3 })
   assert.deepEqual(normalizeMyBets([noPick, noBet, badPhase], T), [])
@@ -320,4 +331,51 @@ test("compliance: everything passing yields a single success banner", () => {
     items.map((i) => [i.tone, i.title]),
     [["success", "You're balanced"]]
   )
+})
+
+// ---------------------------------------------------------------------------
+// Payouts on My Bets — theoretical per resolved entry, voids as refunds
+// ---------------------------------------------------------------------------
+
+test("normalizeMyBets carries the pick's result (unknown strings → pending)", () => {
+  const [hit] = normalizeMyBets([row({ pick_id: "p-1", amount: 5, result: "hit" })], T)
+  assert.equal(hit.result, "hit")
+  const [bad] = normalizeMyBets([row({ pick_id: "p-2", amount: 5, result: "won" })], T)
+  assert.equal(bad.result, "pending")
+})
+
+test("entryPayout computes from the odds snapshot per result", () => {
+  const entries = normalizeMyBets(
+    [
+      row({ pick_id: "hit", amount: 5, odds: 110, result: "hit" }),
+      row({ pick_id: "push", amount: 3, odds: 200, result: "push", sheet_pick_id: 2 }),
+      row({ pick_id: "void", amount: 7, odds: 300, result: "void", sheet_pick_id: 3 }),
+      row({ pick_id: "open", amount: 2, odds: 100, result: "pending", sheet_pick_id: 4 }),
+    ],
+    T
+  )
+  const byPick = Object.fromEntries(entries.map((e) => [e.pick_id, e]))
+  assert.equal(entryPayout(byPick["hit"]), 10.5)
+  assert.equal(entryPayout(byPick["push"]), 3)
+  assert.equal(entryPayout(byPick["void"]), 0)
+  assert.equal(entryRefund(byPick["void"]), 7)
+  assert.equal(entryPayout(byPick["open"]), null)
+})
+
+test("payoutSummary: pushes count, voids show as refunded, pendings counted", () => {
+  const entries = normalizeMyBets(
+    [
+      row({ pick_id: "hit", amount: 5, odds: 110, result: "hit" }),
+      row({ pick_id: "push", amount: 3, odds: 200, result: "push", sheet_pick_id: 2 }),
+      row({ pick_id: "void", amount: 7, odds: 300, result: "void", sheet_pick_id: 3 }),
+      row({ pick_id: "miss", amount: 6, odds: -150, result: "miss", sheet_pick_id: 4 }),
+      row({ pick_id: "open", amount: 2, odds: 100, result: "pending", sheet_pick_id: 5 }),
+    ],
+    T
+  )
+  assert.deepEqual(payoutSummary(entries), {
+    theoretical: 13.5, // 10.50 hit + 3 push + 0 void + 0 miss
+    refunded: 7,
+    pending: 1,
+  })
 })
