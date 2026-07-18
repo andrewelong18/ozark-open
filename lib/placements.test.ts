@@ -517,7 +517,7 @@ test("planWrite inserts when the bettor has no row on the pick", () => {
 test("planWrite updates by key when a live row exists", () => {
   const plan = planWrite({ id: "row-1", deleted_at: null }, 15, 120, false)
   assert.equal(plan.kind, "update")
-  if (plan.kind !== "insert") assert.equal(plan.id, "row-1")
+  assert.equal(plan.id, "row-1")
   assert.equal(plan.fields.amount, 15)
 })
 

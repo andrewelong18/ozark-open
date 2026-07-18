@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test lib/validation.test.ts lib/placements.test.ts lib/my-bets.test.ts lib/closed-bets.test.ts lib/payouts.test.ts lib/admin-view.test.ts"
+    "test": "node --experimental-strip-types --test \"lib/*.test.ts\""
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
