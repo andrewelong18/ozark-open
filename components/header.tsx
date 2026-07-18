@@ -17,16 +17,28 @@ export async function Header() {
   let displayName: string | null = null
   const extraItems: NavItem[] = []
   if (user) {
-    const { data } = await supabase
-      .from("users")
-      .select("display_name, is_admin")
-      .eq("id", user.id)
-      .single()
+    const [{ data }, { data: tournamentData }] = await Promise.all([
+      supabase
+        .from("users")
+        .select("display_name, is_admin")
+        .eq("id", user.id)
+        .single(),
+      supabase
+        .from("tournaments")
+        .select("status")
+        .order("year", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
     const profile = data as {
       display_name: string
       is_admin: boolean
     } | null
     displayName = profile?.display_name ?? user.email ?? null
+    // Results appears only once the tournament wraps — no dead link before
+    // that (the page itself also gates on 'completed').
+    if ((tournamentData as { status: string } | null)?.status === "completed")
+      extraItems.push({ label: "Results", href: "/results" })
     // Admin-only link to the View All page — non-admins never see it (and
     // the page 404s for them regardless).
     if (profile?.is_admin) extraItems.push({ label: "Admin", href: "/admin/view" })
