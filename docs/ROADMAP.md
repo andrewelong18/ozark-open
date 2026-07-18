@@ -34,13 +34,13 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | Sprint | Focus | Status | Blockers |
 |---|---|---|---|
 | [0](sprints/sprint-0.md) | Deploy & verify foundations | 🔶 | none |
-| [1](sprints/sprint-1.md) | Bet/pick schema rework & menu rebuild | 🔶 merged Jul 17, 2026 (PR #10) — awaiting prod SQL (#12) | 0 |
-| [2](sprints/sprint-2.md) | Spreadsheet ingestion (`/admin/import`) | 🔶 code complete + local round-trip Jul 17, 2026 — prod verify blocked on #12/#15 | 1 |
-| [3](sprints/sprint-3.md) | Placements schema & validation | 🔶 code complete + tested locally Jul 17, 2026 — awaiting prod migration | 1 (after 2) |
-| [4](sprints/sprint-4.md) | Placement API & place-bet UI | 🔶 code complete + tested locally Jul 17, 2026 (unit + local-Postgres RLS) — in-browser verify pending prod SQL (#12/#15/#22) | 3 |
-| [5](sprints/sprint-5.md) | My Bets & phase compliance | 🔶 code complete + tested locally Jul 17, 2026 — in-browser verify pending prod SQL (#12/#15/#22/#24) | 4 |
-| [6](sprints/sprint-6.md) | Results & closed-bet views | 🔶 code complete + tested locally Jul 18, 2026 — prod browser verify pending prod SQL (#12/#15/#22/#28) (#31); Pat walkthrough pending (#30) | 2 + 4 |
-| [7](sprints/sprint-7.md) | Payouts: theoretical & final | 🔶 code complete + tested locally Jul 18, 2026 (unit tests incl. the 2026 worked example, PG16 round trip for the view) — prod verify pending the view migration + the #12/#15/#22/#28 chain | 6 |
+| [1](sprints/sprint-1.md) | Bet/pick schema rework & menu rebuild | 🔶 merged Jul 17, 2026 (PR #10); prod SQL applied Jul 18, 2026 (#12 — 13 bets/57 picks) — `/bets` render verify pending (#31) | 0 |
+| [2](sprints/sprint-2.md) | Spreadsheet ingestion (`/admin/import`) | 🔶 code complete + local round-trip Jul 17, 2026; prod SQL applied Jul 18, 2026 (#12) — prod import verify pending (#15: only Andrew is admin so far) | 1 |
+| [3](sprints/sprint-3.md) | Placements schema & validation | ✅ validation tests pass + prod migration applied Jul 18, 2026 (#22 — RLS on, 5 policies) | 1 (after 2) |
+| [4](sprints/sprint-4.md) | Placement API & place-bet UI | 🔶 code complete + tested locally Jul 17, 2026 (unit + local-Postgres RLS) — in-browser verify pending (prod SQL #12/#22 applied Jul 18, 2026; #15 admins partial) | 3 |
+| [5](sprints/sprint-5.md) | My Bets & phase compliance | 🔶 code complete + tested locally Jul 17, 2026 — in-browser verify pending (prod SQL #12/#22 applied Jul 18, 2026; #15 partial, #24 open) | 4 |
+| [6](sprints/sprint-6.md) | Results & closed-bet views | 🔶 code complete + tested locally Jul 18, 2026 — prod SQL applied Jul 18, 2026 (#28) — browser verify (#31) + Pat walkthrough (#30) pending | 2 + 4 |
+| [7](sprints/sprint-7.md) | Payouts: theoretical & final | 🔶 code complete + tested locally Jul 18, 2026 (unit tests incl. the 2026 worked example, PG16 round trip for the view) — view migration + full chain applied Jul 18, 2026 (#34); prod verify pending (numbers vs Pat's hand-math; `tournament.status` flip) | 6 |
 | [8](sprints/sprint-8.md) | Leaderboard mirror | 🔲 | Pat's Sheets mirror |
 | [9](sprints/sprint-9.md) | Polish & group dry run | 🔲 | 0–7 (8 nice-to-have) |
 
@@ -53,12 +53,12 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | 0 — Foundations | Skeleton, deploy pipeline | ✅ **Verified in production Jul 16, 2026** | 0 | Jul 18 |
 | 1 — Auth | Magic-link login, users table | ✅ **Verified in production Jul 16, 2026** (magic-link login → dashboard) | 0 | Jul 18 |
 | 2 — Tournament setup | Tournaments, participants, dashboard | ✅ **Verified in production Jul 16, 2026** | 0 | Jul 18 |
-| 3 — Bet menu | Bets **and picks**, `/bets` page | 🔶 Reworked to ADR 0001, merged Jul 17, 2026 — awaiting prod SQL (#12) | 1 | Jul 24 |
-| 3b — Spreadsheet ingestion | `/admin/import` upload pipeline | 🔶 Code complete + local round-trip Jul 17, 2026 — prod verify blocked on #12/#15 | 2 | Jul 31 |
-| 4 — Placing bets | Placements, validation, My Bets | 🔶 **Sprints 3–5 all code complete Jul 17, 2026** (schema, validation, placement API, `/bets` UI, `/my-bets`, compliance banners, dashboard rework, admin chase SQL — unit-tested + built locally); phase-wide in-browser verify pending prod SQL #12/#15/#22/#24 | 3, 4, 5 | Aug 12 |
-| 5 — Results | Closed-bet views, per-pick results via re-upload | 🔶 Code complete + tested locally Jul 18, 2026 (everyone's placements on closed bets, derived settled badge, users read-all migration, README runbook — unit-tested + built locally); in-browser verify pending prod SQL #12/#15/#22/#28 (#31) and the Pat walkthrough (#30) | 6 | Aug 16 |
-| 6 — Theoretical payouts | Payout view, per-placement display | 🔶 Code complete + tested locally Jul 18, 2026 (`placement_payouts_view` proven on local PG16, My Bets per-pick payouts + rollup, `/admin/view` View-sheet replica) — prod SQL run + browser verify pending | 7 | Aug 21 |
-| 7 — Final payouts | Pari-mutuel split (void-adjusted pool), `/results` | 🔶 Code complete + tested locally Jul 18, 2026 (`lib/payouts.ts` split, `/results` gated on `completed`, 2026 worked example + void case unit-tested) — prod verify pending, incl. flipping `tournament.status` at tournament end | 7 | Aug 21 |
+| 3 — Bet menu | Bets **and picks**, `/bets` page | 🔶 Reworked to ADR 0001, merged Jul 17, 2026; prod SQL applied Jul 18, 2026 (#12) — `/bets` render verify pending (#31) | 1 | Jul 24 |
+| 3b — Spreadsheet ingestion | `/admin/import` upload pipeline | 🔶 Code complete + local round-trip Jul 17, 2026; prod SQL applied Jul 18, 2026 (#12) — prod import verify pending (#15: only Andrew admin so far) | 2 | Jul 31 |
+| 4 — Placing bets | Placements, validation, My Bets | 🔶 **Sprints 3–5 all code complete Jul 17, 2026** (schema, validation, placement API, `/bets` UI, `/my-bets`, compliance banners, dashboard rework, admin chase SQL — unit-tested + built locally); phase-wide in-browser verify pending (prod SQL #12/#22 applied Jul 18, 2026; #15 admins partial, #24 open) | 3, 4, 5 | Aug 12 |
+| 5 — Results | Closed-bet views, per-pick results via re-upload | 🔶 Code complete + tested locally Jul 18, 2026 (everyone's placements on closed bets, derived settled badge, users read-all migration, README runbook — unit-tested + built locally); in-browser verify pending (prod SQL #28 applied Jul 18, 2026; browser #31, Pat #30) | 6 | Aug 16 |
+| 6 — Theoretical payouts | Payout view, per-placement display | 🔶 Code complete + tested locally Jul 18, 2026 (`placement_payouts_view` proven on local PG16, My Bets per-pick payouts + rollup, `/admin/view` View-sheet replica) — prod SQL applied Jul 18, 2026 (#34); browser verify pending | 7 | Aug 21 |
+| 7 — Final payouts | Pari-mutuel split (void-adjusted pool), `/results` | 🔶 Code complete + tested locally Jul 18, 2026 (`lib/payouts.ts` split, `/results` gated on `completed`, 2026 worked example + void case unit-tested) — view + chain applied Jul 18, 2026 (#34); prod verify pending, incl. flipping `tournament.status` at tournament end | 7 | Aug 21 |
 | 8 — Leaderboard | Google Sheets mirror | 🔲 Not started | 8 | Aug 28 |
 | 9 — Polish & dry run | Mobile pass, group test | 🔲 Not started | 9 | Sep 10 |
 
