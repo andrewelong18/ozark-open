@@ -263,7 +263,10 @@ Each individual wager: one row per (user, pick) pair where money was placed.
 A read-only Postgres view that computes each placement's theoretical payout. Defined in a migration; queryable like a table.
 
 ```sql
-CREATE VIEW placement_payouts_view AS
+CREATE VIEW placement_payouts_view
+WITH (security_invoker = on) AS  -- honor the caller's RLS; a default
+                                 -- (definer) view would leak open-phase
+                                 -- placements to non-admins
 SELECT
     p.id                 AS placement_id,
     p.user_id,
@@ -335,8 +338,8 @@ Policies live inline in each table's migration file under `supabase/migrations/`
 - `20260717000000_bet_pick_rework.sql` — Sprint 1: `bets` rebuilt to the §3.5 shape, `bet_picks`, `bet_subjects` dropped, five-category re-seed, per-phase rule params renamed
 - `20260717000001_bet_placements.sql` — Sprint 3: `bet_placements` with soft delete, odds snapshot, and the open/closed visibility policies
 - `20260717000002_users_read_all.sql` — Sprint 6: authenticated read-all policy on `users` (names on closed bets)
+- `20260718000000_placement_payouts_view.sql` — Sprint 7: the §4 payout view with `security_invoker` (SQL proven on a throwaway local PG16 by `scripts/payout-view-roundtrip.ts`)
 
-**Still to come** (see `ROADMAP.md`):
-- `placement_payouts_view` (Sprint 7).
+**Still to come** (see `ROADMAP.md`): nothing scheduled — Sprint 8 (leaderboard) reads Google Sheets, not new tables.
 
 **Known inconsistency to fix in the rework migration:** `tournament_participants.entry_fee` currently has a hardcoded `CHECK (entry_fee BETWEEN 20 AND 50)`, but the entry-fee bounds are supposed to live on the `tournaments` row (`entry_fee_min` / `entry_fee_max`) per the "rules are data, not constants" convention. Fix: drop the hardcoded CHECK (keep `entry_fee > 0`) and enforce the per-tournament bounds in `lib/validation.ts` / at participant creation instead.

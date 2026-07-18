@@ -10,11 +10,15 @@ import { checkTournamentTotal } from "@/lib/validation"
 import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
 import { RulesCard } from "@/components/modules/rules-card"
 import { ComplianceBanner } from "@/components/modules/compliance-banner"
+import { OutcomeBadge } from "@/components/betting/outcome-badge"
 import {
   buildComplianceSummary,
   buildRulesModel,
+  entryPayout,
+  entryRefund,
   groupByPhase,
   normalizeMyBets,
+  payoutSummary,
   type MyBetsQueryRow,
 } from "@/lib/my-bets"
 
@@ -90,7 +94,7 @@ export default async function MyBetsPage() {
   const { data: placementData } = await supabase
     .from("bet_placements")
     .select(
-      "pick_id, amount, odds_at_placement, bet_picks ( label, sheet_pick_id, player_user_id, bets ( id, title, phase, round, status, sheet_bet_id, tournament_id ) )"
+      "pick_id, amount, odds_at_placement, bet_picks ( label, sheet_pick_id, player_user_id, result, bets ( id, title, phase, round, status, sheet_bet_id, tournament_id ) )"
     )
     .eq("user_id", user!.id)
     .is("deleted_at", null)
@@ -103,6 +107,18 @@ export default async function MyBetsPage() {
   const totals = checkTournamentTotal(entries, entryFee)
   const myRules = buildRulesModel(participant, rules)
   const compliance = buildComplianceSummary(entries, entryFee, rules)
+
+  // Theoretical payout rollup — shown once any pick has a result. Pushes
+  // count inside the total; voids contribute 0 and surface as refunded.
+  const payouts = payoutSummary(entries)
+  const anyResolved = entries.some((e) => e.result !== "pending")
+  const payoutCaption = [
+    "Pushes count",
+    ...(payouts.refunded > 0 ? [`$${payouts.refunded} refunded on voids`] : []),
+    ...(payouts.pending > 0
+      ? [`${payouts.pending} pick${payouts.pending === 1 ? "" : "s"} still pending`]
+      : []),
+  ].join(" · ")
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
@@ -126,6 +142,16 @@ export default async function MyBetsPage() {
           money
           caption="Across both phases"
         />
+        {anyResolved && (
+          <StatCard
+            label="Theoretical Payout"
+            value={payouts.theoretical}
+            money
+            cents
+            caption={payoutCaption}
+            className="col-span-2"
+          />
+        )}
       </div>
 
       {compliance.map((item) => (
@@ -163,26 +189,67 @@ export default async function MyBetsPage() {
               </span>
             </div>
             <Card className="gap-0 p-0">
-              {group.entries.map((entry) => (
-                <div
-                  key={entry.pick_id}
-                  className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 first:border-t-0"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[15px] leading-snug font-semibold text-text-strong">
-                      {entry.pick_label}
+              {group.entries.map((entry) => {
+                const theoretical = entryPayout(entry)
+                const refunded = entryRefund(entry)
+                return (
+                  <div
+                    key={entry.pick_id}
+                    className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 first:border-t-0"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[15px] leading-snug font-semibold text-text-strong">
+                        {entry.pick_label}
+                      </div>
+                      <div className="mt-0.5 text-xs text-text-muted">
+                        {ROUND_LABEL[entry.round] ?? entry.round} ·{" "}
+                        {entry.bet_title}
+                      </div>
                     </div>
-                    <div className="mt-0.5 text-xs text-text-muted">
-                      {ROUND_LABEL[entry.round] ?? entry.round} ·{" "}
-                      {entry.bet_title}
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <div className="flex items-center gap-2.5">
+                        <OddsChip odds={entry.odds_at_placement} size="sm" />
+                        <MoneyDisplay
+                          value={entry.amount}
+                          size="sm"
+                          weight="bold"
+                        />
+                      </div>
+                      {/* Result line — only once the pick's result is
+                          uploaded (ADR 0001 §6). Voids show the stake as
+                          refunded, never as a payout. */}
+                      {entry.result !== "pending" && (
+                        <div className="flex items-center gap-2">
+                          <OutcomeBadge outcome={entry.result} size="sm" />
+                          {entry.result === "void" ? (
+                            <span className="text-xs text-text-muted">
+                              <MoneyDisplay
+                                value={refunded}
+                                size="xs"
+                                weight="semibold"
+                                className="text-inherit"
+                              />{" "}
+                              refunded
+                            </span>
+                          ) : (
+                            <MoneyDisplay
+                              value={theoretical ?? 0}
+                              cents
+                              size="sm"
+                              weight="bold"
+                              className={
+                                entry.result === "hit"
+                                  ? "text-money-up"
+                                  : "text-text-body"
+                              }
+                            />
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2.5">
-                    <OddsChip odds={entry.odds_at_placement} size="sm" />
-                    <MoneyDisplay value={entry.amount} size="sm" weight="bold" />
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </Card>
           </section>
         ))
