@@ -46,8 +46,10 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | [10](sprints/sprint-10.md) | ★ Admin roster & registration status | 🔲 | none hard (bonus) |
 | [11](sprints/sprint-11.md) | ★ Bet-state snapshots & rollback | 🔲 | 3 in prod (bonus) |
 | [12](sprints/sprint-12.md) | ★ Animation & delight pass + Jake celebration | 🔲 | Jake photo + sound from Andrew (bonus) |
+| [13](sprints/sprint-13.md) | ★ Funny ad slots (dashboard + landing) | 🔲 | ≥1 finished creative from Andrew (bonus) |
+| [14](sprints/sprint-14.md) | ★ Announcement banner (admin-toggled, dismissible) | 🔲 | none (bonus) |
 
-> **★ Sprints 10–12 are the bonus wish list** (Andrew, Jul 18, 2026): enhancements, never MVP blockers. Work them only when no MVP sprint (0–9) is waiting on you; they must land before the Aug 28 feature freeze or be cut without ceremony — the tournament runs fine without them.
+> **★ Sprints 10–14 are the bonus wish list** (Andrew, Jul 18, 2026): enhancements, never MVP blockers. Work them only when no MVP sprint (0–9) is waiting on you; they must land before the Aug 28 feature freeze or be cut without ceremony — the tournament runs fine without them.
 
 ---
 
@@ -66,7 +68,7 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | 7 — Final payouts | Pari-mutuel split (void-adjusted pool), `/results` | 🔶 Code complete + tested locally Jul 18, 2026 (`lib/payouts.ts` split, `/results` gated on `completed`, 2026 worked example + void case unit-tested) — view + chain applied Jul 18, 2026 (#34); prod verify pending, incl. flipping `tournament.status` at tournament end | 7 | Aug 21 |
 | 8 — Leaderboard | Google Sheets mirror | 🔲 Not started | 8 | Aug 28 |
 | 9 — Polish & dry run | Mobile pass, group test | 🔲 Not started | 9 | Sep 10 |
-| ★ Bonus wish list | Admin roster · bet-state snapshots · animation & Jake celebration | 🔲 Not started (never blocks MVP) | 10–12 | as time allows, before Aug 28 |
+| ★ Bonus wish list | Admin roster · bet-state snapshots · animation & Jake celebration · funny ads · announcement banner | 🔲 Not started (never blocks MVP) | 10–14 | as time allows, before Aug 28 |
 
 ---
 
