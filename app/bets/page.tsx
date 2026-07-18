@@ -1,10 +1,19 @@
+import { Fragment } from "react"
 import { createClient } from "@/lib/supabase/server"
 import { Card } from "@/components/ui/card"
 import { StatusBadge, type BetStatus } from "@/components/betting/status-badge"
-import { PickRow, type PickResult } from "@/components/betting/pick-row"
+import { PickRow } from "@/components/betting/pick-row"
+import { MoneyDisplay } from "@/components/betting/money-display"
 import { BetPlacementCard } from "@/components/betting/bet-placement-card"
 import { EmptyState } from "@/components/modules/empty-state"
 import { formatProbability } from "@/lib/format"
+import {
+  groupPlacementsByPick,
+  normalizeClosedPlacements,
+  toResult,
+  type ClosedPlacementQueryRow,
+  type PickPlacements,
+} from "@/lib/closed-bets"
 
 type BetCategory = { name: string; slug: string; allows_multiple_picks: boolean }
 
@@ -96,12 +105,37 @@ function menuStatus(bets: Bet[]): BetStatus {
   return bets.some((b) => b.status === "open") ? "open" : "closed"
 }
 
-const RESULTS: PickResult[] = ["pending", "hit", "miss", "push", "void"]
-
-function toResult(result: string): PickResult {
-  return (RESULTS as string[]).includes(result)
-    ? (result as PickResult)
-    : "pending"
+// Everyone's wagers on one closed pick, biggest stake first (PRD §12
+// Q11/Q12 — amounts and identities go public the moment the bet closes).
+function PickPlacementList({ group }: { group: PickPlacements }) {
+  return (
+    <div className="border-b border-border bg-surface-sunken px-4 py-2 last:border-b-0">
+      {group.placements.map((p) => (
+        <div
+          key={p.user_id}
+          className="flex items-center justify-between gap-3 py-1"
+        >
+          <span className="min-w-0 flex-1 truncate text-sm text-text-strong">
+            {p.display_name}
+          </span>
+          <MoneyDisplay value={p.amount} size="sm" weight="semibold" />
+        </div>
+      ))}
+      {group.placements.length > 1 && (
+        <div className="mt-1 flex items-center justify-between gap-3 border-t border-border pt-1.5">
+          <span className="text-[11px] font-bold tracking-wider text-text-muted uppercase">
+            {group.placements.length} bettors
+          </span>
+          <MoneyDisplay
+            value={group.total}
+            size="sm"
+            weight="bold"
+            className="text-text-muted"
+          />
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default async function BetsPage() {
@@ -174,6 +208,26 @@ export default async function BetsPage() {
   }))
 
   if (bets.length === 0) return emptyState
+
+  // Everyone's placements on closed bets — RLS opens these rows to all
+  // authenticated users the moment a bet closes. One query for every
+  // closed pick on the page; soft-deleted wagers stay hidden.
+  const closedPickIds = bets
+    .filter((bet) => bet.status === "closed")
+    .flatMap((bet) => bet.bet_picks.map((pick) => pick.id))
+  let placementsByPick: Record<string, PickPlacements> = {}
+  if (closedPickIds.length > 0) {
+    const { data: closedRows } = await supabase
+      .from("bet_placements")
+      .select("pick_id, user_id, amount, users ( display_name )")
+      .in("pick_id", closedPickIds)
+      .is("deleted_at", null)
+    placementsByPick = groupPlacementsByPick(
+      normalizeClosedPlacements(
+        (closedRows ?? []) as ClosedPlacementQueryRow[]
+      )
+    )
+  }
 
   const phases = groupBets(bets)
 
@@ -255,18 +309,28 @@ export default async function BetsPage() {
                           </div>
                           {bet.bet_picks
                             .sort((a, b) => a.sheet_pick_id - b.sheet_pick_id)
-                            .map((pick) => (
-                              <PickRow
-                                key={pick.id}
-                                label={pick.label}
-                                americanOdds={pick.american_odds}
-                                fractionalOdds={pick.fractional_odds}
-                                probability={formatProbability(
-                                  Number(pick.probability)
-                                )}
-                                result={toResult(pick.result)}
-                              />
-                            ))}
+                            .map((pick) => {
+                              const group =
+                                bet.status === "closed"
+                                  ? placementsByPick[pick.id]
+                                  : undefined
+                              return (
+                                <Fragment key={pick.id}>
+                                  <PickRow
+                                    label={pick.label}
+                                    americanOdds={pick.american_odds}
+                                    fractionalOdds={pick.fractional_odds}
+                                    probability={formatProbability(
+                                      Number(pick.probability)
+                                    )}
+                                    result={toResult(pick.result)}
+                                  />
+                                  {group && (
+                                    <PickPlacementList group={group} />
+                                  )}
+                                </Fragment>
+                              )
+                            })}
                         </Card>
                       )
                     )}
