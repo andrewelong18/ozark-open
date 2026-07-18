@@ -5,6 +5,7 @@ import { StatusBadge, type BetStatus } from "@/components/betting/status-badge"
 import { PickRow } from "@/components/betting/pick-row"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import { BetPlacementCard } from "@/components/betting/bet-placement-card"
+import { BetSlipSummary } from "@/components/betting/bet-slip-summary"
 import { EmptyState } from "@/components/modules/empty-state"
 import { formatProbability } from "@/lib/format"
 import {
@@ -15,6 +16,14 @@ import {
   type ClosedPlacementQueryRow,
   type PickPlacements,
 } from "@/lib/closed-bets"
+import { checkTournamentTotal } from "@/lib/validation"
+import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
+import {
+  buildComplianceSummary,
+  normalizeMyBets,
+  type ComplianceItem,
+  type MyBetsQueryRow,
+} from "@/lib/my-bets"
 
 type BetCategory = { name: string; slug: string; allows_multiple_picks: boolean }
 
@@ -144,7 +153,7 @@ export default async function BetsPage() {
 
   const { data: tournament } = await supabase
     .from("tournaments")
-    .select("id")
+    .select(`id, ${TOURNAMENT_RULE_COLUMNS}`)
     .in("status", ["upcoming", "active"])
     .order("year", { ascending: false })
     .limit(1)
@@ -171,33 +180,61 @@ export default async function BetsPage() {
     .neq("status", "hidden")
 
   // Wagering context: only participants get the inline stake inputs, and
-  // their live placements pre-fill them. Everything below is UX — the
-  // placements API re-validates every write server-side.
+  // their live placements pre-fill them (amount + the locked-odds receipt).
+  // Everything below is UX — the placements API re-validates every write
+  // server-side.
   const {
     data: { user },
   } = await supabase.auth.getUser()
   let isParticipant = false
   let placements: Record<string, number> = {}
+  let lockedOdds: Record<string, number> = {}
+  let slip: {
+    entryFee: number
+    totalWagered: number
+    remaining: number
+    pickCount: number
+    items: ComplianceItem[]
+  } | null = null
   if (user) {
     const { data: participant } = await supabase
       .from("tournament_participants")
-      .select("id")
+      .select("entry_fee, is_player")
       .eq("user_id", user.id)
       .eq("tournament_id", tournamentId)
       .maybeSingle()
     isParticipant = participant !== null
-  }
-  if (user && isParticipant) {
-    const { data: placementRows } = await supabase
-      .from("bet_placements")
-      .select("pick_id, amount")
-      .eq("user_id", user.id)
-      .is("deleted_at", null)
-    placements = Object.fromEntries(
-      ((placementRows ?? []) as { pick_id: string; amount: number }[]).map(
-        (p) => [p.pick_id, Number(p.amount)]
+    if (participant) {
+      const entryFee = Number((participant as { entry_fee: number }).entry_fee)
+      const rules = toTournamentRules(
+        tournament as unknown as Record<string, unknown>
       )
-    )
+      // Same query shape as /my-bets, so normalizeMyBets → the §8.1 checks run
+      // verbatim and the summary numbers can't drift from that page.
+      const { data: placementRows } = await supabase
+        .from("bet_placements")
+        .select(
+          "pick_id, amount, odds_at_placement, bet_picks ( label, sheet_pick_id, player_user_id, result, bets ( id, title, phase, round, status, sheet_bet_id, tournament_id ) )"
+        )
+        .eq("user_id", user.id)
+        .is("deleted_at", null)
+      const entries = normalizeMyBets(
+        (placementRows ?? []) as unknown as MyBetsQueryRow[],
+        tournamentId
+      )
+      placements = Object.fromEntries(entries.map((e) => [e.pick_id, e.amount]))
+      lockedOdds = Object.fromEntries(
+        entries.map((e) => [e.pick_id, e.odds_at_placement])
+      )
+      const totals = checkTournamentTotal(entries, entryFee)
+      slip = {
+        entryFee,
+        totalWagered: totals.total,
+        remaining: totals.remaining,
+        pickCount: entries.length,
+        items: buildComplianceSummary(entries, entryFee, rules),
+      }
+    }
   }
 
   const bets: Bet[] = (betsData ?? []).map((bet) => ({
@@ -287,6 +324,7 @@ export default async function BetsPage() {
                               ),
                             }))}
                           placements={placements}
+                          lockedOdds={lockedOdds}
                         />
                       ) : (
                         <Card key={bet.id} className="gap-0 p-0">
@@ -350,6 +388,16 @@ export default async function BetsPage() {
           </section>
         ))}
       </div>
+
+      {slip && (
+        <BetSlipSummary
+          entryFee={slip.entryFee}
+          totalWagered={slip.totalWagered}
+          remaining={slip.remaining}
+          pickCount={slip.pickCount}
+          items={slip.items}
+        />
+      )}
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Card } from "@/components/ui/card"
 import { OddsChip } from "./odds-chip"
+import { MoneyDisplay } from "./money-display"
 import { StakeInput } from "./stake-input"
 
 export type PlacementPick = {
@@ -25,12 +26,21 @@ export type BetPlacementCardProps = {
   picks: PlacementPick[]
   /** The viewer's live placement amounts by pick id. */
   placements: Record<string, number>
+  /** The odds_at_placement snapshot per placed pick — powers the locked-odds
+   * receipt (Sprint 17 §1.5). Kept separate from live odds so the receipt
+   * shows what was locked, never the pick's current menu odds. */
+  lockedOdds?: Record<string, number>
 }
+
+/** The confirmed placement behind a row's receipt — the locked odds and stake
+ * the API stored, shown back as a trust artifact. */
+type Receipt = { odds: number; amount: number }
 
 type RowState = {
   value: string
   placed: boolean
   error: string | null
+  receipt: Receipt | null
 }
 
 /**
@@ -46,6 +56,7 @@ export function BetPlacementCard({
   allowsMultiplePicks,
   picks,
   placements,
+  lockedOdds = {},
 }: BetPlacementCardProps) {
   const router = useRouter()
 
@@ -53,12 +64,15 @@ export function BetPlacementCard({
     Object.fromEntries(
       picks.map((pick) => {
         const amount = placements[pick.id]
+        const odds = lockedOdds[pick.id]
         return [
           pick.id,
           {
             value: amount != null ? String(amount) : "",
             placed: amount != null,
             error: null,
+            receipt:
+              amount != null && odds != null ? { odds, amount } : null,
           },
         ]
       })
@@ -88,7 +102,7 @@ export function BetPlacementCard({
       const data = (await res.json().catch(() => null)) as {
         errors?: string[]
         error?: string
-        placement?: { amount: number }
+        placement?: { amount: number; odds_at_placement: number }
       } | null
       if (!res.ok) {
         // Rule violations arrive as lib/validation.ts strings — shown as-is.
@@ -99,7 +113,17 @@ export function BetPlacementCard({
         patchRow(pick.id, { placed: false, error: message })
         return
       }
-      patchRow(pick.id, { placed: true, error: null })
+      // Receipt from the write's own return row: the snapshotted odds and
+      // stake, so the confirmation shows exactly what was locked (§1.5).
+      const placement = data?.placement
+      patchRow(pick.id, {
+        placed: true,
+        error: null,
+        receipt: {
+          odds: placement ? Number(placement.odds_at_placement) : pick.american_odds,
+          amount: placement ? Number(placement.amount) : amount,
+        },
+      })
       setLive((m) => ({ ...m, [pick.id]: amount }))
       router.refresh()
     } catch {
@@ -130,7 +154,7 @@ export function BetPlacementCard({
         patchRow(pick.id, { error: message })
         return
       }
-      patchRow(pick.id, { value: "", placed: false, error: null })
+      patchRow(pick.id, { value: "", placed: false, error: null, receipt: null })
       setLive((m) => {
         const next = { ...m }
         delete next[pick.id]
@@ -191,10 +215,11 @@ export function BetPlacementCard({
           <div
             key={pick.id}
             className={cn(
-              "flex items-start justify-between gap-3 border-b border-border px-4 py-3 last:rounded-b-[inherit] last:border-b-0",
+              "border-b border-border px-4 py-3 last:rounded-b-[inherit] last:border-b-0",
               hasPlacement ? "bg-indigo-50" : "bg-surface-card"
             )}
           >
+            <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 flex-1 flex-col gap-1.5">
               <div className="flex items-start gap-2.5">
                 {!allowsMultiplePicks && (
@@ -266,6 +291,23 @@ export function BetPlacementCard({
                     ✕ Remove bet
                   </button>
                 )}
+              </div>
+            )}
+            </div>
+
+            {/* Locked-odds receipt (§1.5): the snapshotted odds + stake behind
+                this placement — the confirmation that odds lock at write. */}
+            {hasPlacement && state.receipt && (
+              <div
+                className={cn(
+                  "mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs",
+                  !allowsMultiplePicks && "pl-[30px]"
+                )}
+              >
+                <span className="font-semibold text-win-strong">✓ Locked in</span>
+                <OddsChip odds={state.receipt.odds} size="sm" />
+                <MoneyDisplay value={state.receipt.amount} size="xs" weight="bold" />
+                <span className="text-text-muted">· odds locked at placement</span>
               </div>
             )}
           </div>
