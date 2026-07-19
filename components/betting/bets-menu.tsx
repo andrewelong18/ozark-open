@@ -264,7 +264,7 @@ export function BetsMenu({
               {showCategoryChips && (
                 <div className="flex flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   <FilterChip
-                    label="All"
+                    label="All Categories"
                     active={categories.length === 0}
                     onClick={() => setCategories([])}
                   />
