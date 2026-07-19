@@ -65,7 +65,7 @@ requires a new bet type.
 - **DK/FanDuel:** every user has a self-serve account — display name, preferences, verification, history.
 - **Ozark:** today `display_name` and registration are Studio-only; a participant can't see or set their own identity in-app. A small `/account` page: set your own display name, see your entry fee, registration/ready-to-bet status, and a "how the pool works" link.
 - **Impact:** Med · **Effort:** S–M · **Scope-fit:** ⚠️ — directly resolves the **display-names** open item (`OUTSTANDING_DECISIONS.md` §1: user-set-then-immutable vs. admin-set-in-Studio). Note the constraint: whatever a user sets **must still match the sheet's pick labels** for import name-matching (ADR 0001 §11), so an admin override stays necessary. Build after that call is made.
-- **Slot:** new Sprint 15 (stub in §5).
+- **Slot:** ✅ **built as [Sprint 15](sprints/sprint-15.md)** (Jul 19, 2026). The blocker was resolved by adding a *separate cosmetic* **nickname** (+ profile picture) rather than making `display_name` user-editable — so `display_name` stays admin-controlled and import name-matching is untouched. The page also carries the member's status (admin/registration/ready-to-bet), the "how the pool works" link, and — for admins — the relocated admin entry point.
 
 ### 1.2 First-run onboarding / "How this pool works"
 - **DK/FanDuel:** a guided first-bet flow that teaches the mechanics before you risk anything.
@@ -153,7 +153,7 @@ Numbers are suggestions; renumber to whatever's next.
 
 ### Sprint 15 — Self-Serve Profile / Account Page (Bonus)
 
-> Bonus wish-list sprint. Enhancement, never an MVP blocker.
+> ✅ **Cut into [`docs/sprints/sprint-15.md`](sprints/sprint-15.md) and built** (Jul 19, 2026): `/profile` with a self-set **nickname** + **profile picture**, status (admin/registration/ready-to-bet), and the relocated admin entry point. Diverged from the stub in one deliberate way — instead of making `display_name` editable (the blocker), it adds a *separate cosmetic* nickname, leaving `display_name` admin-controlled for import name-matching. The stub below is kept for provenance.
 
 **Goal:** a `/account` page where a participant sets their own display name and sees their entry fee, registration status, and how the pool works — replacing Studio-only identity management.
 **Target:** as time allows before Aug 28 · **Blockers:** **the display-name decision** (`OUTSTANDING_DECISIONS.md` §1) must be made first — user-set-then-immutable vs. admin-set. Also needs Sprint 4 (placements) shipped.

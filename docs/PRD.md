@@ -290,6 +290,7 @@ Pat & Jake's new architecture memo, plus implementation decisions confirmed by A
 | A8 | **§7 money rules carry over** renamed to phases, counted **per wagered pick** (3 picks on one bet = 3 toward the 5–10 count). |
 | A9 | **Match/Group Match:** one pick per participant; betting on your opponent **hard-blocked**; self-picks allowed but flagged — in every category. |
 | A10 | **Pick→player mapping by display-name matching at import** (stroke suffixes stripped); unmatched picks reported for admin follow-up. Replaces `bet_subjects`. |
+| A11 | **Self-serve identity is a cosmetic nickname, not an editable `display_name`** (Andrew, Jul 19, 2026 — Sprint 15). Members set their own `nickname` + `avatar_url` on `/profile`; `display_name` stays admin-set (Q13) because import name-matching (A10) depends on it. Resolves the `OUTSTANDING_DECISIONS.md` §1 display-name item without touching the matching field. |
 
 ### Original fifteen questions (Jake, July 9, 2026)
 
@@ -309,7 +310,7 @@ All fifteen questions from Draft v2 were answered by Jake on July 9, 2026 (Q1/Q2
 | Q10 | **"The field" picks exist**; displayed like any other pick, no player link — so backing the field is never flagged as a self-pick, even if you're in the field *(Pat, Jul 11)*. |
 | Q11 | Aggregate money per bet is **hidden while the bet is open**; visible after close. |
 | Q12 | After close, **everyone's individual amounts are visible** — not just who bet on what. |
-| Q13 | Display names are **admin-set in Studio** for v1. |
+| Q13 | Display names are **admin-set in Studio** for v1 — they feed the importer's name-matching (ADR 0001 §11), so they stay admin-controlled. **Refined by A11.** |
 | Q14 | **Non-playing bettors are supported** (exempt from the self-bet rule); expect 0–2. |
 | Q15 | Leaderboard mirrors **one Google Sheets tab — player, thru, score, position — updated after each day.** |
 

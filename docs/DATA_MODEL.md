@@ -113,13 +113,17 @@ One row per person who ever logs in. Persists across tournaments forever.
 |---|---|---|
 | `id` | `uuid` PK | Matches `auth.users.id` from Supabase Auth |
 | `email` | `text` UNIQUE NOT NULL | Used for magic-link login |
-| `display_name` | `text` NOT NULL | E.g. "Dan Mercer" — what shows on bets and leaderboards |
-| `is_admin` | `boolean` NOT NULL DEFAULT `false` | Admins are Pat, Jake, Steve, Andrew |
+| `display_name` | `text` NOT NULL | E.g. "Dan Mercer" — what shows on bets and leaderboards. **Admin-set only** (Studio / import name-matching, ADR 0001 §11); never user-editable. |
+| `nickname` | `text` NULL | Sprint 15 — a user-set *cosmetic* nickname shown next to `display_name` everywhere (a touch smaller, never a muted subtext). Null = none. Does **not** affect import name-matching. |
+| `avatar_url` | `text` NULL | Sprint 15 — public URL of the user's uploaded avatar in the `avatars` storage bucket (`<uid>/avatar`, cache-busted). Null → a branded initials placeholder renders. |
+| `is_admin` | `boolean` NOT NULL DEFAULT `false` | Admins are Pat, Jake, Steve, Andrew. Not user-editable (guard trigger). |
 | `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | |
 
 **Why no `password` column:** there are no passwords. Authentication is magic-link only via Supabase Auth.
 
 **Why no `venmo_handle` column:** the app does not handle payment. Pat keeps Venmo info in his phone, as today.
+
+**Self-serve edits (Sprint 15).** An own-row `UPDATE` RLS policy (`auth.uid() = id`) lets a member update their own row, but a `BEFORE UPDATE` guard trigger (`guard_users_self_update`) pins `id`/`email`/`display_name`/`is_admin`/`created_at` for any logged-in non-admin — so `/profile` can change only `nickname` + `avatar_url`. Admins (import name-matching runs under an admin session) and Studio/service writes (`auth.uid()` is null) are unaffected. Avatars live in a public `avatars` storage bucket where a user may write only under their own `<uid>/` prefix (`20260719000000_user_profiles.sql`, `20260719000001_avatars_bucket.sql`).
 
 ---
 
