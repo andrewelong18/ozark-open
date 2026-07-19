@@ -1,20 +1,17 @@
-import { Fragment } from "react"
 import { createClient } from "@/lib/supabase/server"
-import { Card } from "@/components/ui/card"
-import { Avatar } from "@/components/avatar"
-import { UserName } from "@/components/user-name"
 import { StatusBadge, type BetStatus } from "@/components/betting/status-badge"
-import { PickRow } from "@/components/betting/pick-row"
-import { MoneyDisplay } from "@/components/betting/money-display"
-import { BetPlacementCard } from "@/components/betting/bet-placement-card"
 import { BetSlipSummary } from "@/components/betting/bet-slip-summary"
 import { EmptyState } from "@/components/modules/empty-state"
-import { formatProbability } from "@/lib/format"
+import {
+  BetsMenu,
+  type Bet,
+  type BetCategory,
+  type Pick,
+  type PhaseGroup,
+} from "@/components/betting/bets-menu"
 import {
   groupPlacementsByPick,
-  isBetSettled,
   normalizeClosedPlacements,
-  toResult,
   type ClosedPlacementQueryRow,
   type PickPlacements,
 } from "@/lib/closed-bets"
@@ -27,37 +24,7 @@ import {
   type MyBetsQueryRow,
 } from "@/lib/my-bets"
 
-type BetCategory = { name: string; slug: string; allows_multiple_picks: boolean }
-
-type Pick = {
-  id: string
-  sheet_pick_id: number
-  label: string
-  american_odds: number
-  fractional_odds: string
-  probability: number
-  result: string
-}
-
-type Bet = {
-  id: string
-  sheet_bet_id: number
-  title: string
-  phase: number
-  round: string
-  status: string
-  total_probability: number | null
-  bet_categories: BetCategory | null
-  bet_picks: Pick[]
-}
-
 const ROUND_ORDER = ["tournament", "round_1", "round_2", "round_3"] as const
-const ROUND_LABEL: Record<string, string> = {
-  tournament: "Tournament",
-  round_1: "Round 1",
-  round_2: "Round 2",
-  round_3: "Round 3",
-}
 const CATEGORY_ORDER = [
   "Top Finisher",
   "Top X Finisher",
@@ -65,10 +32,6 @@ const CATEGORY_ORDER = [
   "Group Match",
   "Prop Bet",
 ]
-
-type CategoryGroup = { name: string; bets: Bet[] }
-type RoundGroup = { round: string; categories: CategoryGroup[] }
-type PhaseGroup = { phase: number; rounds: RoundGroup[] }
 
 // The sheet arrives unsorted; the menu orders phase → round → category
 // (ADR 0001 §7), bets and picks by their stable sheet IDs.
@@ -115,44 +78,6 @@ function groupBets(bets: Bet[]): PhaseGroup[] {
 // (Hidden bets never reach the page; "resolved" lives per pick now.)
 function menuStatus(bets: Bet[]): BetStatus {
   return bets.some((b) => b.status === "open") ? "open" : "closed"
-}
-
-// Everyone's wagers on one closed pick, biggest stake first (PRD §12
-// Q11/Q12 — amounts and identities go public the moment the bet closes).
-function PickPlacementList({ group }: { group: PickPlacements }) {
-  return (
-    <div className="border-b border-border bg-surface-sunken px-4 py-2 last:border-b-0">
-      {group.placements.map((p) => (
-        <div
-          key={p.user_id}
-          className="flex items-center justify-between gap-3 py-1"
-        >
-          <span className="flex min-w-0 flex-1 items-center gap-2">
-            <Avatar src={p.avatar_url} name={p.display_name} size="sm" />
-            <UserName
-              displayName={p.display_name}
-              nickname={p.nickname}
-              className="min-w-0 truncate text-sm text-text-strong"
-            />
-          </span>
-          <MoneyDisplay value={p.amount} size="sm" weight="semibold" />
-        </div>
-      ))}
-      {group.placements.length > 1 && (
-        <div className="mt-1 flex items-center justify-between gap-3 border-t border-border pt-1.5">
-          <span className="text-[11px] font-bold tracking-wider text-text-muted uppercase">
-            {group.placements.length} bettors
-          </span>
-          <MoneyDisplay
-            value={group.total}
-            size="sm"
-            weight="bold"
-            className="text-text-muted"
-          />
-        </div>
-      )}
-    </div>
-  )
 }
 
 export default async function BetsPage() {
@@ -290,110 +215,14 @@ export default async function BetsPage() {
         </p>
       )}
 
-      <div className="mt-3 flex flex-col gap-8">
-        {phases.map(({ phase, rounds }) => (
-          <section key={phase} className="flex flex-col gap-5">
-            <h2 className="font-heading text-2xl text-indigo-700">
-              Phase {phase}
-            </h2>
-            {rounds.map(({ round, categories }) => (
-              <div key={round} className="flex flex-col gap-4">
-                <h3 className="font-heading text-lg text-text-strong">
-                  {ROUND_LABEL[round] ?? round}
-                </h3>
-                {categories.map(({ name, bets }) => (
-                  <div key={name} className="flex flex-col gap-3">
-                    <div className="text-[11px] font-bold tracking-wider text-text-muted uppercase">
-                      {name}
-                    </div>
-                    {bets.map((bet) =>
-                      bet.status === "open" && isParticipant ? (
-                        <BetPlacementCard
-                          key={bet.id}
-                          title={bet.title}
-                          totalProbability={
-                            bet.total_probability != null
-                              ? `Total probability ${formatProbability(Number(bet.total_probability))}`
-                              : null
-                          }
-                          allowsMultiplePicks={
-                            bet.bet_categories?.allows_multiple_picks ?? true
-                          }
-                          picks={bet.bet_picks
-                            .sort((a, b) => a.sheet_pick_id - b.sheet_pick_id)
-                            .map((pick) => ({
-                              id: pick.id,
-                              label: pick.label,
-                              american_odds: pick.american_odds,
-                              fractional_odds: pick.fractional_odds,
-                              probability: formatProbability(
-                                Number(pick.probability)
-                              ),
-                            }))}
-                          placements={placements}
-                          lockedOdds={lockedOdds}
-                        />
-                      ) : (
-                        <Card key={bet.id} className="gap-0 p-0">
-                          <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="text-base leading-snug font-semibold text-pretty text-text-strong">
-                                {bet.title}
-                              </div>
-                              {bet.total_probability != null && (
-                                <div className="tabular mt-0.5 text-[11px] text-text-muted">
-                                  Total probability{" "}
-                                  {formatProbability(
-                                    Number(bet.total_probability)
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                            {bet.status !== "open" && (
-                              <StatusBadge
-                                status={
-                                  // Settled is derived at render — every
-                                  // pick resolved — never stored.
-                                  isBetSettled(bet.bet_picks)
-                                    ? "resolved"
-                                    : "closed"
-                                }
-                              />
-                            )}
-                          </div>
-                          {bet.bet_picks
-                            .sort((a, b) => a.sheet_pick_id - b.sheet_pick_id)
-                            .map((pick) => {
-                              const group =
-                                bet.status === "closed"
-                                  ? placementsByPick[pick.id]
-                                  : undefined
-                              return (
-                                <Fragment key={pick.id}>
-                                  <PickRow
-                                    label={pick.label}
-                                    americanOdds={pick.american_odds}
-                                    fractionalOdds={pick.fractional_odds}
-                                    probability={formatProbability(
-                                      Number(pick.probability)
-                                    )}
-                                    result={toResult(pick.result)}
-                                  />
-                                  {group && (
-                                    <PickPlacementList group={group} />
-                                  )}
-                                </Fragment>
-                              )
-                            })}
-                        </Card>
-                      )
-                    )}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </section>
-        ))}
+      <div className="mt-3">
+        <BetsMenu
+          phases={phases}
+          isParticipant={isParticipant}
+          placements={placements}
+          lockedOdds={lockedOdds}
+          placementsByPick={placementsByPick}
+        />
       </div>
 
       {slip && (
