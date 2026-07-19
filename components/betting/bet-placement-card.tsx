@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { OddsChip } from "./odds-chip"
 import { MoneyDisplay } from "./money-display"
@@ -41,6 +42,10 @@ type RowState = {
   placed: boolean
   error: string | null
   receipt: Receipt | null
+  /** A two-step guard on the writes: placing and removing both stage a confirm
+   * step first so a stray tap can't lock in or wipe a bet. null = no pending
+   * action. */
+  confirming: "place" | "remove" | null
 }
 
 /**
@@ -73,6 +78,7 @@ export function BetPlacementCard({
             error: null,
             receipt:
               amount != null && odds != null ? { odds, amount } : null,
+            confirming: null,
           },
         ]
       })
@@ -87,12 +93,20 @@ export function BetPlacementCard({
   const patchRow = (pickId: string, patch: Partial<RowState>) =>
     setRows((r) => ({ ...r, [pickId]: { ...r[pickId], ...patch } }))
 
+  // Step 1 of placing: validate the amount is real, then stage the confirm
+  // strip instead of writing. The actual POST waits for place() below.
+  const requestPlace = (pick: PlacementPick) => {
+    const state = rows[pick.id]
+    if (!state.value || Number(state.value) <= 0) return
+    patchRow(pick.id, { error: null, confirming: "place" })
+  }
+
   const place = async (pick: PlacementPick) => {
     const state = rows[pick.id]
     const amount = Number(state.value)
     if (!state.value || amount <= 0) return
     setBusy(pick.id)
-    patchRow(pick.id, { error: null })
+    patchRow(pick.id, { error: null, confirming: null })
     try {
       const res = await fetch("/api/placements", {
         method: "POST",
@@ -133,9 +147,15 @@ export function BetPlacementCard({
     }
   }
 
+  // Step 1 of removing: staging the confirm strip. Removal is destructive
+  // (soft-delete of the wager), so it never fires on a single tap.
+  const requestRemove = (pick: PlacementPick) => {
+    patchRow(pick.id, { error: null, confirming: "remove" })
+  }
+
   const remove = async (pick: PlacementPick) => {
     setBusy(pick.id)
-    patchRow(pick.id, { error: null })
+    patchRow(pick.id, { error: null, confirming: null })
     try {
       const res = await fetch("/api/placements", {
         method: "DELETE",
@@ -277,14 +297,19 @@ export function BetPlacementCard({
                   error={state.error}
                   disabled={busy === pick.id}
                   onChange={(digits) =>
-                    patchRow(pick.id, { value: digits, placed: false, error: null })
+                    patchRow(pick.id, {
+                      value: digits,
+                      placed: false,
+                      error: null,
+                      confirming: null,
+                    })
                   }
-                  onPlace={() => place(pick)}
+                  onPlace={() => requestPlace(pick)}
                 />
-                {hasPlacement && (
+                {hasPlacement && state.confirming !== "remove" && (
                   <button
                     type="button"
-                    onClick={() => remove(pick)}
+                    onClick={() => requestRemove(pick)}
                     disabled={busy === pick.id}
                     className="cursor-pointer text-[11px] font-medium text-text-muted transition-colors hover:text-loss"
                   >
@@ -295,9 +320,91 @@ export function BetPlacementCard({
             )}
             </div>
 
+            {/* Explicit place-confirm: locking in a wager takes a second,
+                deliberate tap — never a stray Enter. */}
+            {state.confirming === "place" && (
+              <div
+                className={cn(
+                  "mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2.5",
+                  !allowsMultiplePicks && "ml-[30px]"
+                )}
+              >
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-strong">
+                  <span className="font-semibold">
+                    {hasPlacement ? "Update to" : "Lock in"}
+                  </span>
+                  <MoneyDisplay value={Number(state.value)} size="sm" weight="bold" />
+                  <span className="text-text-muted">on</span>
+                  <span className="font-semibold">{pick.label}</span>
+                  <OddsChip odds={pick.american_odds} size="sm" />
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => place(pick)}
+                    disabled={busy === pick.id}
+                  >
+                    {hasPlacement ? "Confirm change" : "Confirm bet"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => patchRow(pick.id, { confirming: null })}
+                    disabled={busy === pick.id}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Explicit remove-confirm: removal is destructive (soft-deletes
+                the wager), so it takes a deliberate second tap. */}
+            {state.confirming === "remove" && (
+              <div
+                className={cn(
+                  "mt-2 rounded-lg border border-loss-border bg-loss-surface px-3 py-2.5",
+                  !allowsMultiplePicks && "ml-[30px]"
+                )}
+              >
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-text-strong">
+                  <span className="font-semibold">Remove your</span>
+                  {state.receipt && (
+                    <MoneyDisplay
+                      value={state.receipt.amount}
+                      size="sm"
+                      weight="bold"
+                    />
+                  )}
+                  <span className="text-text-muted">on</span>
+                  <span className="font-semibold">{pick.label}</span>
+                  <span className="text-text-muted">?</span>
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => remove(pick)}
+                    disabled={busy === pick.id}
+                  >
+                    Remove bet
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => patchRow(pick.id, { confirming: null })}
+                    disabled={busy === pick.id}
+                  >
+                    Keep it
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Locked-odds receipt (§1.5): the snapshotted odds + stake behind
-                this placement — the confirmation that odds lock at write. */}
-            {hasPlacement && state.receipt && (
+                this placement — the confirmation that odds lock at write.
+                Hidden while a confirm strip owns the row. */}
+            {hasPlacement && state.receipt && state.confirming === null && (
               <div
                 className={cn(
                   "mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs",
