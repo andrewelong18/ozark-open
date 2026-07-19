@@ -329,9 +329,6 @@ export function BetsMenu({
         <div className="flex flex-col gap-8">
           {filteredPhases.map(({ phase, rounds }) => (
             <section key={phase} className="flex flex-col gap-5">
-              <h2 className="font-heading text-2xl text-indigo-700">
-                Phase {phase}
-              </h2>
               {rounds.map(({ round: roundKey, categories: cats }) => (
                 <div key={roundKey} className="flex flex-col gap-4">
                   <h3 className="font-heading text-lg text-text-strong">
