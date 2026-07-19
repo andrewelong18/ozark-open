@@ -10,7 +10,7 @@ export type NavItem = { label: string; href: string }
 // Only real routes are listed here — no dead links to unbuilt screens.
 const NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard" },
-  { label: "Bets", href: "/bets" },
+  { label: "Bet Menu", href: "/bets" },
   { label: "My Bets", href: "/my-bets" },
 ]
 

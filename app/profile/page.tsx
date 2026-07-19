@@ -168,6 +168,13 @@ export default async function ProfilePage() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Log out — moved here from the header. */}
+      <form method="POST" action="/auth/signout">
+        <Button variant="secondary" type="submit" className="w-full">
+          Log out
+        </Button>
+      </form>
     </div>
   )
 }
