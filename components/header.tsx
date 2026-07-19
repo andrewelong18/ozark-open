@@ -7,8 +7,9 @@ import { UserName } from "@/components/user-name"
 
 /**
  * App header — the indigo clubhouse bar with the Azalea brand wordmark, the
- * user + logout cluster, and the pill nav. Mobile-first: the wordmark truncates
- * with an ellipsis and never collides with the user/logout cluster.
+ * user cluster, and the pill nav. Mobile-first: the wordmark truncates with an
+ * ellipsis and never collides with the user cluster. Log out lives on the
+ * profile page.
  */
 export async function Header() {
   const supabase = await createClient()
@@ -62,29 +63,19 @@ export async function Header() {
           </span>
         </Link>
         {user ? (
-          <div className="flex shrink-0 items-center gap-2.5">
-            <Link
-              href="/profile"
-              className="flex items-center gap-2 rounded-full py-0.5 pr-2 pl-0.5 transition-colors hover:bg-white/10"
-            >
-              <Avatar src={avatarUrl} name={displayName ?? "You"} size="sm" />
-              {displayName && (
-                <UserName
-                  displayName={displayName}
-                  nickname={nickname}
-                  className="hidden text-sm whitespace-nowrap text-white sm:inline"
-                />
-              )}
-            </Link>
-            <form method="POST" action="/auth/signout">
-              <button
-                type="submit"
-                className="h-8 rounded-md border border-white/25 bg-transparent px-3 text-sm font-semibold text-white transition-colors hover:bg-white/10"
-              >
-                Log out
-              </button>
-            </form>
-          </div>
+          <Link
+            href="/profile"
+            className="flex shrink-0 items-center gap-2 rounded-full py-0.5 pr-2 pl-0.5 transition-colors hover:bg-white/10"
+          >
+            <Avatar src={avatarUrl} name={displayName ?? "You"} size="sm" />
+            {displayName && (
+              <UserName
+                displayName={displayName}
+                nickname={nickname}
+                className="hidden text-sm whitespace-nowrap text-white sm:inline"
+              />
+            )}
+          </Link>
         ) : (
           <Link
             href="/login"
