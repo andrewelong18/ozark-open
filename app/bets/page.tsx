@@ -1,6 +1,8 @@
 import { Fragment } from "react"
 import { createClient } from "@/lib/supabase/server"
 import { Card } from "@/components/ui/card"
+import { Avatar } from "@/components/avatar"
+import { UserName } from "@/components/user-name"
 import { StatusBadge, type BetStatus } from "@/components/betting/status-badge"
 import { PickRow } from "@/components/betting/pick-row"
 import { MoneyDisplay } from "@/components/betting/money-display"
@@ -125,8 +127,13 @@ function PickPlacementList({ group }: { group: PickPlacements }) {
           key={p.user_id}
           className="flex items-center justify-between gap-3 py-1"
         >
-          <span className="min-w-0 flex-1 truncate text-sm text-text-strong">
-            {p.display_name}
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <Avatar src={p.avatar_url} name={p.display_name} size="sm" />
+            <UserName
+              displayName={p.display_name}
+              nickname={p.nickname}
+              className="min-w-0 truncate text-sm text-text-strong"
+            />
           </span>
           <MoneyDisplay value={p.amount} size="sm" weight="semibold" />
         </div>
@@ -257,7 +264,7 @@ export default async function BetsPage() {
   if (closedPickIds.length > 0) {
     const { data: closedRows } = await supabase
       .from("bet_placements")
-      .select("pick_id, user_id, amount, users ( display_name )")
+      .select("pick_id, user_id, amount, users ( display_name, nickname, avatar_url )")
       .in("pick_id", closedPickIds)
       .is("deleted_at", null)
     placementsByPick = groupPlacementsByPick(

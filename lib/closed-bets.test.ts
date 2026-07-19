@@ -84,9 +84,42 @@ test("normalize flattens object-shaped and array-shaped user joins", () => {
     row({ user_id: "u-2", users: [{ display_name: "Pat" }] }),
   ]
   assert.deepEqual(normalizeClosedPlacements(rows), [
-    { pick_id: "p-1", user_id: "u-1", display_name: "Dan Mercer", amount: 10 },
-    { pick_id: "p-1", user_id: "u-2", display_name: "Pat", amount: 10 },
+    {
+      pick_id: "p-1",
+      user_id: "u-1",
+      display_name: "Dan Mercer",
+      nickname: null,
+      avatar_url: null,
+      amount: 10,
+    },
+    {
+      pick_id: "p-1",
+      user_id: "u-2",
+      display_name: "Pat",
+      nickname: null,
+      avatar_url: null,
+      amount: 10,
+    },
   ])
+})
+
+test("normalize carries nickname + avatar_url through, defaulting missing to null", () => {
+  const rows = [
+    row({
+      user_id: "u-1",
+      users: {
+        display_name: "Dan Mercer",
+        nickname: "Merc",
+        avatar_url: "https://x/avatars/u-1/avatar",
+      },
+    }),
+    row({ user_id: "u-2", users: { display_name: "Pat" } }),
+  ]
+  const out = normalizeClosedPlacements(rows)
+  assert.equal(out[0].nickname, "Merc")
+  assert.equal(out[0].avatar_url, "https://x/avatars/u-1/avatar")
+  assert.equal(out[1].nickname, null)
+  assert.equal(out[1].avatar_url, null)
 })
 
 test("normalize coerces string numerics from PostgREST", () => {

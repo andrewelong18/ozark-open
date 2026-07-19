@@ -152,12 +152,16 @@ export function normalizePayoutRows(rows: PayoutViewQueryRow[]): PayoutRow[] {
 export type ResultsParticipant = {
   user_id: string
   display_name: string
+  nickname?: string | null
+  avatar_url?: string | null
   entry_fee: number
 }
 
 export type ResultsRow = {
   user_id: string
   display_name: string
+  nickname: string | null
+  avatar_url: string | null
   entry_fee: number
   theoretical: number
   refunded: number
@@ -207,6 +211,8 @@ export function buildResultsTable(
     return {
       user_id: p.user_id,
       display_name: p.display_name,
+      nickname: p.nickname ?? null,
+      avatar_url: p.avatar_url ?? null,
       entry_fee: p.entry_fee,
       theoretical: mine.theoretical,
       refunded: mine.refunded,

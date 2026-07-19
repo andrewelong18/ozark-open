@@ -28,7 +28,11 @@ function one<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value
 }
 
-type UserJoin = { display_name: string }
+type UserJoin = {
+  display_name: string
+  nickname?: string | null
+  avatar_url?: string | null
+}
 
 type AdminBetJoin = {
   title: string
@@ -65,6 +69,8 @@ export type AdminPlacementRow = {
   placement_id: string
   user_id: string
   display_name: string
+  nickname: string | null
+  avatar_url: string | null
   phase: 1 | 2
   round: string
   bet_status: string
@@ -102,10 +108,13 @@ export function normalizeAdminRows(
     const amount = Number(row.amount)
     const odds = Number(row.odds_at_placement)
     const result = toResult(pick.result)
+    const joined = one(row.users)
     out.push({
       placement_id: row.id,
       user_id: row.user_id,
-      display_name: one(row.users)?.display_name ?? "Unknown bettor",
+      display_name: joined?.display_name ?? "Unknown bettor",
+      nickname: joined?.nickname ?? null,
+      avatar_url: joined?.avatar_url ?? null,
       phase: bet.phase,
       round: bet.round,
       bet_status: bet.status,

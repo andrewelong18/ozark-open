@@ -8,6 +8,8 @@ import { MoneyDisplay } from "@/components/betting/money-display"
 import { OddsChip } from "@/components/betting/odds-chip"
 import { OutcomeBadge } from "@/components/betting/outcome-badge"
 import { StatusBadge } from "@/components/betting/status-badge"
+import { Avatar } from "@/components/avatar"
+import { UserName } from "@/components/user-name"
 import {
   buildAdminView,
   normalizeAdminRows,
@@ -28,10 +30,15 @@ const ROUND_LABEL: Record<string, string> = {
   round_3: "Round 3",
 }
 
+type UserJoin = {
+  display_name: string
+  nickname: string | null
+  avatar_url: string | null
+}
 type ParticipantRow = {
   user_id: string
   entry_fee: number
-  users: { display_name: string } | { display_name: string }[] | null
+  users: UserJoin | UserJoin[] | null
 }
 
 export default async function AdminViewPage() {
@@ -75,12 +82,12 @@ export default async function AdminViewPage() {
     await Promise.all([
       supabase
         .from("tournament_participants")
-        .select("user_id, entry_fee, users ( display_name )")
+        .select("user_id, entry_fee, users ( display_name, nickname, avatar_url )")
         .eq("tournament_id", t.id),
       supabase
         .from("bet_placements")
         .select(
-          "id, user_id, pick_id, amount, odds_at_placement, requires_admin_review, users ( display_name ), bet_picks ( label, sheet_pick_id, result, bets ( title, phase, round, status, sheet_bet_id, tournament_id ) )"
+          "id, user_id, pick_id, amount, odds_at_placement, requires_admin_review, users ( display_name, nickname, avatar_url ), bet_picks ( label, sheet_pick_id, result, bets ( title, phase, round, status, sheet_bet_id, tournament_id ) )"
         )
         .is("deleted_at", null),
     ])
@@ -91,6 +98,8 @@ export default async function AdminViewPage() {
       return {
         user_id: p.user_id,
         display_name: joined?.display_name ?? "Unknown bettor",
+        nickname: joined?.nickname ?? null,
+        avatar_url: joined?.avatar_url ?? null,
         entry_fee: Number(p.entry_fee),
       }
     }
@@ -142,10 +151,18 @@ export default async function AdminViewPage() {
         view.bettors.map((bettor) => (
           <section key={bettor.user_id} className="flex flex-col gap-2">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <h2 className="font-heading text-2xl text-indigo-700">
-                {bettor.display_name}
+              <h2 className="flex items-center gap-2 font-heading text-2xl text-indigo-700">
+                <Avatar
+                  src={bettor.avatar_url}
+                  name={bettor.display_name}
+                  size="sm"
+                />
+                <UserName
+                  displayName={bettor.display_name}
+                  nickname={bettor.nickname}
+                />
                 {bettor.flagged > 0 && (
-                  <Badge variant="amber" className="ml-2 align-middle">
+                  <Badge variant="amber" className="align-middle">
                     {bettor.flagged} self-pick
                   </Badge>
                 )}
