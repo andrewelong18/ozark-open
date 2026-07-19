@@ -48,8 +48,9 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | [12](sprints/sprint-12.md) | ★ Animation & delight pass + Jake celebration | 🔲 | Jake photo + sound from Andrew (bonus) |
 | [13](sprints/sprint-13.md) | ★ Funny ad slots (dashboard + landing) | 🔲 | ≥1 finished creative from Andrew (bonus) |
 | [14](sprints/sprint-14.md) | ★ Announcement banner (admin-toggled, dismissible) | 🔲 | none (bonus) |
+| [17](sprints/sprint-17.md) | ★ Bet-slip review & confirmation (Competitive Analysis §1.3 + §1.5) | 🔲 | none hard (bonus); builds on 4 + 5 |
 
-> **★ Sprints 10–14 are the bonus wish list** (Andrew, Jul 18, 2026): enhancements, never MVP blockers. Work them only when no MVP sprint (0–9) is waiting on you; they must land before the Aug 28 feature freeze or be cut without ceremony — the tournament runs fine without them.
+> **★ Sprints 10–14 and 17 are the bonus wish list** (Andrew, Jul 18, 2026): enhancements, never MVP blockers. Work them only when no MVP sprint (0–9) is waiting on you; they must land before the Aug 28 feature freeze or be cut without ceremony — the tournament runs fine without them. *(Sprints 15–16 are reserved for the Competitive Analysis §1.1/§1.2 stubs — profile page, first-run onboarding — not yet cut into files; Sprint 17 keeps its `COMPETITIVE_ANALYSIS.md` §6 number.)*
 
 ---
 
@@ -68,7 +69,7 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | 7 — Final payouts | Pari-mutuel split (void-adjusted pool), `/results` | 🔶 Code complete + tested locally Jul 18, 2026 (`lib/payouts.ts` split, `/results` gated on `completed`, 2026 worked example + void case unit-tested) — view + chain applied Jul 18, 2026 (#34); prod verify pending, incl. flipping `tournament.status` at tournament end | 7 | Aug 21 |
 | 8 — Leaderboard | Google Sheets mirror | 🔲 Not started | 8 | Aug 28 |
 | 9 — Polish & dry run | Mobile pass, group test | 🔲 Not started | 9 | Sep 10 |
-| ★ Bonus wish list | Admin roster · bet-state snapshots · animation & Jake celebration · funny ads · announcement banner | 🔲 Not started (never blocks MVP) | 10–14 | as time allows, before Aug 28 |
+| ★ Bonus wish list | Admin roster · bet-state snapshots · animation & Jake celebration · funny ads · announcement banner · bet-slip review & confirmation | 🔲 Not started (never blocks MVP) | 10–14, 17 | as time allows, before Aug 28 |
 
 ---
 
