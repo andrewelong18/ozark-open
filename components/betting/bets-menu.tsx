@@ -252,7 +252,7 @@ export function BetsMenu({
                         : "text-text-muted after:bg-transparent hover:text-text-strong"
                     )}
                   >
-                    {r === "all" ? "All" : (ROUND_TAB_LABEL[r] ?? r)}
+                    {r === "all" ? "All Bet Rounds" : (ROUND_TAB_LABEL[r] ?? r)}
                   </button>
                 )
               })}
