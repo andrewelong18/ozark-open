@@ -200,6 +200,16 @@ export default async function DashboardPage() {
           message="Contact an admin to be added to this tournament's pool."
         />
       )}
+
+      {/* Activity feed — placeholder until there's a feed to show. */}
+      <section className="flex flex-col gap-3">
+        <h2 className="font-heading text-lg text-text-strong">Activity</h2>
+        <EmptyState
+          glyph="📣"
+          title="No activity yet"
+          message="Bets, line moves, and pool news will show up here."
+        />
+      </section>
     </div>
   )
 }
