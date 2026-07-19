@@ -33,10 +33,12 @@ explicit confirm-or-supersede rather than a silent default:
   leaderboard kept (Sprint 8, Google Sheets read-only). Note: results now arrive
   via the bets-spreadsheet upload, so if the leaderboard is dropped, the Google
   Sheets integration disappears entirely and Sprint 8 with it.
-- **Display names.** Pat (Jul 11): user-set at registration, then immutable by
-  the user; admins can always edit. Current docs (Q13): admin-set in Studio.
-  Matters for the import name-matching (ADR 0001 §11) — names must match the
-  sheet's pick labels either way.
+- **Display names.** ✅ **Resolved Jul 19, 2026 (PRD §12 A11, Sprint 15).** Rather
+  than pick between user-set (Pat, Jul 11) and admin-set (Q13), Sprint 15 keeps
+  `display_name` **admin-set** — it feeds import name-matching (ADR 0001 §11) — and
+  gives users a **separate cosmetic `nickname`** (plus an avatar) they set on
+  `/profile`. Import name-matching is untouched; the user still gets self-serve
+  identity. Nothing further needed here.
 - **Per-user betting toggle + non-player cap.** Pat (Jul 11): admins can
   enable/disable betting per user (`betting_enabled` on `tournament_participants`)
   and non-players carry a stricter max (see #2). Neither is in the Jul 15 schema;

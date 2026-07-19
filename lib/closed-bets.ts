@@ -41,7 +41,11 @@ function one<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value
 }
 
-type UserJoin = { display_name: string }
+type UserJoin = {
+  display_name: string
+  nickname?: string | null
+  avatar_url?: string | null
+}
 
 /** Raw shape of the closed-bet placements query
  * (bet_placements → users, scoped by pick_id). */
@@ -57,6 +61,8 @@ export type ClosedPlacement = {
   pick_id: string
   user_id: string
   display_name: string
+  nickname: string | null
+  avatar_url: string | null
   amount: number
 }
 
@@ -69,12 +75,17 @@ export type ClosedPlacement = {
 export function normalizeClosedPlacements(
   rows: ClosedPlacementQueryRow[]
 ): ClosedPlacement[] {
-  return rows.map((row) => ({
-    pick_id: row.pick_id,
-    user_id: row.user_id,
-    display_name: one(row.users)?.display_name ?? "Unknown bettor",
-    amount: Number(row.amount),
-  }))
+  return rows.map((row) => {
+    const joined = one(row.users)
+    return {
+      pick_id: row.pick_id,
+      user_id: row.user_id,
+      display_name: joined?.display_name ?? "Unknown bettor",
+      nickname: joined?.nickname ?? null,
+      avatar_url: joined?.avatar_url ?? null,
+      amount: Number(row.amount),
+    }
+  })
 }
 
 /** Everyone's wagers on one pick, plus the aggregate the header shows

@@ -139,7 +139,7 @@ No deployments, no code, no Git — the app re-renders on the next page load.
 
 ### How to upload
 
-1. Log in as an admin (`is_admin = true` — non-admins get a 404 on this page) and go to **`/admin/import`**.
+1. Log in as an admin (`is_admin = true` — non-admins get a 404 on this page) and go to **`/admin/import`**. (Admins reach the admin pages from their **`/profile`** page now — the old top-nav "Admin" pill was retired there in Sprint 15; the `/admin/import` and `/admin/view` URLs are unchanged.)
 2. Choose the workbook (`.xlsx` or `.csv`) and upload. Bad files are rejected **before any write** — a missing column or an invalid status/result value fails the whole upload with per-row errors, so a typo can't half-apply.
 3. Read the **import report**:
    - **Created / updated / unchanged counts** for bets and picks. Sanity-check them against what you meant to change — a routine status flip should show updates roughly equal to the phase's row count and create nothing.
@@ -180,7 +180,7 @@ No deployments, no code, no Git — the app re-renders on the next page load.
 Studio (https://supabase.com/dashboard → Project → Table Editor) is the admin UI for everything that isn't the menu — **data only, never schema**:
 
 - **Promote an admin:** `users` → set `is_admin = true`.
-- **Fix a display name:** `users` → `display_name` (new accounts default to their email address). Names matter twice: they're what everyone sees on closed bets, and the importer matches pick labels against them.
+- **Fix a display name:** `users` → `display_name` (new accounts default to their email address). Names matter twice: they're what everyone sees on closed bets, and the importer matches pick labels against them. **This stays admin-only** — members can't edit `display_name` (a guard trigger enforces it), so import name-matching can't be broken from the app. Members *do* self-manage their own `nickname` + `avatar_url` on `/profile` (Sprint 15) — those are cosmetic and never affect matching, so leave them alone in Studio.
 - **Register a participant:** add a row to `tournament_participants` with their `entry_fee` (and `is_player` if they're in the field).
 - **Link an unmatched pick to a player:** `bet_picks` → set `player_user_id` (this powers self-pick flagging). The importer respects hand-set links on every future upload.
 - **One-off data fixes** as needed.

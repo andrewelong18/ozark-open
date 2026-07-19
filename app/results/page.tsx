@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Avatar } from "@/components/avatar"
+import { UserName } from "@/components/user-name"
 import { EmptyState } from "@/components/modules/empty-state"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import {
@@ -48,7 +50,7 @@ export default async function ResultsPage() {
   const [{ data: participantData }, { data: payoutData }] = await Promise.all([
     supabase
       .from("tournament_participants")
-      .select("user_id, entry_fee, users ( display_name )")
+      .select("user_id, entry_fee, users ( display_name, nickname, avatar_url )")
       .eq("tournament_id", tournament.id),
     supabase
       .from("placement_payouts_view")
@@ -58,10 +60,15 @@ export default async function ResultsPage() {
       .eq("tournament_id", tournament.id),
   ])
 
+  type UserJoin = {
+    display_name: string
+    nickname: string | null
+    avatar_url: string | null
+  }
   type ParticipantRow = {
     user_id: string
     entry_fee: number
-    users: { display_name: string } | { display_name: string }[] | null
+    users: UserJoin | UserJoin[] | null
   }
   const participants = ((participantData ?? []) as ParticipantRow[]).map(
     (p) => {
@@ -69,6 +76,8 @@ export default async function ResultsPage() {
       return {
         user_id: p.user_id,
         display_name: joined?.display_name ?? "Unknown bettor",
+        nickname: joined?.nickname ?? null,
+        avatar_url: joined?.avatar_url ?? null,
         entry_fee: Number(p.entry_fee),
       }
     }
@@ -111,12 +120,18 @@ export default async function ResultsPage() {
         <>
           {/* Winner spotlight — the screenshot people share. */}
           <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-inverse p-5 shadow-md">
-            <div>
-              <div className="text-[11px] font-bold tracking-wider uppercase text-gold-300">
-                Top Payout
-              </div>
-              <div className="mt-0.5 font-heading text-2xl leading-tight text-white">
-                {winner.display_name}
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar src={winner.avatar_url} name={winner.display_name} size="md" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold tracking-wider uppercase text-gold-300">
+                  Top Payout
+                </div>
+                <div className="mt-0.5 font-heading text-2xl leading-tight text-white">
+                  <UserName
+                    displayName={winner.display_name}
+                    nickname={winner.nickname}
+                  />
+                </div>
               </div>
             </div>
             <div className="text-right">
@@ -164,13 +179,23 @@ export default async function ResultsPage() {
                   >
                     {i + 1}
                   </span>
-                  <span className="truncate text-sm font-semibold text-text-strong">
-                    {row.display_name}
-                    {row.refunded > 0 && (
-                      <span className="ml-1.5 text-xs font-normal text-text-muted">
-                        (${row.refunded} refunded)
-                      </span>
-                    )}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Avatar
+                      src={row.avatar_url}
+                      name={row.display_name}
+                      size="sm"
+                    />
+                    <span className="min-w-0 truncate text-sm font-semibold text-text-strong">
+                      <UserName
+                        displayName={row.display_name}
+                        nickname={row.nickname}
+                      />
+                      {row.refunded > 0 && (
+                        <span className="ml-1.5 text-xs font-normal text-text-muted">
+                          (${row.refunded} refunded)
+                        </span>
+                      )}
+                    </span>
                   </span>
                   <span className="text-right">
                     <MoneyDisplay

@@ -50,6 +50,14 @@ run_sql -c "
   CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS 'SELECT NULL::uuid';
   CREATE ROLE authenticated; CREATE ROLE anon;"
 
+echo "==> stub Supabase storage schema (avatars bucket migration)"
+run_sql -c "
+  CREATE SCHEMA storage;
+  CREATE TABLE storage.buckets (id text PRIMARY KEY, name text, public boolean DEFAULT false);
+  CREATE TABLE storage.objects (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), bucket_id text, name text);
+  ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+  CREATE FUNCTION storage.foldername(name text) RETURNS text[] LANGUAGE sql AS 'SELECT string_to_array(name, ''/'')';"
+
 echo "==> migrations + Phase 1 seed"
 for f in "$REPO"/supabase/migrations/*.sql; do
   run_sql -f "$f"

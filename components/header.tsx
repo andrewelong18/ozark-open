@@ -2,6 +2,8 @@ import Link from "next/link"
 
 import { createClient } from "@/lib/supabase/server"
 import { SiteNav, type NavItem } from "@/components/site-nav"
+import { Avatar } from "@/components/avatar"
+import { UserName } from "@/components/user-name"
 
 /**
  * App header — the indigo clubhouse bar with the Azalea brand wordmark, the
@@ -15,12 +17,14 @@ export async function Header() {
   } = await supabase.auth.getUser()
 
   let displayName: string | null = null
+  let nickname: string | null = null
+  let avatarUrl: string | null = null
   const extraItems: NavItem[] = []
   if (user) {
     const [{ data }, { data: tournamentData }] = await Promise.all([
       supabase
         .from("users")
-        .select("display_name, is_admin")
+        .select("display_name, nickname, avatar_url, is_admin")
         .eq("id", user.id)
         .single(),
       supabase
@@ -32,16 +36,18 @@ export async function Header() {
     ])
     const profile = data as {
       display_name: string
+      nickname: string | null
+      avatar_url: string | null
       is_admin: boolean
     } | null
     displayName = profile?.display_name ?? user.email ?? null
+    nickname = profile?.nickname ?? null
+    avatarUrl = profile?.avatar_url ?? null
     // Results appears only once the tournament wraps — no dead link before
     // that (the page itself also gates on 'completed').
     if ((tournamentData as { status: string } | null)?.status === "completed")
       extraItems.push({ label: "Results", href: "/results" })
-    // Admin-only link to the View All page — non-admins never see it (and
-    // the page 404s for them regardless).
-    if (profile?.is_admin) extraItems.push({ label: "Admin", href: "/admin/view" })
+    // Admin tools live on the profile page now (Sprint 15) — no top-nav pill.
   }
 
   return (
@@ -57,11 +63,19 @@ export async function Header() {
         </Link>
         {user ? (
           <div className="flex shrink-0 items-center gap-2.5">
-            {displayName && (
-              <span className="hidden text-sm whitespace-nowrap text-indigo-200 sm:inline">
-                {displayName}
-              </span>
-            )}
+            <Link
+              href="/profile"
+              className="flex items-center gap-2 rounded-full py-0.5 pr-2 pl-0.5 transition-colors hover:bg-white/10"
+            >
+              <Avatar src={avatarUrl} name={displayName ?? "You"} size="sm" />
+              {displayName && (
+                <UserName
+                  displayName={displayName}
+                  nickname={nickname}
+                  className="hidden text-sm whitespace-nowrap text-white sm:inline"
+                />
+              )}
+            </Link>
             <form method="POST" action="/auth/signout">
               <button
                 type="submit"
