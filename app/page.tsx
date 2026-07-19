@@ -1,13 +1,22 @@
 import Link from "next/link"
 import Image from "next/image"
+import { redirect } from "next/navigation"
 
+import { createClient } from "@/lib/supabase/server"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
-// Marketing landing page. One CTA only — log in — rendered as a plain <Link>
-// styled by buttonVariants so navigation works with zero client JS.
-export default function Home() {
+// Marketing landing page for logged-out visitors; authenticated members go
+// straight to their dashboard. One CTA only — log in — rendered as a plain
+// <Link> styled by buttonVariants so navigation works with zero client JS.
+export default async function Home() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (user) redirect("/dashboard")
+
   return (
     <div className="mx-auto max-w-[var(--content-max,640px)] px-4 pt-14 pb-16 sm:pt-20">
       <section className="flex flex-col items-center text-center">
