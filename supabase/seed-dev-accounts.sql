@@ -1,11 +1,13 @@
--- Dev-only dummy accounts for exercising the Sprint 16 onboarding + approval
--- flow locally. See docs/DEV_TESTING.md for how to use these.
+-- Dev dummy accounts for exercising the Sprint 16 onboarding + approval flow.
+-- See docs/DEV_TESTING.md for how to use these (local stack OR a hosted project).
 --
--- ⚠️  LOCAL SUPABASE ONLY. This writes rows into auth.users — never run it
---     against a production/hosted project. Apply AFTER the migrations (and
---     ideally after seed-sample-phase1.sql so there's an open bet menu to
---     place on). Idempotent: fixed UUIDs, delete-then-insert, so re-running
---     resets these accounts to their documented state.
+-- ⚠️  DEV / STAGING ONLY. This writes rows into auth.users. Run it against your
+--     local stack or a throwaway/dev Supabase project — NOT your live
+--     production data (it creates real login-able accounts there). A teardown
+--     snippet is at the bottom. Apply AFTER the migrations (and ideally after
+--     seed-sample-phase1.sql so there's an open bet menu to place on).
+--     Idempotent: fixed UUIDs, delete-then-insert, so re-running resets these
+--     accounts to their documented state.
 --
 -- How it works: inserting into auth.users fires the handle_new_user trigger,
 -- which creates the matching public.users row (display_name = email,
@@ -13,9 +15,9 @@
 -- auth.uid() is NULL, so guard_users_self_update is bypassed and we can set
 -- display_name / onboarded_at / is_admin freely.
 --
--- Log in via magic link caught by Inbucket (http://localhost:54324) — enter
--- the email on /login, then click the link in Inbucket. (encrypted_password is
--- also set, so email+password 'devpass' works too if you ever want it.)
+-- The accounts are passwordless (magic-link only) — log in by entering the
+-- email on /login and following the link (Inbucket locally, or a real email /
+-- the scripts/dev-magiclink.ts link on hosted). See the cheat sheet.
 
 DO $$
 DECLARE
@@ -36,15 +38,17 @@ BEGIN
     -- Clean slate (cascades to public.users + tournament_participants + identities).
     DELETE FROM auth.users WHERE id = uid;
 
+    -- Passwordless (magic-link only) — no encrypted_password, so no pgcrypto
+    -- dependency and this runs cleanly in the hosted SQL editor too.
     INSERT INTO auth.users (
       instance_id, id, aud, role, email,
-      encrypted_password, email_confirmed_at,
+      email_confirmed_at,
       raw_app_meta_data, raw_user_meta_data,
       created_at, updated_at,
       confirmation_token, email_change, email_change_token_new, recovery_token
     ) VALUES (
       '00000000-0000-0000-0000-000000000000', uid, 'authenticated', 'authenticated', acct->>'email',
-      crypt('devpass', gen_salt('bf')), now(),
+      now(),
       '{"provider":"email","providers":["email"]}', '{}',
       now(), now(),
       '', '', '', ''
@@ -90,3 +94,9 @@ CROSS JOIN (SELECT id FROM public.tournaments WHERE year = 2026) AS t
 ON CONFLICT (user_id, tournament_id) DO UPDATE SET
   entry_fee = EXCLUDED.entry_fee,
   is_player = EXCLUDED.is_player;
+
+-- ── Teardown ────────────────────────────────────────────────────────────────
+-- Remove every dummy account (cascades to public.users, participants,
+-- identities). Run this to clean a hosted/dev project back to normal.
+--
+--   DELETE FROM auth.users WHERE email LIKE '%@ozark.test';

@@ -87,8 +87,8 @@ ozark-open/
 6. Visit http://localhost:3000
 
 > **Testing the app end-to-end?** See [`docs/DEV_TESTING.md`](docs/DEV_TESTING.md) — a cheat
-> sheet for running the full stack locally with pre-seeded dummy accounts and magic-link
-> logins caught in a local inbox (no real email needed).
+> sheet for driving the flow with pre-seeded dummy accounts, either against a hosted Supabase
+> project (no Docker) or a full local stack, with magic-link logins that need no real email.
 
 ### Tests & verification
 
