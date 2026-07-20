@@ -66,10 +66,11 @@ done
 run_sql -f "$REPO/supabase/seed-sample-phase1.sql"
 echo "    applied seed-sample-phase1.sql"
 
-echo "==> round trips (import → placement RLS → payout view)"
+echo "==> round trips (import → placement RLS → payout view → onboarding guard)"
 node --experimental-strip-types "$REPO/scripts/import-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/placement-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/payout-view-roundtrip.ts"
+node --experimental-strip-types "$REPO/scripts/onboarding-guard-roundtrip.ts"
 
 echo "==> admin chase SQL smoke (docs/admin/phase-compliance.sql)"
 psql "$PGURI" -X -v ON_ERROR_STOP=1 -f "$REPO/docs/admin/phase-compliance.sql"
