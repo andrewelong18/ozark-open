@@ -58,14 +58,20 @@ export async function middleware(request: NextRequest) {
   // of the app. Skip the check for the onboarding page itself and the auth
   // callback so they can actually get there / sign in.
   if (user && !pathname.startsWith("/auth")) {
-    const { data: profile } = await supabase
+    const { data: profile, error } = await supabase
       .from("users")
       .select("onboarded_at")
       .eq("id", user.id)
       .maybeSingle()
-    const onboarded = Boolean(
-      (profile as { onboarded_at: string | null } | null)?.onboarded_at
-    )
+
+    // Fail OPEN if the check itself failed (e.g. the onboarding migration
+    // isn't applied yet, so users.onboarded_at doesn't exist). Forcing
+    // /onboarding on a query error traps every member in an inescapable loop —
+    // the onboarding write targets the same missing column and 500s, so it can
+    // never be satisfied. A soft first-run gate must never brick the whole app.
+    const onboarded = error
+      ? true
+      : Boolean((profile as { onboarded_at: string | null } | null)?.onboarded_at)
 
     if (!onboarded && !pathname.startsWith("/onboarding")) {
       return NextResponse.redirect(new URL("/onboarding", request.url))
