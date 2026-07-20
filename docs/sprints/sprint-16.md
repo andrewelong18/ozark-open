@@ -21,6 +21,6 @@
 - [x] Middleware: redirect authenticated-but-not-onboarded members to `/onboarding`; send onboarded members away from `/login` + `/onboarding`.
 - [x] `/admin/participants` (admin-guarded, 404 for non-admins): **Awaiting approval** (onboarded, no participant row) and **In the pool** lists. Approve = verify display name + set entry fee + player flag → create the row. Edit/revoke existing participants. `POST/PATCH/DELETE /api/admin/participants` re-checks `is_admin` and validates the fee with `validateEntryFee`. Linked from the `/profile` admin card.
 - [x] Reframe non-participant copy as "pending approval" (not "not registered") on `/dashboard`, `/bets`, `/my-bets`, `/profile`.
-- [ ] Docs: this file; PRD §12 A12; DATA_MODEL §3.1/§3.3; ARCHITECTURE §3; ROADMAP index + status; OUTSTANDING_DECISIONS §1; COMPETITIVE_ANALYSIS §1.2/§6; README Track 2.
+- [x] Docs: this file; PRD §12 A12; DATA_MODEL §3.1/§3.3; ARCHITECTURE §3; ROADMAP index + status; OUTSTANDING_DECISIONS §1; COMPETITIVE_ANALYSIS §1.2/§6; README Track 2.
 
 **Done when:** a first-time member is forced through onboarding (self-set display name), reads and can re-open the walkthrough, and sees the bet menu but can't place; an admin approves them from `/admin/participants` (which verifies the name and creates the participant row); and the newly approved member places a valid wager — with no Supabase Studio step involved. A self-serve `/profile` update still can never change `display_name` (guard) once onboarded.
