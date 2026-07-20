@@ -124,7 +124,9 @@ sequenceDiagram
 **Implementation notes:**
 - **Magic-link emails must go through custom SMTP (Resend, free tier).** Supabase's built-in email service is for development only — it's rate-limited to a handful of messages per hour, which guarantees dropped logins when ~32 people hit the app on tournament morning. Configured in Sprint 0.
 - **Session duration is extended** (Supabase Auth settings) so a login during dry-run week survives through the tournament — the magic link is a fallback, not a daily ritual.
-- First time a new email logs in, Supabase auto-creates an `auth.users` row. We sync this to our `public.users` table via a database trigger.
+- First time a new email logs in, Supabase auto-creates an `auth.users` row. We sync this to our `public.users` table via a database trigger (`display_name` defaults to the email, `onboarded_at` NULL).
+- **Required onboarding (Sprint 16).** While `users.onboarded_at IS NULL`, the middleware forces the member to `/onboarding`, where they set their own `display_name` (once — the guard trigger permits this only pre-onboarding) plus an optional nickname/avatar, then read a "how this pool works" walkthrough. `POST /api/onboarding` writes the fields and stamps `onboarded_at`.
+- **Bettor approval (Sprint 16).** An onboarded member can browse the bet menu but can't place bets until an admin approves them on `/admin/participants`. Approving verifies/corrects the `display_name` (for import name-matching), sets the entry fee + player flag, and **creates the `tournament_participants` row** — row-exists is the eligibility gate (PRD §12 A11/A12). This replaces the manual Studio row-add; there is no `betting_enabled` column.
 - New users default to `is_admin = false`. To promote someone to admin, edit the `is_admin` column in Supabase Studio.
 - Sessions persist via HTTP-only cookies (handled by Supabase client SDK).
 - No password reset flow needed — there are no passwords.

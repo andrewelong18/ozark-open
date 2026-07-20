@@ -290,7 +290,8 @@ Pat & Jake's new architecture memo, plus implementation decisions confirmed by A
 | A8 | **§7 money rules carry over** renamed to phases, counted **per wagered pick** (3 picks on one bet = 3 toward the 5–10 count). |
 | A9 | **Match/Group Match:** one pick per participant; betting on your opponent **hard-blocked**; self-picks allowed but flagged — in every category. |
 | A10 | **Pick→player mapping by display-name matching at import** (stroke suffixes stripped); unmatched picks reported for admin follow-up. Replaces `bet_subjects`. |
-| A11 | **Self-serve identity is a cosmetic nickname, not an editable `display_name`** (Andrew, Jul 19, 2026 — Sprint 15). Members set their own `nickname` + `avatar_url` on `/profile`; `display_name` stays admin-set (Q13) because import name-matching (A10) depends on it. Resolves the `OUTSTANDING_DECISIONS.md` §1 display-name item without touching the matching field. |
+| A11 | **Self-serve identity is a cosmetic nickname, not an editable `display_name`** (Andrew, Jul 19, 2026 — Sprint 15). Members set their own `nickname` + `avatar_url` on `/profile`; `display_name` stays admin-set (Q13) because import name-matching (A10) depends on it. Resolves the `OUTSTANDING_DECISIONS.md` §1 display-name item without touching the matching field. **Refined by A12.** |
+| A12 | **Members set their own `display_name` once, at required onboarding; the admin verifies it at approval** (Andrew, Jul 20, 2026 — Sprint 16). Reopens A11's "admin-set only" in a controlled way: the DB guard permits the self-set only while `onboarded_at IS NULL`, then pins `display_name` again (admin-owned for import matching, A10). A member can view the menu on registration but can only **place bets after an admin approves them** on `/admin/participants` — and that approval, which also confirms/corrects the name, is what **creates the `tournament_participants` row** (eligibility stays "row exists," A11's model; no `betting_enabled` column — the `OUTSTANDING_DECISIONS.md` §1 toggle is superseded). |
 
 ### Original fifteen questions (Jake, July 9, 2026)
 
@@ -310,7 +311,7 @@ All fifteen questions from Draft v2 were answered by Jake on July 9, 2026 (Q1/Q2
 | Q10 | **"The field" picks exist**; displayed like any other pick, no player link — so backing the field is never flagged as a self-pick, even if you're in the field *(Pat, Jul 11)*. |
 | Q11 | Aggregate money per bet is **hidden while the bet is open**; visible after close. |
 | Q12 | After close, **everyone's individual amounts are visible** — not just who bet on what. |
-| Q13 | Display names are **admin-set in Studio** for v1 — they feed the importer's name-matching (ADR 0001 §11), so they stay admin-controlled. **Refined by A11.** |
+| Q13 | Display names are **admin-set in Studio** for v1 — they feed the importer's name-matching (ADR 0001 §11), so they stay admin-controlled. **Refined by A11, then A12** (member sets it once at onboarding; admin verifies at approval and owns it thereafter). |
 | Q14 | **Non-playing bettors are supported** (exempt from the self-bet rule); expect 0–2. |
 | Q15 | Leaderboard mirrors **one Google Sheets tab — player, thru, score, position — updated after each day.** |
 

@@ -82,8 +82,8 @@ export default async function MyBetsPage() {
       <div className="mx-auto max-w-lg px-4 py-10">
         <EmptyState
           glyph="🏌️"
-          title="You're not registered"
-          message="Betting is for registered participants. Ask an admin to add you to this tournament's pool."
+          title="Approval pending"
+          message="You're registered — an admin just needs to approve you to place bets. Browse the bet menu in the meantime."
         />
       </div>
     )

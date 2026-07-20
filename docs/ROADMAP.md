@@ -49,9 +49,10 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | [13](sprints/sprint-13.md) | ★ Funny ad slots (dashboard + landing) | 🔲 | ≥1 finished creative from Andrew (bonus) |
 | [14](sprints/sprint-14.md) | ★ Announcement banner (admin-toggled, dismissible) | 🔲 | none (bonus) |
 | [15](sprints/sprint-15.md) | ★ Self-serve profile page (nickname, avatar, status; Competitive Analysis §1.1) | 🔶 code complete Jul 19, 2026 (nickname + avatar_url columns, `avatars` storage bucket, `/profile`, admin entry relocated here, name+nickname everywhere — unit-tested + built locally); prod SQL + browser verify pending | none (bonus) |
+| [16](sprints/sprint-16.md) | ★ First-run onboarding, self-set identity & admin bettor-approval (Competitive Analysis §1.2, expanded) | 🔶 code complete Jul 20, 2026 (`onboarded_at` + relaxed guard, `/onboarding` flow + walkthrough, middleware gate, `/admin/participants` approval — unit-tested + built locally); prod SQL + browser verify pending | none hard (bonus); builds on 1 + 4 + 15 |
 | [17](sprints/sprint-17.md) | ★ Bet-slip review & confirmation (Competitive Analysis §1.3 + §1.5) | 🔲 | none hard (bonus); builds on 4 + 5 |
 
-> **★ Sprints 10–15 and 17 are the bonus wish list** (Andrew, Jul 18, 2026): enhancements, never MVP blockers. Work them only when no MVP sprint (0–9) is waiting on you; they must land before the Aug 28 feature freeze or be cut without ceremony — the tournament runs fine without them. *(Sprint 15 — the Competitive Analysis §1.1 profile page — was cut into a file Jul 19, 2026. Sprint 16 stays reserved for the §1.2 first-run onboarding stub, not yet cut; Sprint 17 keeps its `COMPETITIVE_ANALYSIS.md` §6 number.)*
+> **★ Sprints 10–17 are the bonus wish list** (Andrew, Jul 18, 2026): enhancements, never MVP blockers. Work them only when no MVP sprint (0–9) is waiting on you; they must land before the Aug 28 feature freeze or be cut without ceremony — the tournament runs fine without them. *(Sprint 15 — the Competitive Analysis §1.1 profile page — was cut into a file Jul 19, 2026. Sprint 16 — the §1.2 first-run onboarding stub, expanded on Andrew's Jul 20 direction to also cover self-set identity + admin bettor-approval — was cut into a file Jul 20, 2026. Sprint 17 keeps its `COMPETITIVE_ANALYSIS.md` §6 number.)*
 
 ---
 
@@ -70,7 +71,7 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | 7 — Final payouts | Pari-mutuel split (void-adjusted pool), `/results` | 🔶 Code complete + tested locally Jul 18, 2026 (`lib/payouts.ts` split, `/results` gated on `completed`, 2026 worked example + void case unit-tested) — view + chain applied Jul 18, 2026 (#34); prod verify pending, incl. flipping `tournament.status` at tournament end | 7 | Aug 21 |
 | 8 — Leaderboard | Google Sheets mirror | 🔲 Not started | 8 | Aug 28 |
 | 9 — Polish & dry run | Mobile pass, group test | 🔲 Not started | 9 | Sep 10 |
-| ★ Bonus wish list | Admin roster · bet-state snapshots · animation & Jake celebration · funny ads · announcement banner · self-serve profile page · bet-slip review & confirmation | 🔶 Sprint 15 (profile page) code complete Jul 19, 2026; rest not started (never blocks MVP) | 10–15, 17 | as time allows, before Aug 28 |
+| ★ Bonus wish list | Admin roster · bet-state snapshots · animation & Jake celebration · funny ads · announcement banner · self-serve profile page · first-run onboarding + bettor-approval · bet-slip review & confirmation | 🔶 Sprint 15 (profile page) code complete Jul 19, 2026; Sprint 16 (onboarding + bettor-approval) code complete Jul 20, 2026; rest not started (never blocks MVP) | 10–17 | as time allows, before Aug 28 |
 
 ---
 

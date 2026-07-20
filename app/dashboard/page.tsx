@@ -6,6 +6,7 @@ import { StatCard } from "@/components/modules/stat-card"
 import { BudgetModule } from "@/components/modules/budget-module"
 import { RulesCard } from "@/components/modules/rules-card"
 import { EmptyState } from "@/components/modules/empty-state"
+import { HowItWorksLauncher } from "@/components/onboarding/how-it-works-launcher"
 import Link from "next/link"
 import {
   checkPhaseMinimums,
@@ -148,7 +149,7 @@ export default async function DashboardPage() {
           label="Your Entry"
           value={Number(participant?.entry_fee ?? 0)}
           money
-          caption={participant ? undefined : "Not registered"}
+          caption={participant ? undefined : "Pending approval"}
         />
         <StatCard label="Bets Placed" value={betCount} caption="This tournament" />
       </div>
@@ -196,10 +197,17 @@ export default async function DashboardPage() {
       ) : (
         <EmptyState
           glyph="🏌️"
-          title="You're not registered"
-          message="Contact an admin to be added to this tournament's pool."
+          title="Approval pending"
+          message="You're registered — an admin just needs to approve you to place bets. You can browse the full bet menu in the meantime."
         />
       )}
+
+      <div className="flex justify-center">
+        <HowItWorksLauncher
+          minPicks={rules.min_picks_per_phase}
+          maxPicks={rules.max_picks_per_phase}
+        />
+      </div>
 
       {/* Activity feed — placeholder until there's a feed to show. */}
       <section className="flex flex-col gap-3">
