@@ -1,7 +1,6 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { useRouter } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/client"
 import { Avatar } from "@/components/avatar"
@@ -30,7 +29,6 @@ export function OnboardingForm({
   minPicks: number
   maxPicks: number
 }) {
-  const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
   const [step, setStep] = useState<"identity" | "walkthrough">("identity")
   const [displayName, setDisplayName] = useState("")
@@ -113,9 +111,14 @@ export function OnboardingForm({
         maxPicks={maxPicks}
         doneLabel="Start betting"
         onDone={() => {
-          // onboarded_at is set — the middleware will let us into the app.
-          router.push("/bets")
-          router.refresh()
+          // onboarded_at is already set (step 1 stamped it), so middleware will
+          // let us into the app — but only on a *fresh* request. A client
+          // router.push() would replay this page's poisoned Router Cache: the
+          // nav Links prefetched /dashboard, /bets, /my-bets while onboarded_at
+          // was still NULL, so middleware redirected those prefetches back to
+          // /onboarding and cached that result. A hard navigation resets the
+          // cache and re-runs middleware with the now-onboarded session.
+          window.location.assign("/bets")
         }}
       />
     )
