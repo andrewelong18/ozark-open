@@ -7,10 +7,14 @@
 // node:test suite exercises the exact code the route runs.
 
 export const NICKNAME_MAX = 24
+export const DISPLAY_NAME_MAX = 40
 
 // Letters (any language), numbers, spaces, and friendly punctuation. Keeps a
 // nickname to a name — no newlines, no markup.
 const NICKNAME_RE = /^[\p{L}\p{N} '"._!?()&-]+$/u
+// A display name is the same shape but must be non-empty and is what everyone
+// sees / what the importer matches against (ADR 0001 §11).
+const DISPLAY_NAME_RE = NICKNAME_RE
 
 export type ProfileInput = {
   /** Trimmed nickname, or null to clear it. */
@@ -59,5 +63,75 @@ export function validateProfile(
       )
     }
   }
+  return errors.length > 0 ? { ok: false, errors } : { ok: true }
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding (Sprint 16): the required first-run step. Same nickname + avatar
+// as /profile, plus a REQUIRED display_name the member sets themselves — the
+// one time they may (the DB guard pins it afterward; the admin verifies it at
+// approval). Pure like the rest of this module.
+// ---------------------------------------------------------------------------
+
+export type OnboardingInput = {
+  /** Trimmed, whitespace-collapsed display name. Never null — it's required. */
+  displayName: string
+  /** Trimmed nickname, or null to leave it unset. */
+  nickname: string | null
+  /** True when the client just uploaded a new avatar file to storage. */
+  avatarUpdated: boolean
+}
+
+/** Trim + collapse internal whitespace; empty stays "" so validation can flag it. */
+export function normalizeDisplayName(raw: unknown): string {
+  if (typeof raw !== "string") return ""
+  return raw.trim().replace(/\s+/g, " ")
+}
+
+export function parseOnboardingBody(
+  body: unknown
+): { ok: true; value: OnboardingInput } | { ok: false; error: string } {
+  if (typeof body !== "object" || body === null) {
+    return { ok: false, error: "Invalid request body." }
+  }
+  const b = body as Record<string, unknown>
+  if (b.displayName != null && typeof b.displayName !== "string") {
+    return { ok: false, error: "Display name must be text." }
+  }
+  if (b.nickname != null && typeof b.nickname !== "string") {
+    return { ok: false, error: "Nickname must be text." }
+  }
+  return {
+    ok: true,
+    value: {
+      displayName: normalizeDisplayName(b.displayName),
+      nickname: normalizeNickname(b.nickname),
+      avatarUpdated: b.avatarUpdated === true,
+    },
+  }
+}
+
+/** Validate a REQUIRED display name (onboarding + the admin-verify step). */
+export function validateDisplayName(name: string): string | null {
+  if (name.length === 0) return "Enter your name so everyone knows who's betting."
+  if (name.length > DISPLAY_NAME_MAX)
+    return `Name must be ${DISPLAY_NAME_MAX} characters or fewer.`
+  if (!DISPLAY_NAME_RE.test(name))
+    return "Name can only use letters, numbers, spaces, and basic punctuation."
+  return null
+}
+
+export function validateOnboarding(
+  input: OnboardingInput
+): { ok: true } | { ok: false; errors: string[] } {
+  const errors: string[] = []
+  const nameError = validateDisplayName(input.displayName)
+  if (nameError) errors.push(nameError)
+  // Reuse the nickname rules for the optional field.
+  const profileVerdict = validateProfile({
+    nickname: input.nickname,
+    avatarUpdated: input.avatarUpdated,
+  })
+  if (!profileVerdict.ok) errors.push(...profileVerdict.errors)
   return errors.length > 0 ? { ok: false, errors } : { ok: true }
 }
