@@ -121,7 +121,8 @@ export default async function MyBetsPage() {
   ].join(" · ")
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
+    <div className="mx-auto grid max-w-[var(--container-max,1120px)] grid-cols-1 gap-4 px-4 py-6 lg:grid-cols-3 lg:gap-6">
+      <div className="flex flex-col gap-4 lg:col-span-2">
       <div>
         <h1 className="font-heading text-3xl leading-tight text-text-strong">
           My Bets
@@ -262,6 +263,10 @@ export default async function MyBetsPage() {
         minBets={myRules.min_picks_per_phase}
         maxBets={myRules.max_picks_per_phase}
       />
+      </div>
+
+      {/* Reserved right rail — empty for now (matches dashboard's 2/3 split). */}
+      <aside className="hidden lg:col-span-1 lg:block" aria-hidden />
     </div>
   )
 }

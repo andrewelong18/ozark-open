@@ -119,7 +119,8 @@ export default async function DashboardPage() {
   const myRules = participant ? buildRulesModel(participant, rules) : null
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
+    <div className="mx-auto grid max-w-[var(--container-max,1120px)] grid-cols-1 gap-4 px-4 py-6 lg:grid-cols-3 lg:gap-6">
+      <div className="flex flex-col gap-4 lg:col-span-2">
       <div className="flex items-end justify-between gap-3">
         <div>
           <h1 className="font-heading text-3xl leading-tight text-text-strong">
@@ -208,16 +209,20 @@ export default async function DashboardPage() {
           maxPicks={rules.max_picks_per_phase}
         />
       </div>
+      </div>
 
-      {/* Activity feed — placeholder until there's a feed to show. */}
-      <section className="flex flex-col gap-3">
-        <h2 className="font-heading text-lg text-text-strong">Activity</h2>
-        <EmptyState
-          glyph="📣"
-          title="No activity yet"
-          message="Bets, line moves, and pool news will show up here."
-        />
-      </section>
+      {/* Activity feed — the right rail on desktop, stacked below on mobile.
+          Placeholder until there's a feed to show. */}
+      <aside className="lg:col-span-1">
+        <section className="flex h-full flex-col gap-3">
+          <h2 className="font-heading text-lg text-text-strong">Activity</h2>
+          <EmptyState
+            glyph="📣"
+            title="No activity yet"
+            message="Bets, line moves, and pool news will show up here."
+          />
+        </section>
+      </aside>
     </div>
   )
 }
