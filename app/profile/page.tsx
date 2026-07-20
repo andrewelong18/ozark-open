@@ -142,6 +142,9 @@ export default async function ProfilePage() {
               <Button variant="secondary" size="sm" render={<Link href="/admin/import" />}>
                 Import Bets
               </Button>
+              <Button variant="secondary" size="sm" render={<Link href="/admin/participants" />}>
+                Participants
+              </Button>
             </div>
           </CardContent>
         </Card>
