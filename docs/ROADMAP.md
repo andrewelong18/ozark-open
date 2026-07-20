@@ -84,7 +84,7 @@ Shipped May 7, 2026 (see git history and `docs/superpowers/` for the design spec
 - **Phase 2:** `tournaments` + `tournament_participants` tables with RLS and the 2026 seed row (`20260507000001_tournaments.sql`); `/dashboard` showing tournament + registration status.
 - **Phase 3:** `bet_categories` / `bets` / `bet_subjects` tables with RLS and the seven-category seed (`20260507000002_bets.sql`); `/bets` menu grouped by round → category with American/fractional/implied odds (`lib/odds.ts`). **⚠️ Superseded in part by ADR 0001** (July 15): the one-odds-per-bet schema, `bet_subjects`, the seven categories, and the computed odds display are all replaced by the bet/pick structure — Sprint 1 reworks this. Auth, tournaments, and the page scaffolding carry forward untouched.
 
-**Phases 0–2 are now verified in production** (Jul 16, 2026) — infra was rebuilt under Andrew's own Vercel + Supabase accounts, taking ownership back from the fork. Production: **https://ozark-open-sportsbook.vercel.app**. Phase 3 remains ⚠️ rework-required regardless (Sprint 1). See `sprints/sprint-0.md` for the infra facts and the env-var gotcha.
+**Phases 0–2 are now verified in production** (Jul 16, 2026) — infra was rebuilt under Andrew's own Vercel + Supabase accounts, taking ownership back from the fork. Production: **https://ozark-open-sportsbook.vercel.app** (custom domain **`ozark-open.com`** registered via Vercel; also the auth email sending domain — see issue #16). Phase 3 remains ⚠️ rework-required regardless (Sprint 1). See `sprints/sprint-0.md` for the infra facts and the env-var gotcha.
 
 ---
 

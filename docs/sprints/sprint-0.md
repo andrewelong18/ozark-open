@@ -28,9 +28,11 @@
 Ownership was taken back from the fork; all infra is now under Andrew's own accounts.
 
 - **Production URL: https://ozark-open-sportsbook.vercel.app** — Vercel project `nerdyandyproject/ozark-open-sportsbook`, auto-deploys `main`.
+- **Custom domain: `ozark-open.com`** — owned, registered through Vercel, so **Vercel manages its DNS** (add records under the domain's DNS tab, not an external registrar). It's the public-facing domain and the auth email sending domain. Assign it to the project in Vercel → Settings → Domains to make it the primary app URL; the `.vercel.app` URL keeps working either way.
 - **`ozark-open.vercel.app` is NOT ours** — it's the fork's stale deployment and still serves a broken build. Ignore it; never use it for testing or in Supabase config.
 - **Supabase project:** `rbjqqzjqhsbcotqfrwhb` · auth uses the new-style **publishable** key (`sb_publishable_…`, the `anon` replacement).
-- **Supabase Auth URL config** must list the production URL as `https://ozark-open-sportsbook.vercel.app/**` plus `http://localhost:3001/**` for local dev. The app derives `emailRedirectTo` from the **request host**, so any new domain must be added here or magic links break.
+- **Supabase Auth URL config** must list `https://ozark-open.com/**` **and** `https://ozark-open-sportsbook.vercel.app/**` (keep both during the cutover) plus `http://localhost:3000/**` for local dev. The app derives `emailRedirectTo` from the **request host**, so whichever domain a user visits must be in this list or their magic link breaks.
+- **Auth emails go through Resend SMTP** (issue #16) — Supabase's built-in email is dev-only (a few/hour) and drops links when ~32 people log in at once. Config: Supabase → Authentication → Emails → SMTP → host `smtp.resend.com`, port `465`, user `resend`, password = a Resend API key, sender `noreply@ozark-open.com`. The `ozark-open.com` sending domain is verified in Resend by pasting its DKIM/SPF/MX records into Vercel DNS.
 - **Env-var gotcha (cost hours):** the Vercel dashboard silently saved `NEXT_PUBLIC_*` vars with **empty values**, and `NEXT_PUBLIC_*` is inlined at **build** time — so every build baked in blanks and login failed with "fetch failed". Set them via CLI and verify:
   ```
   vercel env add NEXT_PUBLIC_SUPABASE_URL production --value '<url>' --no-sensitive --force
