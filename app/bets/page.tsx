@@ -202,7 +202,8 @@ export default async function BetsPage() {
   const phases = groupBets(bets)
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-6">
+    <div className="mx-auto grid max-w-[var(--container-max,1120px)] grid-cols-1 gap-4 px-4 py-6 lg:grid-cols-3 lg:gap-6">
+      <div className="lg:col-span-2">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h1 className="font-heading text-3xl text-text-strong">Bet Menu</h1>
         <StatusBadge status={menuStatus(bets)} />
@@ -224,15 +225,22 @@ export default async function BetsPage() {
           placementsByPick={placementsByPick}
         />
       </div>
+      </div>
 
+      {/* Reserved right rail — empty for now (matches dashboard's 2/3 split). */}
+      <aside className="hidden lg:col-span-1 lg:block" aria-hidden />
+
+      {/* Sticky review bar spans the full frame, below both columns. */}
       {slip && (
-        <BetSlipSummary
-          entryFee={slip.entryFee}
-          totalWagered={slip.totalWagered}
-          remaining={slip.remaining}
-          pickCount={slip.pickCount}
-          items={slip.items}
-        />
+        <div className="lg:col-span-3">
+          <BetSlipSummary
+            entryFee={slip.entryFee}
+            totalWagered={slip.totalWagered}
+            remaining={slip.remaining}
+            pickCount={slip.pickCount}
+            items={slip.items}
+          />
+        </div>
       )}
     </div>
   )

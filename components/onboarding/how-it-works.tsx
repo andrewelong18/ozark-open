@@ -12,13 +12,18 @@ import { Card, CardContent } from "@/components/ui/card"
 // (PRD §7 / lib/validation.ts) so nobody's taught a rule the app doesn't keep.
 // The pick-count range is passed in from the tournaments row — never hardcoded.
 
-type CardSpec = {
+export type HowItWorksCard = {
   icon: typeof Coins
   title: string
   body: string
 }
 
-function cards(minPicks: number, maxPicks: number): CardSpec[] {
+// The explainer content, shared by the carousel below and the profile
+// "How it works" tab (which renders these statically).
+export function howItWorksCards(
+  minPicks: number,
+  maxPicks: number
+): HowItWorksCard[] {
   return [
     {
       icon: Coins,
@@ -54,7 +59,7 @@ export function HowItWorks({
   onDone: () => void
   doneLabel?: string
 }) {
-  const specs = cards(minPicks, maxPicks)
+  const specs = howItWorksCards(minPicks, maxPicks)
   const [index, setIndex] = useState(0)
   const spec = specs[index]
   const Icon = spec.icon
