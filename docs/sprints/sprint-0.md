@@ -30,7 +30,7 @@ Ownership was taken back from the fork; all infra is now under Andrew's own acco
 - **Production URL: https://ozark-open-sportsbook.vercel.app** — Vercel project `nerdyandyproject/ozark-open-sportsbook`, auto-deploys `main`.
 - **`ozark-open.vercel.app` is NOT ours** — it's the fork's stale deployment and still serves a broken build. Ignore it; never use it for testing or in Supabase config.
 - **Supabase project:** `rbjqqzjqhsbcotqfrwhb` · auth uses the new-style **publishable** key (`sb_publishable_…`, the `anon` replacement).
-- **Supabase Auth URL config** must list the production URL as `https://ozark-open-sportsbook.vercel.app/**` plus `http://localhost:3001/**` for local dev. The app derives `emailRedirectTo` from the **request host**, so any new domain must be added here or magic links break.
+- **Supabase Auth URL config** must list the production URL as `https://ozark-open-sportsbook.vercel.app/**` plus `http://localhost:3000/**` for local dev. The app derives `emailRedirectTo` from the **request host**, so any new domain must be added here or magic links break.
 - **Env-var gotcha (cost hours):** the Vercel dashboard silently saved `NEXT_PUBLIC_*` vars with **empty values**, and `NEXT_PUBLIC_*` is inlined at **build** time — so every build baked in blanks and login failed with "fetch failed". Set them via CLI and verify:
   ```
   vercel env add NEXT_PUBLIC_SUPABASE_URL production --value '<url>' --no-sensitive --force
