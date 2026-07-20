@@ -104,8 +104,8 @@ export default async function ProfilePage() {
               !tournament
                 ? "No tournament yet"
                 : participant
-                  ? `Registered${participant.is_player ? "" : " (non-player)"}`
-                  : "Not registered"
+                  ? `Approved${participant.is_player ? "" : " (non-player)"}`
+                  : "Pending approval"
             }
             tone={participant ? "good" : "muted"}
           />
@@ -117,10 +117,10 @@ export default async function ProfilePage() {
             label="Ready to bet"
             value={
               !participant
-                ? "Ask an admin to add you to the pool"
+                ? "An admin will approve you to bet soon"
                 : readyToBet
                   ? "Yes — the book is open"
-                  : "Registered — betting opens when the book does"
+                  : "Approved — betting opens when the book does"
             }
             tone={readyToBet ? "good" : "muted"}
           />

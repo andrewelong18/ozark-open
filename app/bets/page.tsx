@@ -210,8 +210,8 @@ export default async function BetsPage() {
 
       {user && !isParticipant && (
         <p className="mb-4 rounded-lg border border-border bg-surface-sunken px-4 py-3 text-sm text-text-muted">
-          You&apos;re browsing the menu — betting is for registered
-          participants. Ask an admin to add you to the pool.
+          You&apos;re registered — an admin just needs to approve you before you
+          can place bets. Browse the full menu in the meantime.
         </p>
       )}
 
