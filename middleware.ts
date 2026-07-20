@@ -38,14 +38,41 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname
-  const protectedRoutes = ["/dashboard", "/bets", "/my-bets", "/admin", "/results", "/profile"]
+  const protectedRoutes = [
+    "/dashboard",
+    "/bets",
+    "/my-bets",
+    "/admin",
+    "/results",
+    "/profile",
+    "/onboarding",
+  ]
   const isProtected = protectedRoutes.some((r) => pathname.startsWith(r))
 
   if (!user && isProtected) {
     return NextResponse.redirect(new URL("/login", request.url))
   }
-  if (user && pathname === "/login") {
-    return NextResponse.redirect(new URL("/dashboard", request.url))
+
+  // First-run onboarding gate (Sprint 16): an authenticated member with
+  // onboarded_at IS NULL must complete the required setup step before the rest
+  // of the app. Skip the check for the onboarding page itself and the auth
+  // callback so they can actually get there / sign in.
+  if (user && !pathname.startsWith("/auth")) {
+    const { data: profile } = await supabase
+      .from("users")
+      .select("onboarded_at")
+      .eq("id", user.id)
+      .maybeSingle()
+    const onboarded = Boolean(
+      (profile as { onboarded_at: string | null } | null)?.onboarded_at
+    )
+
+    if (!onboarded && !pathname.startsWith("/onboarding")) {
+      return NextResponse.redirect(new URL("/onboarding", request.url))
+    }
+    if (onboarded && (pathname === "/login" || pathname.startsWith("/onboarding"))) {
+      return NextResponse.redirect(new URL("/dashboard", request.url))
+    }
   }
 
   return supabaseResponse
