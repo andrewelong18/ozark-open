@@ -86,6 +86,10 @@ ozark-open/
 5. Start the dev server: `npm run dev`
 6. Visit http://localhost:3000
 
+> **Testing the app end-to-end?** See [`docs/DEV_TESTING.md`](docs/DEV_TESTING.md) — a cheat
+> sheet for running the full stack locally with pre-seeded dummy accounts and magic-link
+> logins caught in a local inbox (no real email needed).
+
 ### Tests & verification
 
 - `npm run test` — unit tests (every `lib/*.test.ts`: validation, placements, my-bets, closed-bets, payouts, admin view).
