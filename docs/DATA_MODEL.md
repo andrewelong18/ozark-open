@@ -113,17 +113,18 @@ One row per person who ever logs in. Persists across tournaments forever.
 |---|---|---|
 | `id` | `uuid` PK | Matches `auth.users.id` from Supabase Auth |
 | `email` | `text` UNIQUE NOT NULL | Used for magic-link login |
-| `display_name` | `text` NOT NULL | E.g. "Dan Mercer" — what shows on bets and leaderboards. **Admin-set only** (Studio / import name-matching, ADR 0001 §11); never user-editable. |
+| `display_name` | `text` NOT NULL | E.g. "Dan Mercer" — what shows on bets and leaderboards. Set **once by the member** at onboarding (Sprint 16 / A12), then **admin-owned** (Studio / import name-matching, ADR 0001 §11). Defaults to the email until onboarding overwrites it. |
 | `nickname` | `text` NULL | Sprint 15 — a user-set *cosmetic* nickname shown next to `display_name` everywhere (a touch smaller, never a muted subtext). Null = none. Does **not** affect import name-matching. |
 | `avatar_url` | `text` NULL | Sprint 15 — public URL of the user's uploaded avatar in the `avatars` storage bucket (`<uid>/avatar`, cache-busted). Null → a branded initials placeholder renders. |
 | `is_admin` | `boolean` NOT NULL DEFAULT `false` | Admins are Pat, Jake, Steve, Andrew. Not user-editable (guard trigger). |
+| `onboarded_at` | `timestamptz` NULL | Sprint 16 — stamped when the member completes the required first-run step. NULL → the middleware forces `/onboarding`. Also the guard's one-time-set window for `display_name` (see below). Existing members were backfilled as already-onboarded. |
 | `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | |
 
 **Why no `password` column:** there are no passwords. Authentication is magic-link only via Supabase Auth.
 
 **Why no `venmo_handle` column:** the app does not handle payment. Pat keeps Venmo info in his phone, as today.
 
-**Self-serve edits (Sprint 15).** An own-row `UPDATE` RLS policy (`auth.uid() = id`) lets a member update their own row, but a `BEFORE UPDATE` guard trigger (`guard_users_self_update`) pins `id`/`email`/`display_name`/`is_admin`/`created_at` for any logged-in non-admin — so `/profile` can change only `nickname` + `avatar_url`. Admins (import name-matching runs under an admin session) and Studio/service writes (`auth.uid()` is null) are unaffected. Avatars live in a public `avatars` storage bucket where a user may write only under their own `<uid>/` prefix (`20260719000000_user_profiles.sql`, `20260719000001_avatars_bucket.sql`).
+**Self-serve edits (Sprint 15, refined Sprint 16).** An own-row `UPDATE` RLS policy (`auth.uid() = id`) lets a member update their own row, and a `BEFORE UPDATE` guard trigger (`guard_users_self_update`) pins `id`/`email`/`is_admin`/`created_at` for any logged-in non-admin. `display_name` + `onboarded_at` are also pinned **once `onboarded_at IS NOT NULL`** — so a member may set their own `display_name` exactly once (their `/onboarding` write, which also stamps `onboarded_at`), after which `/profile` can change only `nickname` + `avatar_url` (A12). Admins (import name-matching runs under an admin session) and Studio/service writes (`auth.uid()` is null) are unaffected. Avatars live in a public `avatars` storage bucket where a user may write only under their own `<uid>/` prefix (`20260719000000_user_profiles.sql`, `20260719000001_avatars_bucket.sql`, `20260720000000_onboarding_and_bettor_approval.sql`).
 
 ---
 
@@ -163,9 +164,11 @@ Join table connecting users to tournaments. A user is "in" a tournament for a gi
 | `entry_fee` | `int` NOT NULL CHECK (`entry_fee BETWEEN 20 AND 50`) | The participant's chosen entry, $20–$50 |
 | `is_player` | `boolean` NOT NULL DEFAULT `true` | True if they're playing golf, false if they're only betting (rare) |
 
-**Constraint:** UNIQUE (`user_id`, `tournament_id`) — a user can only join a tournament once.
+**Constraint:** UNIQUE (`user_id`, `tournament_id`) — a user can only join a tournament once. (The `entry_fee` CHECK was relaxed to `> 0` in `20260717000000_bet_pick_rework.sql`; the $20–$50 bounds live on the `tournaments` row and are enforced in app code — DATA_MODEL §6 known inconsistency.)
 
 **Why `is_player`:** the rules talk about "betting on yourself" — that only matters if the bettor is also a player. Non-playing entrants (if any) are exempt from the self-bet rule.
+
+**How rows are created (Sprint 16 / A12).** A member logging in does **not** create a participant row — they're onboarded but not yet in the pool, so they can view the menu but not bet. An admin approves them on `/admin/participants`, which sets the entry fee + player flag and **creates the row**. The row existing = approved to bet; there is no separate `betting_enabled` flag. Writes stay admin-only (RLS): `POST/PATCH/DELETE /api/admin/participants` re-checks `is_admin` and validates the fee against the `tournaments` row. This replaces the old manual Supabase Studio row-add.
 
 ---
 

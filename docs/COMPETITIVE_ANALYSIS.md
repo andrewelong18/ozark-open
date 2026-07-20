@@ -71,7 +71,7 @@ requires a new bet type.
 - **DK/FanDuel:** a guided first-bet flow that teaches the mechanics before you risk anything.
 - **Ozark:** the rules are genuinely non-obvious (phases, 5–10 picks *per phase*, total must equal entry exactly, bets go public at close). A dismissible first-login walkthrough — 3–4 cards — plus a persistent "How it works" entry point removes the "wait, how does this work?" texts to Pat.
 - **Impact:** High · **Effort:** S · **Scope-fit:** ✅ — pairs naturally with the Sprint 14 announcement banner (shared dismiss-in-`sessionStorage` pattern).
-- **Slot:** new Sprint 16 stub (§5), or fold the explainer content into Sprint 14.
+- **Slot:** ✅ **cut into [Sprint 16](sprints/sprint-16.md) and built** (Jul 20, 2026) — expanded on Andrew's direction beyond the walkthrough to also add **self-set identity** (required display name at onboarding) and an in-app **admin bettor-approval** step (`/admin/participants` creates the participant row). The walkthrough itself is the 4-card `HowItWorks` shown at the end of `/onboarding` and re-openable from the dashboard.
 
 ### 1.3 Bet-slip / review-before-commit
 - **DK/FanDuel:** add picks to a slip, *then* review the whole thing and confirm.
@@ -166,6 +166,8 @@ Numbers are suggestions; renumber to whatever's next.
 **Done when:** a participant reads their own status and (per policy) sets their display name without an admin touching Studio.
 
 ### Sprint 16 — First-Run Onboarding & "How It Works" (Bonus)
+
+> ✅ **Cut into [`docs/sprints/sprint-16.md`](sprints/sprint-16.md) and built** (Jul 20, 2026), expanded beyond this stub: alongside the walkthrough it adds required **self-set identity** (display name at onboarding, admin-verified at approval — PRD §12 A12) and **admin bettor-approval** (`/admin/participants` creates the participant row, replacing the manual Studio add). The stub below is kept for provenance.
 
 **Goal:** a dismissible first-login walkthrough of phases, the 5–10-picks-per-phase / exact-entry-total rule, and the reveal-at-close mechanic, plus a persistent entry point.
 **Target:** before betting opens (most useful early) · **Blockers:** none hard.

@@ -127,7 +127,8 @@ Everything an admin does during tournament week runs on **two tracks** (full rat
 | Track | Tool | Owns |
 |---|---|---|
 | 1 | The bets spreadsheet → **`/admin/import`** | The entire menu: bets, picks, odds, probabilities, **statuses** (`hidden`/`open`/`closed`), **results** (`hit`/`miss`/`push`/`void`) |
-| 2 | **Supabase Studio** (Table Editor) | People and fixes: admins, display names, participants, entry fees, pick→player links |
+| 1b | **`/admin/participants`** | Approving bettors: verify a member's display name, set entry fee + player flag, create/edit/revoke their pool entry (Sprint 16) |
+| 2 | **Supabase Studio** (Table Editor) | Remaining fixes: promoting admins, one-off data fixes, pick→player links |
 
 Three rules make the whole thing safe:
 
@@ -180,8 +181,8 @@ No deployments, no code, no Git — the app re-renders on the next page load.
 Studio (https://supabase.com/dashboard → Project → Table Editor) is the admin UI for everything that isn't the menu — **data only, never schema**:
 
 - **Promote an admin:** `users` → set `is_admin = true`.
-- **Fix a display name:** `users` → `display_name` (new accounts default to their email address). Names matter twice: they're what everyone sees on closed bets, and the importer matches pick labels against them. **This stays admin-only** — members can't edit `display_name` (a guard trigger enforces it), so import name-matching can't be broken from the app. Members *do* self-manage their own `nickname` + `avatar_url` on `/profile` (Sprint 15) — those are cosmetic and never affect matching, so leave them alone in Studio.
-- **Register a participant:** add a row to `tournament_participants` with their `entry_fee` (and `is_player` if they're in the field).
+- **Fix a display name:** `users` → `display_name`. Members set their own name **once** at onboarding (Sprint 16); after that a guard trigger pins it, so corrections are an admin job — in Studio, or (cleaner) on the approval card at **`/admin/participants`**. Names matter twice: they're what everyone sees on closed bets, and the importer matches pick labels against them. Members *do* self-manage their own `nickname` + `avatar_url` on `/profile` (Sprint 15) — those are cosmetic and never affect matching, so leave them alone in Studio.
+- **Register / approve a participant:** use **`/admin/participants`** (Sprint 16), not Studio — approving a member sets their `entry_fee` + `is_player` and creates the `tournament_participants` row that grants betting access. (The row can still be hand-edited in Studio if ever needed; the app's gate is simply whether it exists.)
 - **Link an unmatched pick to a player:** `bet_picks` → set `player_user_id` (this powers self-pick flagging). The importer respects hand-set links on every future upload.
 - **One-off data fixes** as needed.
 

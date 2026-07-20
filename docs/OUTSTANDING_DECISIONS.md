@@ -33,16 +33,17 @@ explicit confirm-or-supersede rather than a silent default:
   leaderboard kept (Sprint 8, Google Sheets read-only). Note: results now arrive
   via the bets-spreadsheet upload, so if the leaderboard is dropped, the Google
   Sheets integration disappears entirely and Sprint 8 with it.
-- **Display names.** ✅ **Resolved Jul 19, 2026 (PRD §12 A11, Sprint 15).** Rather
-  than pick between user-set (Pat, Jul 11) and admin-set (Q13), Sprint 15 keeps
-  `display_name` **admin-set** — it feeds import name-matching (ADR 0001 §11) — and
-  gives users a **separate cosmetic `nickname`** (plus an avatar) they set on
-  `/profile`. Import name-matching is untouched; the user still gets self-serve
-  identity. Nothing further needed here.
-- **Per-user betting toggle + non-player cap.** Pat (Jul 11): admins can
-  enable/disable betting per user (`betting_enabled` on `tournament_participants`)
-  and non-players carry a stricter max (see #2). Neither is in the Jul 15 schema;
-  add in the Sprint 1 rework migration if confirmed.
+- **Display names.** ✅ **Resolved Jul 19 (A11, Sprint 15), refined Jul 20, 2026
+  (PRD §12 A12, Sprint 16).** Sprint 15 kept `display_name` admin-set with a separate
+  cosmetic `nickname`. Sprint 16 then lets a member set their own `display_name`
+  **once** at required onboarding (guard permits it only while `onboarded_at IS NULL`);
+  the **admin verifies/corrects it at approval**, so import name-matching (ADR 0001 §11)
+  still only ever sees an admin-owned name. Nothing further needed here.
+- **Per-user betting toggle + non-player cap.** The betting-toggle half is ✅
+  **superseded Jul 20, 2026 (Sprint 16 / A12).** Rather than a `betting_enabled`
+  column, betting eligibility is gated by whether a `tournament_participants` row
+  exists, and admins grant/revoke it on `/admin/participants` (approving creates the
+  row). The **non-player stricter cap** (#2) is still open.
 
 ## 2. Stricter betting maximum for non-playing bettors
 **Owner:** Pat + Jake · **Blocks:** the non-player path in `lib/validation.ts` (Sprint 3).
