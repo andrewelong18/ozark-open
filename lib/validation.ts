@@ -142,7 +142,7 @@ export function validatePhasePickCount(ctx: PlacementContext, rules: TournamentR
   if (ctx.existing.some((p) => p.pick_id === ctx.pick.id)) return null
   const inPhase = ctx.existing.filter((p) => p.phase === ctx.bet.phase).length
   if (inPhase >= rules.max_picks_per_phase)
-    return `You've already wagered on ${inPhase} picks in Phase ${ctx.bet.phase} — the maximum is ${rules.max_picks_per_phase}.`
+    return `Phase ${ctx.bet.phase} is full — ${rules.max_picks_per_phase} picks max.`
   return null
 }
 
@@ -176,7 +176,7 @@ export function validateRunningTotal(ctx: PlacementContext, amount: number): str
     .reduce((sum, p) => sum + p.amount, 0)
   const total = otherTotal + amount
   if (total > ctx.bettor.entry_fee)
-    return `This would put your total wagered at $${total} — your $${ctx.bettor.entry_fee} entry is the most you can wager across both phases.`
+    return `Over your $${ctx.bettor.entry_fee} entry — that's the most you can wager across both phases.`
   return null
 }
 

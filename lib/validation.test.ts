@@ -145,7 +145,7 @@ test("phase pick count: 11th pick in a phase is rejected", () => {
     placement({ pick_id: `pick-${i}`, phase: 1 })
   )
   const c = ctx({ existing: ten })
-  assert.match(validatePhasePickCount(c, rules)!, /maximum is 10/)
+  assert.match(validatePhasePickCount(c, rules)!, /Phase 1 is full — 10 picks max/)
 })
 
 test("phase pick count: the other phase doesn't count", () => {
@@ -173,7 +173,7 @@ test("multi-pick counting: $3 on three picks of one bet = 3 toward the count", (
     ),
   ]
   const c = ctx({ existing })
-  assert.match(validatePhasePickCount(c, rules)!, /already wagered on 10 picks/)
+  assert.match(validatePhasePickCount(c, rules)!, /Phase 1 is full/)
 })
 
 // ---------------------------------------------------------------------------
@@ -238,7 +238,7 @@ test("running total: capped at the entry fee across both phases", () => {
   ]
   const c = ctx({ existing })
   assert.equal(validateRunningTotal(c, 5), null) // exactly $40
-  assert.match(validateRunningTotal(c, 6)!, /total wagered at \$41/)
+  assert.match(validateRunningTotal(c, 6)!, /Over your \$40 entry/)
 })
 
 test("running total: same-pick edit replaces the old amount", () => {
@@ -365,7 +365,7 @@ test("validatePlacement: collects every violated rule", () => {
   assert.deepEqual(result.errors, [
     "This bet is not open for wagering.",
     "Max single bet is $10 for your $20 entry.",
-    "This would put your total wagered at $26 — your $20 entry is the most you can wager across both phases.",
+    "Over your $20 entry — that's the most you can wager across both phases.",
     "This bet allows only one pick per participant.",
     "You can't bet on your opponent in a match you're playing in.",
   ])

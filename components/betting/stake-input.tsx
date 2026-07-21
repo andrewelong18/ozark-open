@@ -97,9 +97,8 @@ export function StakeInput({
           {placed ? "✓" : "↵"}
         </button>
       </div>
-      {error && (
-        <span className="text-[11px] font-medium text-loss">{error}</span>
-      )}
+      {/* The error message itself is surfaced by the menu's floating toast so
+          the input never reflows — here `error` only reddens the border above. */}
       {!error && placed && (
         <span className="text-[11px] font-semibold text-win-strong">
           Bet placed

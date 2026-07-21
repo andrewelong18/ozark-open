@@ -332,7 +332,7 @@ test("every §7 violation surfaces its validation message verbatim", () => {
       amount: 1,
       existing: Array.from({ length: 10 }, (_, i) => placementOn(`p${i}`, 1)),
       expected:
-        "You've already wagered on 10 picks in Phase 1 — the maximum is 10.",
+        "Phase 1 is full — 10 picks max.",
     },
     {
       name: "over the self-bet cap",
@@ -361,7 +361,7 @@ test("every §7 violation surfaces its validation message verbatim", () => {
       amount: 20,
       existing: [placementOn("p1", 15), placementOn("p2", 10, 2)],
       expected:
-        "This would put your total wagered at $45 — your $40 entry is the most you can wager across both phases.",
+        "Over your $40 entry — that's the most you can wager across both phases.",
     },
     {
       name: "second pick in a single-pick bet",
