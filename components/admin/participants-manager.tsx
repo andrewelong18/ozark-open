@@ -273,7 +273,7 @@ export function ParticipantsManager({
         </h2>
         {pending.length === 0 ? (
           <p className="text-sm text-text-muted">
-            No one's waiting — every registered member is in the pool.
+            No one&apos;s waiting — every registered member is in the pool.
           </p>
         ) : (
           pending.map((u) => (
