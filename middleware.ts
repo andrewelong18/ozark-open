@@ -42,6 +42,7 @@ export async function middleware(request: NextRequest) {
     "/dashboard",
     "/bets",
     "/my-bets",
+    "/leaderboard",
     "/admin",
     "/results",
     "/profile",

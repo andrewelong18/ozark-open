@@ -313,7 +313,7 @@ All fifteen questions from Draft v2 were answered by Jake on July 9, 2026 (Q1/Q2
 | Q12 | After close, **everyone's individual amounts are visible** — not just who bet on what. |
 | Q13 | Display names are **admin-set in Studio** for v1 — they feed the importer's name-matching (ADR 0001 §11), so they stay admin-controlled. **Refined by A11, then A12** (member sets it once at onboarding; admin verifies at approval and owns it thereafter). |
 | Q14 | **Non-playing bettors are supported** (exempt from the self-bet rule); expect 0–2. |
-| Q15 | Leaderboard mirrors **one Google Sheets tab — player, thru, score, position — updated after each day.** |
+| Q15 | Leaderboard mirrors **one Google Sheets tab, "Sportsbook Leaderboard," updated after each day.** ~~Original columns: player, thru, score, position.~~ **Revised (Pat, Jul 21):** the tab Pat built has eight columns — Position, Player, Round 1 Points, Round 2 Points, Total Points, Starting Strokes, Round 3 Score, Final Score. The last three are to-par values displayed with the sheet's `+0;-0;"E"` number format (positive `+N`, negative `-N`, zero `E`, blank when not yet scored). The app reads the tab read-only and renders it verbatim — it never computes standings. |
 
 ### Defaults already taken (not blocking — speak up only to change)
 
