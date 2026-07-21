@@ -75,8 +75,10 @@ export function ProfileTabs({
         </div>
       </div>
 
-      {/* Sub-nav — the persistent second-level pill rail. */}
-      <nav className="flex gap-1 overflow-x-auto rounded-full border border-border bg-surface-sunken p-1">
+      {/* Sub-nav — the persistent second-level pill rail. On mobile it bleeds to
+          the right screen edge under a fade so the horizontal scroll is
+          discoverable; contained again once it fits (sm+). */}
+      <nav className="scrollbar-none fade-right sm:fade-right-none -mr-4 flex gap-1 overflow-x-auto rounded-full rounded-r-none border border-r-0 border-border bg-surface-sunken p-1 sm:mr-0 sm:rounded-r-full sm:border-r">
         {tabs.map((t) => {
           const active = t.id === tab
           return (

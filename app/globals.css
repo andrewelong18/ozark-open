@@ -370,3 +370,26 @@
 .animate-stake-flash {
   animation: stake-flash var(--dur-slow) var(--ease-out);
 }
+
+/* Pill-nav scroll affordance (see SiteNav / ProfileTabs): hide the scrollbar
+   and fade the right edge so the bar reads as "scroll for more." Registered as
+   @utility so they compose with responsive variants (e.g. sm:fade-right-none to
+   drop the fade once the bar fits). */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+@utility fade-right {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 2rem),
+    transparent
+  );
+  mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent);
+}
+@utility fade-right-none {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
