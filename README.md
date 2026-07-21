@@ -81,7 +81,7 @@ ozark-open/
 
 1. Clone the repo: `git clone https://github.com/<your-username>/ozark-open-sportsbook.git`
 2. Install dependencies: `npm install`
-3. Copy `.env.local.example` to `.env.local` and fill in your Supabase URL and anon key (find them at https://supabase.com/dashboard → Project → Settings → API).
+3. Copy `.env.local.example` to `.env.local` and fill in your Supabase URL and anon key (find them at https://supabase.com/dashboard → Project → Settings → API). The `GOOGLE_*` vars power the read-only `/leaderboard` mirror (Sprint 8) — leave them blank locally and the page shows a friendly "no standings yet" state; fill them in to read a real Google Sheet (see `.env.local.example` for how to set up the service account).
 4. Run database migrations: `npx supabase db push` (or run the SQL files in `supabase/migrations/` manually in the Supabase SQL editor).
 5. Start the dev server: `npm run dev`
 6. Visit http://localhost:3000
