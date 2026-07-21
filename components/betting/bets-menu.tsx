@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useMemo, useState } from "react"
+import { Fragment, useCallback, useMemo, useState } from "react"
 
 import { Card } from "@/components/ui/card"
 import { Avatar } from "@/components/avatar"
@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/betting/status-badge"
 import { PickRow } from "@/components/betting/pick-row"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import { BetPlacementCard } from "@/components/betting/bet-placement-card"
+import { BetErrorToast } from "@/components/betting/bet-error-toast"
 import { EmptyState } from "@/components/modules/empty-state"
 import { formatProbability } from "@/lib/format"
 import { isBetSettled, toResult, type PickPlacements } from "@/lib/closed-bets"
@@ -138,6 +139,10 @@ export function BetsMenu({
   const [status, setStatus] = useState<StatusFilter>("all")
   const [round, setRound] = useState<string>("all")
   const [categories, setCategories] = useState<string[]>([])
+  // Rule-violation messages surface as one floating toast (see BetErrorToast)
+  // instead of inline, so the stake input never reflows.
+  const [toastError, setToastError] = useState<string | null>(null)
+  const dismissToast = useCallback(() => setToastError(null), [])
 
   // Every bet on the page, flattened — used to decide which controls are
   // even worth showing (a lone round or an all-open menu needs no filter).
@@ -366,6 +371,7 @@ export function BetsMenu({
                               }))}
                             placements={placements}
                             lockedOdds={lockedOdds}
+                            onError={setToastError}
                           />
                         ) : (
                           <Card key={bet.id} className="gap-0 p-0">
@@ -429,6 +435,7 @@ export function BetsMenu({
           ))}
         </div>
       )}
+      <BetErrorToast message={toastError} onDismiss={dismissToast} />
     </>
   )
 }

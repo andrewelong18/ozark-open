@@ -20,18 +20,26 @@ function partsUntil(target: number, now: number): Parts {
   }
 }
 
+// A once-per-second clock via useSyncExternalStore: the server snapshot is null
+// (so SSR + first client render agree — no hydration mismatch) and the client
+// snapshot is bucketed to whole seconds so repeated reads within a tick are
+// equal (React requires a stable snapshot between notifications).
+function subscribe(onTick: () => void) {
+  const id = setInterval(onTick, 1000)
+  return () => clearInterval(id)
+}
+const clientSnapshot = () => Math.floor(Date.now() / 1000)
+const serverSnapshot = () => null
+
 export function Countdown({ target }: { target: Date }) {
   const targetMs = target.getTime()
 
-  // Start from 0s so the server-rendered markup and the first client render
-  // agree; the real values arrive on mount, avoiding a hydration mismatch.
-  const [now, setNow] = React.useState<number | null>(null)
-
-  React.useEffect(() => {
-    setNow(Date.now())
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [])
+  const nowSec = React.useSyncExternalStore(
+    subscribe,
+    clientSnapshot,
+    serverSnapshot
+  )
+  const now = nowSec == null ? null : nowSec * 1000
 
   const reached = now != null && now >= targetMs
   const parts = partsUntil(targetMs, now ?? targetMs)

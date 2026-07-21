@@ -31,6 +31,10 @@ export type BetPlacementCardProps = {
    * receipt (Sprint 17 §1.5). Kept separate from live odds so the receipt
    * shows what was locked, never the pick's current menu odds. */
   lockedOdds?: Record<string, number>
+  /** Surfaces a rule-violation message as the menu's floating toast instead of
+   * inline, so the stake input never reflows. The row still flags its own
+   * `error` state to turn the input border red. */
+  onError?: (message: string) => void
 }
 
 /** The confirmed placement behind a row's receipt — the locked odds and stake
@@ -62,6 +66,7 @@ export function BetPlacementCard({
   picks,
   placements,
   lockedOdds = {},
+  onError,
 }: BetPlacementCardProps) {
   const router = useRouter()
 
@@ -125,6 +130,7 @@ export function BetPlacementCard({
           data?.error ??
           "Something went wrong — try again."
         patchRow(pick.id, { placed: false, error: message })
+        onError?.(message)
         return
       }
       // Receipt from the write's own return row: the snapshotted odds and
@@ -141,7 +147,9 @@ export function BetPlacementCard({
       setLive((m) => ({ ...m, [pick.id]: amount }))
       router.refresh()
     } catch {
-      patchRow(pick.id, { placed: false, error: "Couldn't reach the book — check your connection." })
+      const message = "Couldn't reach the book — check your connection."
+      patchRow(pick.id, { placed: false, error: message })
+      onError?.(message)
     } finally {
       setBusy(null)
     }
@@ -172,6 +180,7 @@ export function BetPlacementCard({
           data?.error ??
           "Something went wrong — try again."
         patchRow(pick.id, { error: message })
+        onError?.(message)
         return
       }
       patchRow(pick.id, { value: "", placed: false, error: null, receipt: null })
@@ -182,7 +191,9 @@ export function BetPlacementCard({
       })
       router.refresh()
     } catch {
-      patchRow(pick.id, { error: "Couldn't reach the book — check your connection." })
+      const message = "Couldn't reach the book — check your connection."
+      patchRow(pick.id, { error: message })
+      onError?.(message)
     } finally {
       setBusy(null)
     }
@@ -194,9 +205,7 @@ export function BetPlacementCard({
     if (allowsMultiplePicks) return
     if (placedPickId && placedPickId !== pick.id) {
       const placedLabel = picks.find((p) => p.id === placedPickId)?.label ?? "your pick"
-      patchRow(pick.id, {
-        error: `Remove your $${live[placedPickId]} on ${placedLabel} to switch picks.`,
-      })
+      onError?.(`Remove your $${live[placedPickId]} on ${placedLabel} to switch picks.`)
       return
     }
     setSelected(pick.id)
@@ -281,12 +290,6 @@ export function BetPlacementCard({
                   probability={pick.probability}
                 />
               </div>
-              {/* Hint/error for rows without their own input (pick-one) */}
-              {!showInput && state.error && (
-                <span className={cn("text-[11px] font-medium text-loss", !allowsMultiplePicks && "pl-[30px]")}>
-                  {state.error}
-                </span>
-              )}
             </div>
 
             {showInput && (
