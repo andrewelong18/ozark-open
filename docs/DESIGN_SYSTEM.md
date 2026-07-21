@@ -153,6 +153,11 @@ nav with gold active pill, active via `usePathname`).
 - **Adding a component:** reuse/extend the shadcn primitive if one fits;
   otherwise add under `components/betting|modules/` and bind classes to the
   semantic tokens above — don't reach past them to raw hex.
+- **Destructive / irreversible actions read red.** Buttons that log out, remove,
+  or delete use the `destructive` `Button` variant (tonal loss red). Inline text
+  controls that do the same (e.g. the bet-menu "Remove bet" link) use `text-loss`
+  (→ `text-loss-strong` on hover). Red is reserved for this and for losses/errors
+  — never for ordinary emphasis.
 - **Verify:** `npm run lint` and `npx tsc --noEmit` and `npm run build` must stay
   green. The `ozark-open-design` skill (`.claude/skills/ozark-open-design/`) is
   vendored reference and is excluded from linting.

@@ -311,7 +311,7 @@ export function BetPlacementCard({
                     type="button"
                     onClick={() => requestRemove(pick)}
                     disabled={busy === pick.id}
-                    className="cursor-pointer text-[11px] font-medium text-text-muted transition-colors hover:text-loss"
+                    className="cursor-pointer text-[11px] font-medium text-loss transition-colors hover:text-loss-strong"
                   >
                     ✕ Remove bet
                   </button>

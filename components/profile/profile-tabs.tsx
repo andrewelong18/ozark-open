@@ -119,7 +119,7 @@ export function ProfileTabs({
 
       {/* Log out — pinned to the bottom of every sub-page. */}
       <form method="POST" action="/auth/signout" className="mt-auto pt-4">
-        <Button variant="secondary" type="submit" className="w-full">
+        <Button variant="destructive" type="submit" className="w-full">
           Log out
         </Button>
       </form>
