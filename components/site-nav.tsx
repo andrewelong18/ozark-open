@@ -12,6 +12,7 @@ const NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Bet Menu", href: "/bets" },
   { label: "My Bets", href: "/my-bets" },
+  { label: "Leaderboard", href: "/leaderboard" },
 ]
 
 /**
