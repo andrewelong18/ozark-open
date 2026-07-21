@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/server"
 import { StatusBadge, type BetStatus } from "@/components/betting/status-badge"
 import { BetSlipSummary } from "@/components/betting/bet-slip-summary"
@@ -202,7 +203,13 @@ export default async function BetsPage() {
   const phases = groupBets(bets)
 
   return (
-    <div className="mx-auto grid max-w-[var(--container-max,1120px)] grid-cols-1 gap-4 px-4 py-6 lg:grid-cols-3 lg:gap-6">
+    <div
+      className={cn(
+        "mx-auto grid max-w-[var(--container-max,1120px)] grid-cols-1 gap-4 px-4 py-6 lg:grid-cols-3 lg:gap-6",
+        // Clear the fixed review bar so it never covers the last content.
+        slip && "pb-28"
+      )}
+    >
       <div className="lg:col-span-2">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h1 className="font-heading text-3xl text-text-strong">Bet Menu</h1>
@@ -230,17 +237,16 @@ export default async function BetsPage() {
       {/* Reserved right rail — empty for now (matches dashboard's 2/3 split). */}
       <aside className="hidden lg:col-span-1 lg:block" aria-hidden />
 
-      {/* Sticky review bar spans the full frame, below both columns. */}
+      {/* Fixed review bar — pinned to the viewport bottom, outside the grid flow
+          so it doesn't reserve a row. */}
       {slip && (
-        <div className="lg:col-span-3">
-          <BetSlipSummary
-            entryFee={slip.entryFee}
-            totalWagered={slip.totalWagered}
-            remaining={slip.remaining}
-            pickCount={slip.pickCount}
-            items={slip.items}
-          />
-        </div>
+        <BetSlipSummary
+          entryFee={slip.entryFee}
+          totalWagered={slip.totalWagered}
+          remaining={slip.remaining}
+          pickCount={slip.pickCount}
+          items={slip.items}
+        />
       )}
     </div>
   )

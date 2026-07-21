@@ -3,9 +3,10 @@ import { cn } from "@/lib/utils"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import type { ComplianceItem } from "@/lib/my-bets"
 
-// Bet-slip review summary (Sprint 17 · Competitive Analysis §1.3). A sticky
-// footer bar on /bets that keeps "am I balanced?" answered while the
-// participant scrolls the menu — the review-at-the-moment-of-placing surface,
+// Bet-slip review summary (Sprint 17 · Competitive Analysis §1.3). A fixed
+// footer bar on /bets, pinned to the viewport bottom so "am I balanced?" stays
+// answered the whole time — not just at the end of the page. The
+// review-at-the-moment-of-placing surface,
 // not a draft bet slip. Every number is handed in precomputed by the page
 // from the same lib/validation.ts + lib/my-bets.ts helpers /my-bets uses, so
 // the two views can never disagree. Server component: it re-renders on the
@@ -55,8 +56,8 @@ export function BetSlipSummary({
         : lead.title
 
   return (
-    <aside className="sticky bottom-0 z-20 -mx-4 px-4 pt-2 pb-3">
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-surface-card px-4 py-3 shadow-[0_-2px_16px_rgba(31,29,60,0.12)]">
+    <aside className="fixed inset-x-0 bottom-0 z-30 px-4 pb-3">
+      <div className="mx-auto flex max-w-[var(--container-max,1120px)] items-center justify-between gap-4 rounded-xl border border-border bg-surface-card px-4 py-3 shadow-[0_-2px_16px_rgba(31,29,60,0.12)]">
         <div className="min-w-0">
           <div className="flex items-baseline gap-1.5">
             <MoneyDisplay value={totalWagered} size="md" weight="bold" />
