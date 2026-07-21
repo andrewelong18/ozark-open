@@ -7,6 +7,7 @@ import { BudgetModule } from "@/components/modules/budget-module"
 import { RulesCard } from "@/components/modules/rules-card"
 import { EmptyState } from "@/components/modules/empty-state"
 import { HowItWorksLauncher } from "@/components/onboarding/how-it-works-launcher"
+import { Countdown } from "@/components/countdown"
 import Link from "next/link"
 import {
   checkPhaseMinimums,
@@ -216,6 +217,19 @@ export default async function DashboardPage() {
       <aside className="lg:col-span-1">
         <section className="flex h-full flex-col gap-3">
           <h2 className="font-heading text-lg text-text-strong">Activity</h2>
+          {/* Countdown to the opening ceremony: 8:00 PM Central (CDT, UTC−5) on
+              Sep 24, 2026. */}
+          <Card>
+            <CardContent className="flex flex-col gap-3">
+              <div>
+                <div className="font-heading text-lg text-text-strong">
+                  Opening ceremony
+                </div>
+                <p className="text-sm text-text-muted">Sep 24, 2026 · 8:00 PM CT</p>
+              </div>
+              <Countdown target={new Date("2026-09-24T20:00:00-05:00")} />
+            </CardContent>
+          </Card>
           <EmptyState
             glyph="📣"
             title="No activity yet"
