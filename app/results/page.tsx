@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar } from "@/components/avatar"
-import { UserName } from "@/components/user-name"
+import { PlayerChip } from "@/components/player/player-chip"
 import { EmptyState } from "@/components/modules/empty-state"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import {
@@ -126,10 +126,15 @@ export default async function ResultsPage() {
                 <div className="text-[11px] font-bold tracking-wider uppercase text-gold-300">
                   Top Payout
                 </div>
-                <div className="mt-0.5 font-heading text-2xl leading-tight text-white">
-                  <UserName
+                <div className="mt-0.5">
+                  <PlayerChip
+                    userId={winner.user_id}
                     displayName={winner.display_name}
                     nickname={winner.nickname}
+                    hideAvatar
+                    tone="onDark"
+                    nameClassName="font-heading text-2xl leading-tight text-white"
+                    nicknameClassName="text-gold-300"
                   />
                 </div>
               </div>
@@ -179,24 +184,20 @@ export default async function ResultsPage() {
                   >
                     {i + 1}
                   </span>
-                  <span className="flex min-w-0 items-center gap-2">
-                    <Avatar
-                      src={row.avatar_url}
-                      name={row.display_name}
-                      size="sm"
-                    />
-                    <span className="min-w-0 truncate text-sm font-semibold text-text-strong">
-                      <UserName
-                        displayName={row.display_name}
-                        nickname={row.nickname}
-                      />
-                      {row.refunded > 0 && (
-                        <span className="ml-1.5 text-xs font-normal text-text-muted">
-                          (${row.refunded} refunded)
-                        </span>
-                      )}
-                    </span>
-                  </span>
+                  <PlayerChip
+                    userId={row.user_id}
+                    displayName={row.display_name}
+                    nickname={row.nickname}
+                    avatarUrl={row.avatar_url}
+                    className="min-w-0"
+                    nameClassName="text-sm font-semibold text-text-strong"
+                  >
+                    {row.refunded > 0 && (
+                      <span className="ml-1.5 text-xs font-normal text-text-muted">
+                        (${row.refunded} refunded)
+                      </span>
+                    )}
+                  </PlayerChip>
                   <span className="text-right">
                     <MoneyDisplay
                       value={row.entry_fee}

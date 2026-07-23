@@ -3,8 +3,7 @@
 import { Fragment, useCallback, useMemo, useState } from "react"
 
 import { Card } from "@/components/ui/card"
-import { Avatar } from "@/components/avatar"
-import { UserName } from "@/components/user-name"
+import { PlayerChip } from "@/components/player/player-chip"
 import { StatusBadge } from "@/components/betting/status-badge"
 import { PickRow } from "@/components/betting/pick-row"
 import { MoneyDisplay } from "@/components/betting/money-display"
@@ -93,14 +92,14 @@ function PickPlacementList({ group }: { group: PickPlacements }) {
           key={p.user_id}
           className="flex items-center justify-between gap-3 py-1"
         >
-          <span className="flex min-w-0 flex-1 items-center gap-2">
-            <Avatar src={p.avatar_url} name={p.display_name} size="sm" />
-            <UserName
-              displayName={p.display_name}
-              nickname={p.nickname}
-              className="min-w-0 truncate text-sm text-text-strong"
-            />
-          </span>
+          <PlayerChip
+            userId={p.user_id}
+            displayName={p.display_name}
+            nickname={p.nickname}
+            avatarUrl={p.avatar_url}
+            className="min-w-0 flex-1"
+            nameClassName="text-sm text-text-strong"
+          />
           <MoneyDisplay value={p.amount} size="sm" weight="semibold" />
         </div>
       ))}
