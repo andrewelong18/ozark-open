@@ -3,6 +3,7 @@ import { Montserrat } from "next/font/google"
 import localFont from "next/font/local"
 import "./globals.css"
 import { Header } from "@/components/header"
+import { PlayerProfileProvider } from "@/components/player/player-profile-provider"
 
 // Workhorse UI + body face. Exposed as --font-montserrat → --font-sans.
 const montserrat = Montserrat({
@@ -33,8 +34,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${montserrat.variable} ${azalea.variable}`}>
       <body className="font-sans antialiased">
-        <Header />
-        <main>{children}</main>
+        <PlayerProfileProvider>
+          <Header />
+          <main>{children}</main>
+        </PlayerProfileProvider>
       </body>
     </html>
   )
