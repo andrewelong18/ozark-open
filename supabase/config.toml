@@ -253,6 +253,13 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# Magic-link email uses the stateless token_hash flow (see the template comment
+# and app/auth/callback/route.ts). Keeps the local stack in sync with the hosted
+# project's custom template so links behave identically when opened cross-device.
+[auth.email.template.magic_link]
+subject = "Sign in to the Ozark Open Sportsbook"
+content_path = "./templates/magic_link.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"
