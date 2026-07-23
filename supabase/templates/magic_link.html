@@ -1,0 +1,22 @@
+<!--
+  Ozark Open magic-link email.
+
+  Uses the STATELESS token_hash flow (not the default {{ .ConfirmationURL }}
+  PKCE flow). The link points straight at our own /auth/callback with a
+  token_hash + type, which app/auth/callback/route.ts verifies via verifyOtp().
+  Because it carries no PKCE code, the link no longer depends on a cookie from
+  the browser that requested it — so it works when opened on a phone, in a
+  different browser, or inside an email client's in-app webview.
+
+  {{ .SiteURL }} must be the app's base URL (Auth → URL Configuration → Site URL
+  on hosted; site_url in config.toml locally). The resulting
+  /auth/callback path must be covered by the redirect allow-list.
+-->
+<h2>Sign in to the Ozark Open Sportsbook</h2>
+<p>Click the button below to sign in. This link works once and expires soon.</p>
+<p>
+  <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email">
+    Sign in
+  </a>
+</p>
+<p>If you didn't request this, you can safely ignore this email.</p>
