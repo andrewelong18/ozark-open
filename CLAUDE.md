@@ -18,6 +18,7 @@ Next.js 15 (App Router) + TypeScript · Supabase (Postgres, magic-link auth, RLS
 | `docs/ARCHITECTURE.md` | Auth flow, RLS strategy, where the math lives. |
 | `docs/OUTSTANDING_DECISIONS.md` | Before building anything touching non-player limits, entry collection, or the items Pat's Jul 11 review left open — the still-open calls live here. |
 | `docs/DESIGN_SYSTEM.md` | How the brand's visual system is wired into the app (tokens, fonts, ports). The `ozark-open-design` skill (`.claude/skills/ozark-open-design/`) is the visual source of truth. |
+| `docs/AGENT_AUTOMATION.md` | Doing prod Supabase/Vercel work directly — the Supabase MCP (migrations + data edits), the auth-config script, Vercel env vars. Read when a task would otherwise become a "manual step" GitHub issue. |
 | `README.md` | Local setup, deploy, the admin workflow (spreadsheet upload + Studio). |
 
 Do **not** re-read all foundation docs by default — each `docs/sprints/sprint-N.md` cites the sections it depends on; read those and start.
@@ -37,6 +38,7 @@ Do **not** re-read all foundation docs by default — each `docs/sprints/sprint-
 ## Project Conventions
 
 - **Migrations only.** Schema changes are SQL files in `supabase/migrations/`; Supabase Studio edits data, never schema.
+- **Prod migrations & data edits can be applied directly** when the Supabase MCP is connected (`.mcp.json`, `SUPABASE_ACCESS_TOKEN` set) — use `apply_migration` for a new migration file and `execute_sql` for data edits, then verify. Only fall back to filing a "run this in prod" GitHub issue (step 5) when the token isn't present. Auth-dashboard settings go through `scripts/prod-auth-config.sh`; see `docs/AGENT_AUTOMATION.md`.
 - **The bet menu arrives by spreadsheet upload** (`/admin/import`, upsert by the sheet's `bet_id`/`pick_id` — ADR 0001). Studio is the admin CMS for everything else; the only custom admin UI in v1 is that upload page plus the read-only `/admin/view` View-sheet replica (Sprint 7) — and, if the bonus wish list happens, the read-only `/admin/roster` page (Sprint 10).
 - **The app never adjudicates a bet.** Results (hit/miss/push/void) are computed in the admin's Excel workbook and uploaded per pick. Don't build resolution logic.
 - **Odds display values come from the sheet** (`fractional_odds`, `probability`, `total_probability` — verbatim, never recomputed). `american_odds` is for payout math only.

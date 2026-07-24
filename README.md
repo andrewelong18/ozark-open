@@ -192,6 +192,15 @@ Studio (https://supabase.com/dashboard → Project → Table Editor) is the admi
 
 > **Until the prod database steps land** (rework migration + admin flag, issues #12/#15), the fallback remains pasting `supabase/seed-sample-phase1.sql` into the Supabase SQL editor (after the migrations). Seed and importer upsert by the same sheet IDs, so either can safely run over the other.
 
+### Track 3 — Claude Code (automated)
+
+The two tracks above are the *manual* runbook. Once the Supabase MCP is connected
+(a free personal access token in `SUPABASE_ACCESS_TOKEN`), the coding agent does
+the Track 2 data edits and the prod migrations itself — no SQL-editor pasting, no
+"run this in prod" issue. Auth-dashboard settings (SMTP, session lifetime,
+magic-link template) and Vercel env vars are automated too. Setup and the full
+issue-by-issue mapping are in [`docs/AGENT_AUTOMATION.md`](docs/AGENT_AUTOMATION.md).
+
 ---
 
 ## License & Disclaimer
