@@ -21,6 +21,7 @@ erDiagram
     users ||--o{ tournament_participants : "joins"
     users ||--o{ bet_placements : "places"
     tournaments ||--o{ tournament_participants : "has"
+    tournaments ||--o{ tournament_invites : "expects"
     tournaments ||--o{ bets : "contains"
     bet_categories ||--o{ bets : "categorizes"
     bets ||--o{ bet_picks : "offers"
@@ -53,6 +54,14 @@ erDiagram
         uuid tournament_id FK
         int entry_fee
         boolean is_player
+    }
+
+    tournament_invites {
+        uuid id PK
+        uuid tournament_id FK
+        text email
+        text invited_name
+        timestamptz created_at
     }
 
     bet_categories {
@@ -176,6 +185,8 @@ Join table connecting users to tournaments. A user is "in" a tournament for a gi
 
 **How rows are created (Sprint 16 / A12).** A member logging in does **not** create a participant row — they're onboarded but not yet in the pool, so they can view the menu but not bet. An admin approves them on `/admin/participants`, which sets the entry fee + player flag and **creates the row**. The row existing = approved to bet; there is no separate `betting_enabled` flag. Writes stay admin-only (RLS): `POST/PATCH/DELETE /api/admin/participants` re-checks `is_admin` and validates the fee against the `tournaments` row. This replaces the old manual Supabase Studio row-add.
 
+People who are *expected* in the tournament but haven't registered are deliberately **not** modeled here — they live in `tournament_invites` (§3.8), precisely so a row in this table keeps meaning "approved to bet".
+
 ---
 
 ### 3.4 `bet_categories`
@@ -271,6 +282,26 @@ Each individual wager: one row per (user, pick) pair where money was placed.
 
 ---
 
+### 3.8 `tournament_invites`
+
+The **expected roster** — who we think is playing this year. Typed into Supabase Studio by an admin before anyone signs in, and read only by `/admin/roster` (Sprint 10).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` PK | |
+| `tournament_id` | `uuid` NOT NULL FK → `tournaments.id` | |
+| `email` | `text` NOT NULL CHECK (`position('@' IN email) > 1`) | Stored as typed; matched case-insensitively |
+| `invited_name` | `text` | Optional — so the "hasn't registered yet" chase list reads as names, not raw addresses |
+| `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | |
+
+**Constraint:** UNIQUE (`tournament_id`, `lower(email)`) — a functional index, so hand-typed `Dan@X.com` and `dan@x.com` collide instead of producing two roster rows.
+
+**Why a separate table rather than a nullable `tournament_participants.user_id`.** Sprint 10 originally proposed widening §3.3 to hold "invited but never registered". That would break the A11 invariant above: a `tournament_participants` row *means* approved to bet, and it's what `/dashboard`, `/results` and `/admin/view` sum the pool from. Invite rows there would either inflate the pool or force a `user_id IS NOT NULL` guard into every tournament-wide query. Keeping them apart costs one table and protects the money math.
+
+**No FK to `users`** — by design. The whole point of an invite is that the `users` row may not exist yet, so `/admin/roster` matches the two by normalized email at read time (`lib/roster.ts`). Nothing in the app writes this table.
+
+---
+
 ## 4. The Payout View
 
 A read-only Postgres view that computes each placement's theoretical payout. Defined in a migration; queryable like a table.
@@ -335,6 +366,8 @@ Policies live inline in each table's migration file under `supabase/migrations/`
 - **`tournament_participants`**: anyone authenticated can `SELECT`. Only admins can `INSERT` / `UPDATE`.
 - **`bet_categories`, `tournaments`**: read by all authenticated users; write by admins only.
 - **`users`**: readable by all authenticated users (`20260717000002_users_read_all.sql` — closed-bet views and payouts show everyone's `display_name`, PRD §12 Q12; fine for a private pool behind login). Writes still admin/trigger only.
+- **`tournament_invites`**: admins only, read *and* write — unlike `users`, these are the email addresses of people who aren't in the app yet, and the admin roster page is the only consumer.
+- **`admin_auth_activity()`** (`20260725000000`): not a table but the same boundary. `auth.users.last_sign_in_at` isn't client-readable, so this `SECURITY DEFINER` function exposes just `(user_id, last_sign_in_at)` and self-gates on `is_admin()` — a non-admin caller gets zero rows, not an error. `EXECUTE` is revoked from `anon` and granted to `authenticated` only. This is deliberately *not* a service-role client: the app has none, and one full-bypass key in the runtime to read one timestamp column isn't a trade worth making.
 
 ---
 
@@ -352,7 +385,12 @@ Policies live inline in each table's migration file under `supabase/migrations/`
 - `20260717000001_bet_placements.sql` — Sprint 3: `bet_placements` with soft delete, odds snapshot, and the open/closed visibility policies
 - `20260717000002_users_read_all.sql` — Sprint 6: authenticated read-all policy on `users` (names on closed bets)
 - `20260718000000_placement_payouts_view.sql` — Sprint 7: the §4 payout view with `security_invoker` (SQL proven on a throwaway local PG16 by `scripts/payout-view-roundtrip.ts`)
+- `20260719000000_user_profiles.sql` — Sprint 15: `users.nickname` / `users.avatar_url`, the self-update policy and its guard trigger
+- `20260719000001_avatars_bucket.sql` — Sprint 15: the public `avatars` storage bucket
+- `20260720000000_onboarding_and_bettor_approval.sql` — Sprint 16: `users.onboarded_at`, relaxed self-update guard (A11 "approval creates the row" stands)
+- `20260723000000_player_profiles.sql` — Sprint 18: the admin-owned profile columns behind the player modal
+- `20260725000000_tournament_invites.sql` — Sprint 10: `tournament_invites` (§3.8) + the `admin_auth_activity()` definer function
 
-**Still to come** (see `ROADMAP.md`): nothing scheduled — Sprint 8 (leaderboard) reads Google Sheets, not new tables.
+**Still to come** (see `ROADMAP.md`): nothing scheduled.
 
 **Known inconsistency to fix in the rework migration:** `tournament_participants.entry_fee` currently has a hardcoded `CHECK (entry_fee BETWEEN 20 AND 50)`, but the entry-fee bounds are supposed to live on the `tournaments` row (`entry_fee_min` / `entry_fee_max`) per the "rules are data, not constants" convention. Fix: drop the hardcoded CHECK (keep `entry_fee > 0`) and enforce the per-tournament bounds in `lib/validation.ts` / at participant creation instead.
