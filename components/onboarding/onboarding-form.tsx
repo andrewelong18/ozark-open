@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
+import Image from "next/image"
 
 import { createClient } from "@/lib/supabase/client"
 import { Avatar } from "@/components/avatar"
@@ -127,81 +128,96 @@ export function OnboardingForm({
   const nameForInitials = displayName.trim() === "" ? email : displayName
 
   return (
-    <Card accent elevated>
-      <CardContent className="flex flex-col gap-5">
-        <div>
-          <div className="font-heading text-2xl text-text-strong">
-            Set up your profile
-          </div>
-          <p className="mt-1 text-sm leading-normal text-text-muted">
-            Your name is how everyone sees your bets when they go public. A
-            nickname and photo are optional.
-          </p>
+    <>
+      <div className="mb-6 flex flex-col items-center text-center">
+        <Image
+          src="/ozark-mark.svg"
+          alt=""
+          width={84}
+          height={84}
+          className="h-16 w-auto"
+          priority
+        />
+        <div className="mt-2 font-heading text-2xl leading-none text-indigo-700">
+          Welcome to the Ozark Open
         </div>
+      </div>
+      <Card accent elevated>
+        <CardContent className="flex flex-col gap-5">
+          <div>
+            <div className="font-heading text-2xl text-text-strong">
+              Set up your profile
+            </div>
+            <p className="mt-1 text-sm leading-normal text-text-muted">
+              Your name is how everyone sees your bets when they go public. A
+              nickname and photo are optional.
+            </p>
+          </div>
 
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          <div className="flex items-center gap-4">
-            <Avatar src={preview} name={nameForInitials} size="lg" />
+          <form onSubmit={submit} className="flex flex-col gap-4">
+            <div className="flex items-center gap-4">
+              <Avatar src={preview} name={nameForInitials} size="lg" />
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="avatar-file">Profile picture (optional)</Label>
+                <input
+                  ref={fileRef}
+                  id="avatar-file"
+                  type="file"
+                  accept={ACCEPTED.join(",")}
+                  onChange={pickFile}
+                  className="block w-full max-w-xs cursor-pointer rounded-lg border border-border bg-surface-sunken text-sm text-text-muted file:mr-3 file:h-11 file:cursor-pointer file:border-0 file:bg-primary file:px-4 file:font-semibold file:text-primary-foreground"
+                />
+                <p className="text-xs text-text-muted">
+                  JPG, PNG, WebP, or GIF · up to 2 MB.
+                </p>
+              </div>
+            </div>
+
             <div className="flex flex-col gap-2">
-              <Label htmlFor="avatar-file">Profile picture (optional)</Label>
-              <input
-                ref={fileRef}
-                id="avatar-file"
-                type="file"
-                accept={ACCEPTED.join(",")}
-                onChange={pickFile}
-                className="block w-full max-w-xs cursor-pointer rounded-lg border border-border bg-surface-sunken text-sm text-text-muted file:mr-3 file:h-11 file:cursor-pointer file:border-0 file:bg-primary file:px-4 file:font-semibold file:text-primary-foreground"
+              <Label htmlFor="display-name">Display name</Label>
+              <Input
+                id="display-name"
+                value={displayName}
+                maxLength={DISPLAY_NAME_MAX}
+                placeholder="e.g. Andrew Long"
+                autoFocus
+                required
+                onChange={(e) => setDisplayName(e.target.value)}
               />
               <p className="text-xs text-text-muted">
-                JPG, PNG, WebP, or GIF · up to 2 MB.
+                Use your real name — an admin matches it to the field to link your
+                bets.
               </p>
             </div>
-          </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="display-name">Display name</Label>
-            <Input
-              id="display-name"
-              value={displayName}
-              maxLength={DISPLAY_NAME_MAX}
-              placeholder="e.g. Andrew Long"
-              autoFocus
-              required
-              onChange={(e) => setDisplayName(e.target.value)}
-            />
-            <p className="text-xs text-text-muted">
-              Use your real name — an admin matches it to the field to link your
-              bets.
-            </p>
-          </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="nickname">Nickname (optional)</Label>
+              <Input
+                id="nickname"
+                value={nickname}
+                maxLength={NICKNAME_MAX}
+                placeholder="e.g. Slim"
+                onChange={(e) => setNickname(e.target.value)}
+              />
+              <p className="text-xs text-text-muted">
+                Shown in quotes next to your name across the app.
+              </p>
+            </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="nickname">Nickname (optional)</Label>
-            <Input
-              id="nickname"
-              value={nickname}
-              maxLength={NICKNAME_MAX}
-              placeholder="e.g. Slim"
-              onChange={(e) => setNickname(e.target.value)}
-            />
-            <p className="text-xs text-text-muted">
-              Shown in quotes next to your name across the app.
-            </p>
-          </div>
+            <Button type="submit" size="lg" className="w-full" disabled={busy}>
+              {busy ? "Saving…" : "Continue"}
+            </Button>
 
-          <Button type="submit" size="lg" className="w-full" disabled={busy}>
-            {busy ? "Saving…" : "Continue"}
-          </Button>
-
-          {errors.length > 0 && (
-            <ul className="flex list-disc flex-col gap-1 rounded-lg border border-loss-border bg-loss-surface py-3 pr-3 pl-8 text-sm text-loss-strong">
-              {errors.map((err) => (
-                <li key={err}>{err}</li>
-              ))}
-            </ul>
-          )}
-        </form>
-      </CardContent>
-    </Card>
+            {errors.length > 0 && (
+              <ul className="flex list-disc flex-col gap-1 rounded-lg border border-loss-border bg-loss-surface py-3 pr-3 pl-8 text-sm text-loss-strong">
+                {errors.map((err) => (
+                  <li key={err}>{err}</li>
+                ))}
+              </ul>
+            )}
+          </form>
+        </CardContent>
+      </Card>
+    </>
   )
 }

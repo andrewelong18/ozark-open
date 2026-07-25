@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { Coins, Layers, Scale, Eye } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -16,6 +17,10 @@ export type HowItWorksCard = {
   icon: typeof Coins
   title: string
   body: string
+  // Jake, one per step — the walkthrough's hero. Sources are ~1.6–1.9 wide with
+  // a white or transparent background, which is why they can sit straight on the
+  // white card with no framing.
+  photo: string
 }
 
 // The explainer content, shared by the carousel below and the profile
@@ -29,21 +34,25 @@ export function howItWorksCards(
       icon: Coins,
       title: "One shared pot, no house",
       body: "The Ozark Open is pari-mutuel. Everyone's entry fees make the pot — there's no house and no rake. At the end it pays itself back out in proportion to each bettor's theoretical winnings.",
+      photo: "/onboarding/jake-step-1.jpg",
     },
     {
       icon: Layers,
       title: "Betting comes in phases",
       body: `The menu opens in phases across the weekend. In each phase you place ${minPicks}–${maxPicks} picks — spread your entry across the bets you like.`,
+      photo: "/onboarding/jake-step-2.png",
     },
     {
       icon: Scale,
       title: "Hit your entry exactly",
       body: "Your total wagered has to equal your entry fee exactly by the time Phase 2 closes. Being under while betting's still open is fine — just don't leave money on the table.",
+      photo: "/onboarding/jake-step-3.jpg",
     },
     {
       icon: Eye,
       title: "Everything reveals at close",
       body: "While a bet is open, nobody can see who you took or how much. The moment it closes, everyone's picks and amounts go public. Around here, that's a feature.",
+      photo: "/onboarding/jake-step-4.jpg",
     },
   ]
 }
@@ -65,9 +74,45 @@ export function HowItWorks({
   const Icon = spec.icon
   const isLast = index === specs.length - 1
 
+  // Fixed height so the card doesn't grow and shrink with each step's copy. One
+  // value for every width on purpose: the natural height climbs continuously
+  // with the card (the photo box is a ratio), measured 559px at 320px up to
+  // 595px once the card hits max-w-md, so any breakpoint tier leaves a band
+  // where the copy still pushes the card taller. 600px clears the tallest step
+  // at every width; on narrow phones the slack lands between the copy and the
+  // controls, identically on all four steps.
   return (
-    <Card accent elevated>
-      <CardContent className="flex flex-col gap-5">
+    <Card accent elevated className="min-h-[37.5rem]">
+      {/* The hero: Jake for this step, inset from the card edges with the brand
+          rail flush under him. All four are mounted and cross-fade on Next, so
+          the browser has them by the time you click and the box never flashes
+          empty. object-bottom keeps his feet on the rail; the 8/5 box is taller
+          than the widest source, so every photo fills the inset width. */}
+      <div className="px-4">
+        <div className="relative aspect-[8/5] w-full">
+          {specs.map((s, i) => (
+            <Image
+              key={s.photo}
+              src={s.photo}
+              alt=""
+              fill
+              priority={i === 0}
+              sizes="(max-width: 640px) 85vw, 416px"
+              aria-hidden={i !== index}
+              className={
+                "object-contain object-bottom transition-opacity duration-200 " +
+                (i === index ? "opacity-100" : "opacity-0")
+              }
+            />
+          ))}
+        </div>
+        <div
+          aria-hidden
+          className="h-1.5 w-full rounded-sm bg-indigo-700 shadow-md"
+        />
+      </div>
+
+      <CardContent className="flex flex-1 flex-col gap-5">
         <div className="flex flex-col items-center gap-3 text-center">
           <span className="inline-flex size-12 items-center justify-center rounded-full bg-accent-gold text-accent-gold-foreground">
             <Icon className="size-6" aria-hidden />
@@ -76,7 +121,9 @@ export function HowItWorks({
           <p className="text-sm leading-normal text-text-muted">{spec.body}</p>
         </div>
 
-        <div className="flex items-center justify-center gap-2" aria-hidden>
+        {/* Pinned to the bottom so the dots and buttons hold one baseline no
+            matter how many lines the copy wraps to. */}
+        <div className="mt-auto flex items-center justify-center gap-2" aria-hidden>
           {specs.map((_, i) => (
             <span
               key={i}
