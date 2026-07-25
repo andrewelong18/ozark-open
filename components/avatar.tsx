@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 // app can carry a face without every member having uploaded one (Sprint 15).
 
 const sizeClasses = {
+  xs: "size-5 text-[9px]",
   sm: "size-8 text-[11px]",
   md: "size-10 text-sm",
   lg: "size-24 text-3xl",
