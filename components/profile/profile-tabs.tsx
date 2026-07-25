@@ -221,6 +221,9 @@ function AdminPanel() {
           >
             Participants
           </Button>
+          <Button variant="secondary" size="sm" render={<Link href="/admin/roster" />}>
+            Roster
+          </Button>
         </div>
       </CardContent>
     </Card>
