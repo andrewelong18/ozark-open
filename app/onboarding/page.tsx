@@ -1,4 +1,3 @@
-import Image from "next/image"
 import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
@@ -38,19 +37,8 @@ export default async function OnboardingPage() {
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-gradient-to-t from-ink-100 to-background px-6 py-8">
       <div className="w-full max-w-md">
-        <div className="mb-6 flex flex-col items-center text-center">
-          <Image
-            src="/ozark-mark.svg"
-            alt=""
-            width={84}
-            height={84}
-            className="h-16 w-auto"
-            priority
-          />
-          <div className="mt-2 font-heading text-2xl leading-none text-indigo-700">
-            Welcome to the Ozark Open
-          </div>
-        </div>
+        {/* The brand block belongs to the identity step only, so it lives inside
+            the form component — the walkthrough steps lead with Jake instead. */}
         <OnboardingForm
           userId={user.id}
           email={user.email ?? ""}

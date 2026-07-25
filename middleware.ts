@@ -74,7 +74,15 @@ export async function middleware(request: NextRequest) {
       ? true
       : Boolean((profile as { onboarded_at: string | null } | null)?.onboarded_at)
 
-    if (!onboarded && !pathname.startsWith("/onboarding")) {
+    // The onboarding write itself must be exempt: redirecting POST
+    // /api/onboarding to /onboarding swallows the write (the browser follows
+    // the 307 to an HTML page, sees res.ok, and advances) so onboarded_at is
+    // never stamped and the member is stuck in the gate forever.
+    if (
+      !onboarded &&
+      !pathname.startsWith("/onboarding") &&
+      !pathname.startsWith("/api/")
+    ) {
       return NextResponse.redirect(new URL("/onboarding", request.url))
     }
     if (onboarded && (pathname === "/login" || pathname.startsWith("/onboarding"))) {
