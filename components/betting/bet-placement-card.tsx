@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { PlayerNameLink } from "@/components/player/player-name-link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { OddsChip } from "./odds-chip"
@@ -16,6 +17,11 @@ export type PlacementPick = {
   /** Sheet-supplied display strings — rendered verbatim, never recomputed. */
   fractional_odds: string
   probability: string
+  /** The golfer this pick names (FK → users.id); when set, the label links to
+   * their profile modal. Null for Field / Yes-No / unmatched — plain text. */
+  player_user_id: string | null
+  /** That golfer's avatar for the trailing icon + modal fallback. */
+  player_avatar_url: string | null
 }
 
 export type BetPlacementCardProps = {
@@ -270,17 +276,30 @@ export function BetPlacementCard({
                     )}
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => select(pick)}
-                  className={cn(
-                    "min-w-0 text-left text-base leading-snug font-medium text-pretty text-text-strong",
-                    !allowsMultiplePicks && "cursor-pointer"
-                  )}
-                  tabIndex={allowsMultiplePicks ? -1 : undefined}
-                >
-                  {pick.label}
-                </button>
+                {pick.player_user_id ? (
+                  // A named golfer: the label links to their profile. Selection
+                  // (pick-one bets) stays on the radio to its left; the tap-to-
+                  // select label is traded for the profile link per the brief.
+                  <PlayerNameLink
+                    userId={pick.player_user_id}
+                    label={pick.label}
+                    avatarUrl={pick.player_avatar_url}
+                    className="min-w-0"
+                    nameClassName="text-base leading-snug font-medium text-text-strong"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => select(pick)}
+                    className={cn(
+                      "min-w-0 text-left text-base leading-snug font-medium text-pretty text-text-strong",
+                      !allowsMultiplePicks && "cursor-pointer"
+                    )}
+                    tabIndex={allowsMultiplePicks ? -1 : undefined}
+                  >
+                    {pick.label}
+                  </button>
+                )}
               </div>
               <div className={cn(!allowsMultiplePicks && "pl-[30px]")}>
                 <OddsChip

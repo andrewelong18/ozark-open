@@ -25,6 +25,13 @@ import {
   type MyBetsQueryRow,
 } from "@/lib/my-bets"
 
+// Raw pick shape from the bets query: the display Pick plus the embedded
+// player row (supabase serializes a to-one join as object OR 1-el array),
+// which we flatten to `player_avatar_url` before handing picks to the menu.
+type PickQueryRow = Omit<Pick, "player_avatar_url"> & {
+  users: { avatar_url: string | null } | { avatar_url: string | null }[] | null
+}
+
 const ROUND_ORDER = ["tournament", "round_1", "round_2", "round_3"] as const
 const CATEGORY_ORDER = [
   "Top Finisher",
@@ -107,7 +114,7 @@ export default async function BetsPage() {
   const { data: betsData } = await supabase
     .from("bets")
     .select(
-      "id, sheet_bet_id, title, phase, round, status, total_probability, bet_categories ( name, slug, allows_multiple_picks ), bet_picks ( id, sheet_pick_id, label, american_odds, fractional_odds, probability, result )"
+      "id, sheet_bet_id, title, phase, round, status, total_probability, bet_categories ( name, slug, allows_multiple_picks ), bet_picks ( id, sheet_pick_id, label, american_odds, fractional_odds, probability, result, player_user_id, users ( avatar_url ) )"
     )
     .eq("tournament_id", tournamentId)
     .neq("status", "hidden")
@@ -175,7 +182,16 @@ export default async function BetsPage() {
     bet_categories: Array.isArray(bet.bet_categories)
       ? (bet.bet_categories[0] ?? null)
       : (bet.bet_categories as BetCategory | null),
-    bet_picks: (bet.bet_picks ?? []) as Pick[],
+    // Flatten each pick's embedded player row (object or 1-el array) into a
+    // scalar avatar url — powers the golfer-name → profile link on the menu.
+    bet_picks: ((bet.bet_picks ?? []) as PickQueryRow[]).map((pick) => {
+      const player = Array.isArray(pick.users)
+        ? (pick.users[0] ?? null)
+        : pick.users
+      const { users: _users, ...rest } = pick
+      void _users
+      return { ...rest, player_avatar_url: player?.avatar_url ?? null }
+    }) as Pick[],
   }))
 
   if (bets.length === 0) return emptyState

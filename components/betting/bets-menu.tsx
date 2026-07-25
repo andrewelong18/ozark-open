@@ -28,6 +28,11 @@ export type Pick = {
   fractional_odds: string
   probability: number
   result: string
+  /** The golfer this pick names (FK → users.id); null for Field, Yes/No
+   * props, and unmatched labels — those stay plain, unlinked text. */
+  player_user_id: string | null
+  /** That golfer's avatar, flattened from the query join (null → initials). */
+  player_avatar_url: string | null
 }
 
 export type Bet = {
@@ -367,6 +372,8 @@ export function BetsMenu({
                                 probability: formatProbability(
                                   Number(pick.probability)
                                 ),
+                                player_user_id: pick.player_user_id,
+                                player_avatar_url: pick.player_avatar_url,
                               }))}
                             placements={placements}
                             lockedOdds={lockedOdds}
@@ -418,6 +425,8 @@ export function BetsMenu({
                                         Number(pick.probability)
                                       )}
                                       result={toResult(pick.result)}
+                                      playerUserId={pick.player_user_id}
+                                      playerAvatarUrl={pick.player_avatar_url}
                                     />
                                     {group && <PickPlacementList group={group} />}
                                   </Fragment>
