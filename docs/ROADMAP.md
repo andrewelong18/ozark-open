@@ -43,7 +43,7 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | [7](sprints/sprint-7.md) | Payouts: theoretical & final | 🔶 code complete + tested locally Jul 18, 2026 (unit tests incl. the 2026 worked example, PG16 round trip for the view) — view migration + full chain applied Jul 18, 2026 (#34); prod verify pending (numbers vs Pat's hand-math; `tournament.status` flip) | 6 |
 | [8](sprints/sprint-8.md) | Leaderboard mirror | 🔶 code complete + unit-tested + built locally Jul 21, 2026 (`lib/leaderboard.ts` reads the "Sportsbook Leaderboard" tab read-only, 5-min cache; `/leaderboard` 8-column table with `+0;-0;"E"` to-par formatting; nav tab + route guard) — Google Cloud service account + Vercel env vars pending (manual), then prod "within 5 min" verify | Pat's Sheets mirror |
 | [9](sprints/sprint-9.md) | Polish & group dry run | 🔲 | 0–7 (8 nice-to-have) |
-| [10](sprints/sprint-10.md) | ★ Admin roster & registration status | 🔲 | none hard (bonus) |
+| [10](sprints/sprint-10.md) | ★ Admin roster & registration status | 🔶 code complete Jul 25, 2026 (`tournament_invites` + `admin_auth_activity()` RPC, `lib/roster.ts` status derivation + relative-time util — unit-tested + built locally; `/admin/roster` attention strip + table, admin-panel entry point); **prod SQL applied + verified Jul 25, 2026** — browser walkthrough pending | none hard (bonus) |
 | [11](sprints/sprint-11.md) | ★ Bet-state snapshots & rollback | 🔲 | 3 in prod (bonus) |
 | [12](sprints/sprint-12.md) | ★ Animation & delight pass + Jake celebration | 🔲 | Jake photo + sound from Andrew (bonus) |
 | [13](sprints/sprint-13.md) | ★ Funny ad slots (dashboard + landing) | 🔲 | ≥1 finished creative from Andrew (bonus) |
@@ -74,7 +74,7 @@ One sprint = one sitting. Open the linked file to work it; don't start a sprint 
 | 8 — Leaderboard | Google Sheets mirror | 🔶 Code complete + tested locally Jul 21, 2026 (`lib/leaderboard.ts` read-only Sheets fetch of the "Sportsbook Leaderboard" tab, `parseLeaderboard`/`formatToPar` unit-tested, 5-min `unstable_cache`; `/leaderboard` 8-column table, always-visible nav tab, middleware guard) — manual Google Cloud service account + Vercel env vars pending, then the "within 5 min" prod check | 8 | Aug 28 |
 | 9 — Polish & dry run | Mobile pass, group test | 🔲 Not started | 9 | Sep 10 |
 | Testing & simulation | E2E browser journeys, DB round-trips in CI, full-pool synthetic seed | 🔲 Planned Jul 24, 2026 (de-risks the Sprint 9 dry run; automates the pending browser-verify issues) | 19 | before Aug 28 |
-| ★ Bonus wish list | Admin roster · bet-state snapshots · animation & Jake celebration · funny ads · announcement banner · self-serve profile page · first-run onboarding + bettor-approval · bet-slip review & confirmation · player profile modals | 🔶 Sprint 15 (profile page) code complete Jul 19, 2026; Sprint 16 (onboarding + bettor-approval) code complete Jul 20, 2026; Sprint 18 (player profile modals) code complete Jul 23, 2026; rest not started (never blocks MVP) | 10–18 | as time allows, before Aug 28 |
+| ★ Bonus wish list | Admin roster · bet-state snapshots · animation & Jake celebration · funny ads · announcement banner · self-serve profile page · first-run onboarding + bettor-approval · bet-slip review & confirmation · player profile modals | 🔶 Sprint 15 (profile page) code complete Jul 19, 2026; Sprint 16 (onboarding + bettor-approval) code complete Jul 20, 2026; Sprint 18 (player profile modals) code complete Jul 23, 2026; Sprint 10 (admin roster) code complete + prod SQL applied Jul 25, 2026; rest not started (never blocks MVP) | 10–18 | as time allows, before Aug 28 |
 
 ---
 
@@ -93,7 +93,7 @@ Shipped May 7, 2026 (see git history and `docs/superpowers/` for the design spec
 
 ## What Is Explicitly Not on the Roadmap
 
-- A custom admin UI beyond `/admin/import` and the read-only `/admin/view` View-sheet replica (Sprint 7) — Studio is the admin UI for everything else (ADR 0001 §7). *(One bonus exception on the wish list: the read-only `/admin/roster` page, Sprint 10.)*
+- A custom admin UI beyond `/admin/import` and the read-only `/admin/view` View-sheet replica (Sprint 7) — Studio is the admin UI for everything else (ADR 0001 §7). *(One bonus exception, shipped Jul 25, 2026: the read-only `/admin/roster` page, Sprint 10.)*
 - A bet resolution engine (results are computed in the admin's workbook and uploaded — ADR 0001 §3).
 - Notifications, email digests, or push notifications (out of scope for v1).
 - A mobile app (it's a mobile-responsive web app — no native build).

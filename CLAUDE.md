@@ -39,7 +39,7 @@ Do **not** re-read all foundation docs by default — each `docs/sprints/sprint-
 
 - **Migrations only.** Schema changes are SQL files in `supabase/migrations/`; Supabase Studio edits data, never schema.
 - **Prod migrations & data edits can be applied directly** when the Supabase MCP is connected (`.mcp.json`, `SUPABASE_ACCESS_TOKEN` set) — use `apply_migration` for a new migration file and `execute_sql` for data edits, then verify. Only fall back to filing a "run this in prod" GitHub issue (step 5) when the token isn't present. Auth-dashboard settings go through `scripts/prod-auth-config.sh`; see `docs/AGENT_AUTOMATION.md`.
-- **The bet menu arrives by spreadsheet upload** (`/admin/import`, upsert by the sheet's `bet_id`/`pick_id` — ADR 0001). Studio is the admin CMS for everything else; the only custom admin UI in v1 is that upload page plus the read-only `/admin/view` View-sheet replica (Sprint 7) — and, if the bonus wish list happens, the read-only `/admin/roster` page (Sprint 10).
+- **The bet menu arrives by spreadsheet upload** (`/admin/import`, upsert by the sheet's `bet_id`/`pick_id` — ADR 0001). Studio is the admin CMS for everything else; the only custom admin UI in v1 is that upload page, the `/admin/participants` bettor-approval page (Sprint 16), and two read-only views — the `/admin/view` View-sheet replica (Sprint 7) and the `/admin/roster` registration-status page (Sprint 10).
 - **The app never adjudicates a bet.** Results (hit/miss/push/void) are computed in the admin's Excel workbook and uploaded per pick. Don't build resolution logic.
 - **Odds display values come from the sheet** (`fractional_odds`, `probability`, `total_probability` — verbatim, never recomputed). `american_odds` is for payout math only.
 - **Validation is server-side** in `lib/validation.ts`, called from API routes. Client checks are UX, not security.
@@ -51,4 +51,4 @@ Do **not** re-read all foundation docs by default — each `docs/sprints/sprint-
 
 ## Out of Scope (don't propose)
 
-Scoring/skins/leaderboard math (stays in the Excel workbook) · bet resolution logic (results come from the admin's workbook per pick — ADR 0001) · payments (Venmo, out of band) · public access, SEO · custom admin UI beyond `/admin/import` + `/admin/view` · notifications · multi-tenancy · parlays, live odds, cash-out, real-time updates · new bet categories without a code change (by design)
+Scoring/skins/leaderboard math (stays in the Excel workbook) · bet resolution logic (results come from the admin's workbook per pick — ADR 0001) · payments (Venmo, out of band) · public access, SEO · custom admin UI beyond `/admin/import` + `/admin/participants` + `/admin/view` + `/admin/roster` · notifications · multi-tenancy · parlays, live odds, cash-out, real-time updates · new bet categories without a code change (by design)
