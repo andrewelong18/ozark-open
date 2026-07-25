@@ -71,25 +71,25 @@ export function HowItWorks({
   const specs = howItWorksCards(minPicks, maxPicks)
   const [index, setIndex] = useState(0)
   const spec = specs[index]
-  const Icon = spec.icon
   const isLast = index === specs.length - 1
 
-  // Fixed height so the card doesn't grow and shrink with each step's copy. One
-  // value for every width on purpose: the natural height climbs continuously
-  // with the card (the photo box is a ratio), measured 559px at 320px up to
-  // 595px once the card hits max-w-md, so any breakpoint tier leaves a band
-  // where the copy still pushes the card taller. 600px clears the tallest step
-  // at every width; on narrow phones the slack lands between the copy and the
-  // controls, identically on all four steps.
+  // Fixed height so the card doesn't grow and shrink with each step's copy.
+  // Measured from the tallest of the four steps at every width: 534px below sm
+  // (the card reaches max-w-md at a 496px viewport while the photo is still
+  // full width) and 482px from sm up, where the photo drops to 4/5. The tiers
+  // are keyed to the same breakpoint as the photo so neither one leaves a band
+  // where copy can still push the card taller. Slack lands between the copy and
+  // the controls, identically on all four steps.
   return (
-    <Card accent elevated className="min-h-[37.5rem]">
+    <Card accent elevated className="min-h-[33.5rem] sm:min-h-[30.5rem]">
       {/* The hero: Jake for this step, inset from the card edges with the brand
-          rail flush under him. All four are mounted and cross-fade on Next, so
-          the browser has them by the time you click and the box never flashes
-          empty. object-bottom keeps his feet on the rail; the 8/5 box is taller
-          than the widest source, so every photo fills the inset width. */}
+          rail flush under him — 4/5 width from sm up, where a full-width photo
+          reads too big. All four are mounted and cross-fade on Next, so the
+          browser has them by the time you click and the box never flashes empty.
+          object-bottom keeps him standing on the rail; the 8/5 box is taller
+          than the widest source, so every photo fills the box's width. */}
       <div className="px-4">
-        <div className="relative aspect-[8/5] w-full">
+        <div className="relative mx-auto aspect-[8/5] w-full sm:w-4/5">
           {specs.map((s, i) => (
             <Image
               key={s.photo}
@@ -106,17 +106,17 @@ export function HowItWorks({
             />
           ))}
         </div>
+        {/* -mt-px so the rail overlaps the photo's last pixel: contained images
+            round to a sub-pixel height, and the leftover sliver of white card
+            read as a hairline between Jake and the rail. */}
         <div
           aria-hidden
-          className="h-1.5 w-full rounded-sm bg-indigo-700 shadow-md"
+          className="-mt-px h-1.5 w-full rounded-sm bg-indigo-700 shadow-md"
         />
       </div>
 
       <CardContent className="flex flex-1 flex-col gap-5">
         <div className="flex flex-col items-center gap-3 text-center">
-          <span className="inline-flex size-12 items-center justify-center rounded-full bg-accent-gold text-accent-gold-foreground">
-            <Icon className="size-6" aria-hidden />
-          </span>
           <div className="font-heading text-2xl text-text-strong">{spec.title}</div>
           <p className="text-sm leading-normal text-text-muted">{spec.body}</p>
         </div>
