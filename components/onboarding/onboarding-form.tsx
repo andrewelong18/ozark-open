@@ -107,21 +107,30 @@ export function OnboardingForm({
 
   if (step === "walkthrough") {
     return (
-      <HowItWorks
-        minPicks={minPicks}
-        maxPicks={maxPicks}
-        doneLabel="Start betting"
-        onDone={() => {
-          // onboarded_at is already set (step 1 stamped it), so middleware will
-          // let us into the app — but only on a *fresh* request. A client
-          // router.push() would replay this page's poisoned Router Cache: the
-          // nav Links prefetched /dashboard, /bets, /my-bets while onboarded_at
-          // was still NULL, so middleware redirected those prefetches back to
-          // /onboarding and cached that result. A hard navigation resets the
-          // cache and re-runs middleware with the now-onboarded session.
-          window.location.assign("/bets")
-        }}
-      />
+      <>
+        {/* The page title where the mark + welcome used to sit — same treatment,
+            but leading-tight rather than leading-none: this one wraps to two
+            lines at 320px and the lines collide without any leading. */}
+        <h1 className="mb-6 text-center font-heading text-2xl leading-tight text-indigo-700">
+          How the Sportsbook Works
+        </h1>
+        <HowItWorks
+          minPicks={minPicks}
+          maxPicks={maxPicks}
+          doneLabel="Start betting"
+          onDone={() => {
+            // onboarded_at is already set (step 1 stamped it), so middleware
+            // will let us into the app — but only on a *fresh* request. A client
+            // router.push() would replay this page's poisoned Router Cache: the
+            // nav Links prefetched /dashboard, /bets, /my-bets while
+            // onboarded_at was still NULL, so middleware redirected those
+            // prefetches back to /onboarding and cached that result. A hard
+            // navigation resets the cache and re-runs middleware with the
+            // now-onboarded session.
+            window.location.assign("/bets")
+          }}
+        />
+      </>
     )
   }
 
