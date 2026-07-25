@@ -32,17 +32,14 @@ export function PlayerNameLink({
       type="button"
       onClick={() => open(userId, { displayName: label, avatarUrl })}
       className={cn(
-        "group/namelink inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md text-left transition-colors",
+        "inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md text-left",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         className
       )}
     >
-      <span
-        className={cn(
-          "min-w-0 truncate underline-offset-2 decoration-indigo-300 group-hover/namelink:underline",
-          nameClassName
-        )}
-      >
+      {/* Reads as normal UI text — same color and size — with only an
+          underline to mark it as a link (decoration inherits the text color). */}
+      <span className={cn("min-w-0 truncate underline underline-offset-2", nameClassName)}>
         {label}
       </span>
       <Avatar src={avatarUrl} name={label} size="xs" className="shrink-0" />
