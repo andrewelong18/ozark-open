@@ -89,30 +89,34 @@ export function HowItWorks({
           object-bottom keeps him standing on the rail; the 8/5 box is taller
           than the widest source, so every photo fills the box's width. */}
       <div className="px-4">
-        <div className="relative mx-auto aspect-[8/5] w-full sm:w-4/5">
-          {specs.map((s, i) => (
-            <Image
-              key={s.photo}
-              src={s.photo}
-              alt=""
-              fill
-              priority={i === 0}
-              sizes="(max-width: 640px) 85vw, 416px"
-              aria-hidden={i !== index}
-              className={
-                "object-contain object-bottom transition-opacity duration-200 " +
-                (i === index ? "opacity-100" : "opacity-0")
-              }
-            />
-          ))}
+        {/* One wrapper sizes the photo and the rail together, so the rail always
+            tucks to exactly the photo's width. */}
+        <div className="mx-auto w-full sm:w-4/5">
+          <div className="relative aspect-[8/5] w-full">
+            {specs.map((s, i) => (
+              <Image
+                key={s.photo}
+                src={s.photo}
+                alt=""
+                fill
+                priority={i === 0}
+                sizes="(max-width: 640px) 85vw, 336px"
+                aria-hidden={i !== index}
+                className={
+                  "object-contain object-bottom transition-opacity duration-200 " +
+                  (i === index ? "opacity-100" : "opacity-0")
+                }
+              />
+            ))}
+          </div>
+          {/* -mt-px so the rail overlaps the photo's last pixel: contained
+              images round to a sub-pixel height, and the leftover sliver of
+              white card read as a hairline between Jake and the rail. */}
+          <div
+            aria-hidden
+            className="-mt-px h-1.5 w-full rounded-sm bg-indigo-700 shadow-md"
+          />
         </div>
-        {/* -mt-px so the rail overlaps the photo's last pixel: contained images
-            round to a sub-pixel height, and the leftover sliver of white card
-            read as a hairline between Jake and the rail. */}
-        <div
-          aria-hidden
-          className="-mt-px h-1.5 w-full rounded-sm bg-indigo-700 shadow-md"
-        />
       </div>
 
       <CardContent className="flex flex-1 flex-col gap-5">
