@@ -1,8 +1,14 @@
-// Admin roster (Sprint 10): the pure half of /admin/roster — merging the
+// Admin roster (Sprint 10): the pure half of /admin/people — merging the
 // expected roster (tournament_invites), everyone who has actually signed in
 // (users), who's approved to bet (tournament_participants) and when each
 // last logged in (admin_auth_activity) into one row per person, each with a
 // single derived status.
+//
+// Sprint 20 made this the ONLY derivation behind the admin people console —
+// the old /admin/participants page derived its own pending/approved split and
+// disagreed with this one. Hence `is_player` riding along (the edit form needs
+// it) and `funnel` (the header counts, filtered off the same sorted array the
+// table renders, so the two cannot disagree).
 //
 // The merge key is the normalized email, because an invite deliberately has
 // no FK to users — the whole point is that the users row may not exist yet.
@@ -40,6 +46,7 @@ export type UserQueryRow = {
 export type ParticipantQueryRow = {
   user_id: string
   entry_fee?: number | string | null
+  is_player?: boolean | null
 }
 
 export type AuthActivityQueryRow = {
@@ -63,9 +70,33 @@ export type RosterPerson = {
   invited: boolean
   onboarded: boolean
   entry_fee: number | null
+  /** null when there's no participant row; the edit form pre-fills from it. */
+  is_player: boolean | null
   last_sign_in_at: string | null
   status: RosterStatus
   reason: RosterReason
+}
+
+/** The four stages of the access funnel, in order. */
+export type FunnelStage =
+  | "no_account"
+  | "not_onboarded"
+  | "awaiting_approval"
+  | "approved"
+
+/**
+ * Which funnel stage a row sits in — and therefore which action (if any) the
+ * console attaches to it.
+ *
+ * `fee_unset` lands in `awaiting_approval`: it IS still awaiting a valid
+ * approval. Its row still gets Edit/Revoke rather than Approve, because the
+ * participant row already exists — a hand-edit anomaly that should approximately
+ * never fire, surfaced honestly rather than hidden.
+ */
+export function funnelStage(person: RosterPerson): FunnelStage {
+  if (person.status === "not_registered") return "no_account"
+  if (person.status === "ready") return "approved"
+  return person.reason === "not_onboarded" ? "not_onboarded" : "awaiting_approval"
 }
 
 export type Roster = {
@@ -76,6 +107,13 @@ export type Roster = {
   /** Chase list 2 — "registered but not set up to bet". */
   notReady: RosterPerson[]
   ready: RosterPerson[]
+  /** The console's header, stage by stage. Same rows, same order, as `people`. */
+  funnel: {
+    noAccount: RosterPerson[]
+    notOnboarded: RosterPerson[]
+    awaitingApproval: RosterPerson[]
+    approved: RosterPerson[]
+  }
   counts: {
     total: number
     notRegistered: number
@@ -165,6 +203,8 @@ export function buildRoster(input: {
       invited,
       onboarded: trimmed(user.onboarded_at) !== "",
       entry_fee: hasFee ? fee : null,
+      // Undefined on the row means the schema default (true) applied.
+      is_player: participant === undefined ? null : participant.is_player !== false,
       last_sign_in_at: lastSignInByUser.get(user.id) ?? null,
       status,
       reason,
@@ -201,6 +241,7 @@ export function buildRoster(input: {
       invited: true,
       onboarded: false,
       entry_fee: null,
+      is_player: null,
       last_sign_in_at: null,
       status: "not_registered",
       reason: "no_account",
@@ -233,6 +274,12 @@ export function buildRoster(input: {
     notRegistered,
     notReady,
     ready,
+    funnel: {
+      noAccount: people.filter((p) => funnelStage(p) === "no_account"),
+      notOnboarded: people.filter((p) => funnelStage(p) === "not_onboarded"),
+      awaitingApproval: people.filter((p) => funnelStage(p) === "awaiting_approval"),
+      approved: people.filter((p) => funnelStage(p) === "approved"),
+    },
     counts: {
       total: people.length,
       notRegistered: notRegistered.length,

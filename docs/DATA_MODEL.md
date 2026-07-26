@@ -183,7 +183,7 @@ Join table connecting users to tournaments. A user is "in" a tournament for a gi
 
 **Why `is_player`:** the rules talk about "betting on yourself" — that only matters if the bettor is also a player. Non-playing entrants (if any) are exempt from the self-bet rule.
 
-**How rows are created (Sprint 16 / A12).** A member logging in does **not** create a participant row — they're onboarded but not yet in the pool, so they can view the menu but not bet. An admin approves them on `/admin/participants`, which sets the entry fee + player flag and **creates the row**. The row existing = approved to bet; there is no separate `betting_enabled` flag. Writes stay admin-only (RLS): `POST/PATCH/DELETE /api/admin/participants` re-checks `is_admin` and validates the fee against the `tournaments` row. This replaces the old manual Supabase Studio row-add.
+**How rows are created (Sprint 16 / A12).** A member logging in does **not** create a participant row — they're onboarded but not yet in the pool, so they can view the menu but not bet. An admin approves them on `/admin/people` (Sprint 20; was `/admin/participants`), which sets the entry fee + player flag and **creates the row**. The row existing = approved to bet; there is no separate `betting_enabled` flag. Writes stay admin-only (RLS): `POST/PATCH/DELETE /api/admin/participants` re-checks `is_admin` and validates the fee against the `tournaments` row. This replaces the old manual Supabase Studio row-add.
 
 People who are *expected* in the tournament but haven't registered are deliberately **not** modeled here — they live in `tournament_invites` (§3.8), precisely so a row in this table keeps meaning "approved to bet".
 
@@ -284,7 +284,7 @@ Each individual wager: one row per (user, pick) pair where money was placed.
 
 ### 3.8 `tournament_invites`
 
-The **expected roster** — who we think is playing this year. Typed into Supabase Studio by an admin before anyone signs in, and read only by `/admin/roster` (Sprint 10).
+The **expected roster** — who we think is playing this year. Entered before anyone signs in, and read by `/admin/people` (Sprint 20; originally `/admin/roster`, Sprint 10).
 
 | Column | Type | Notes |
 |---|---|---|
@@ -298,7 +298,9 @@ The **expected roster** — who we think is playing this year. Typed into Supaba
 
 **Why a separate table rather than a nullable `tournament_participants.user_id`.** Sprint 10 originally proposed widening §3.3 to hold "invited but never registered". That would break the A11 invariant above: a `tournament_participants` row *means* approved to bet, and it's what `/dashboard`, `/results` and `/admin/view` sum the pool from. Invite rows there would either inflate the pool or force a `user_id IS NOT NULL` guard into every tournament-wide query. Keeping them apart costs one table and protects the money math.
 
-**No FK to `users`** — by design. The whole point of an invite is that the `users` row may not exist yet, so `/admin/roster` matches the two by normalized email at read time (`lib/roster.ts`). Nothing in the app writes this table.
+**No FK to `users`** — by design. The whole point of an invite is that the `users` row may not exist yet, so `/admin/people` matches the two by normalized email at read time (`lib/roster.ts`).
+
+**Written by the app since Sprint 20.** The console's paste box (`POST /api/admin/invites`) parses `name, email` lines and adds the missing ones, keyed on the same normalized email as the unique index above — so re-pasting the same list is a no-op. It only ever inserts, or fills in a name that changed; removing an invite is still a Studio job.
 
 ---
 
@@ -366,7 +368,7 @@ Policies live inline in each table's migration file under `supabase/migrations/`
 - **`tournament_participants`**: anyone authenticated can `SELECT`. Only admins can `INSERT` / `UPDATE`.
 - **`bet_categories`, `tournaments`**: read by all authenticated users; write by admins only.
 - **`users`**: readable by all authenticated users (`20260717000002_users_read_all.sql` — closed-bet views and payouts show everyone's `display_name`, PRD §12 Q12; fine for a private pool behind login). Writes still admin/trigger only.
-- **`tournament_invites`**: admins only, read *and* write — unlike `users`, these are the email addresses of people who aren't in the app yet, and the admin roster page is the only consumer.
+- **`tournament_invites`**: admins only, read *and* write — unlike `users`, these are the email addresses of people who aren't in the app yet, and the admin people console is the only consumer.
 - **`admin_auth_activity()`** (`20260725000000`): not a table but the same boundary. `auth.users.last_sign_in_at` isn't client-readable, so this `SECURITY DEFINER` function exposes just `(user_id, last_sign_in_at)` and self-gates on `is_admin()` — a non-admin caller gets zero rows, not an error. `EXECUTE` is revoked from `anon` and granted to `authenticated` only. This is deliberately *not* a service-role client: the app has none, and one full-bypass key in the runtime to read one timestamp column isn't a trade worth making.
 
 ---
