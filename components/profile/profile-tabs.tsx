@@ -207,22 +207,17 @@ function AdminPanel() {
         <p className="text-sm text-text-muted">
           You&apos;re an admin. Manage the pool from here.
         </p>
+        {/* Three pages, clean boundaries: people · menu · money. Sprint 20
+            merged the old Participants and Roster buttons into People. */}
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" render={<Link href="/admin/view" />}>
-            View All
+          <Button variant="secondary" size="sm" render={<Link href="/admin/people" />}>
+            People
           </Button>
           <Button variant="secondary" size="sm" render={<Link href="/admin/import" />}>
             Import Bets
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            render={<Link href="/admin/participants" />}
-          >
-            Participants
-          </Button>
-          <Button variant="secondary" size="sm" render={<Link href="/admin/roster" />}>
-            Roster
+          <Button variant="secondary" size="sm" render={<Link href="/admin/view" />}>
+            View All
           </Button>
         </div>
       </CardContent>
