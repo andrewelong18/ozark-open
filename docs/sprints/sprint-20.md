@@ -57,7 +57,7 @@ Notes for whoever reads this next:
 
 - **A `fee_unset` row counts under "Awaiting approval"** — it is awaiting a *valid* approval — but keeps the **Edit/Revoke** lever rather than Approve, because its `tournament_participants` row already exists. Anomaly state; a hand-edit is the only way to reach it.
 - **No prod SQL to run.** This sprint added no migration.
-- Verified by `npm run test` (186 pass), `npm run lint`, `npm run build`. The browser walkthrough is filed as its own issue — this environment has no Supabase env vars.
+- Verified by `npm run test` (186 pass), `npm run lint`, `npm run build`. The browser walkthrough is filed as [#86](https://github.com/andrewelong18/ozark-open/issues/86) — this environment had no Supabase env vars, so no dev server and no prod read-check.
 
 ### Out of scope (don't build)
 
