@@ -5,6 +5,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import {
   buildRoster,
+  funnelStage,
   normalizeEmail,
   type AuthActivityQueryRow,
   type InviteQueryRow,
@@ -235,4 +236,86 @@ test("hasInvites is false when the admin hasn't entered a roster yet", () => {
   const r = roster({ users: [user("u-a", "a@x.com")] })
   assert.equal(r.hasInvites, false)
   assert.equal(r.counts.total, 1)
+})
+
+// ---------------------------------------------------------------------------
+// is_player passthrough (Sprint 20 — the console's edit form pre-fills from it)
+// ---------------------------------------------------------------------------
+
+test("is_player rides along; null when there is no participant row", () => {
+  const r = roster({
+    users: [
+      user("u-a", "a@x.com", { display_name: "A" }),
+      user("u-b", "b@x.com", { display_name: "B" }),
+      user("u-c", "c@x.com", { display_name: "C" }),
+    ],
+    participants: [
+      { user_id: "u-a", entry_fee: 30, is_player: false },
+      // Omitted on the row = the schema default (true) applied.
+      { user_id: "u-b", entry_fee: 30 },
+    ],
+  })
+  const byName = new Map(r.people.map((p) => [p.name, p]))
+  assert.equal(byName.get("A")!.is_player, false)
+  assert.equal(byName.get("B")!.is_player, true)
+  assert.equal(byName.get("C")!.is_player, null)
+})
+
+// ---------------------------------------------------------------------------
+// The funnel (Sprint 20) — the console's header stages
+// ---------------------------------------------------------------------------
+
+test("each funnel stage holds exactly the rows at that step", () => {
+  const r = roster({
+    invites: [{ email: "pat@x.com", invited_name: "Pat" }],
+    users: [
+      user("u-stall", "stall@x.com", { display_name: "Stall", onboarded_at: null }),
+      user("u-wait", "wait@x.com", { display_name: "Wait" }),
+      user("u-in", "in@x.com", { display_name: "In" }),
+    ],
+    participants: [{ user_id: "u-in", entry_fee: 30 }],
+  })
+  const names = (people: { name: string }[]) => people.map((p) => p.name)
+  assert.deepEqual(names(r.funnel.noAccount), ["Pat"])
+  assert.deepEqual(names(r.funnel.notOnboarded), ["Stall"])
+  assert.deepEqual(names(r.funnel.awaitingApproval), ["Wait"])
+  assert.deepEqual(names(r.funnel.approved), ["In"])
+})
+
+test("the funnel stages partition people — the header can't disagree with the table", () => {
+  const r = roster({
+    invites: [{ email: "pat@x.com" }, { email: "ann@x.com" }],
+    users: [
+      user("u-ann", "ann@x.com"),
+      user("u-cy", "cy@x.com"),
+      user("u-dee", "dee@x.com", { onboarded_at: null }),
+    ],
+    participants: [{ user_id: "u-cy", entry_fee: 20 }],
+  })
+  const { noAccount, notOnboarded, awaitingApproval, approved } = r.funnel
+  assert.equal(
+    noAccount.length + notOnboarded.length + awaitingApproval.length + approved.length,
+    r.people.length
+  )
+  assert.equal(r.people.length, 4)
+})
+
+test("a fee-unset participant sits under awaiting approval, not approved", () => {
+  const r = roster({
+    users: [user("u-a", "a@x.com", { display_name: "A" })],
+    participants: [{ user_id: "u-a", entry_fee: 0 }],
+  })
+  const person = r.people[0]
+  assert.equal(person.reason, "fee_unset")
+  assert.equal(funnelStage(person), "awaiting_approval")
+  assert.deepEqual(r.funnel.approved, [])
+  // It keeps its participant row, so the console gives it Edit/Revoke.
+  assert.equal(person.is_player, true)
+})
+
+test("with no invites the funnel simply starts at 'signed in'", () => {
+  const r = roster({ users: [user("u-a", "a@x.com")] })
+  assert.equal(r.hasInvites, false)
+  assert.deepEqual(r.funnel.noAccount, [])
+  assert.equal(r.funnel.awaitingApproval.length, 1)
 })
