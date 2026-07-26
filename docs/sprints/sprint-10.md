@@ -2,6 +2,8 @@
 
 > Part of the [Ozark Open roadmap](../ROADMAP.md). **Bonus wish-list sprint (added Jul 18, 2026)** — an enhancement, never an MVP blocker. Work it only when no MVP sprint (0–9) is waiting; if it never ships, the tournament still runs.
 
+> **⚠️ Page superseded by [Sprint 20](sprint-20.md) (Jul 26, 2026).** `/admin/roster` is now a redirect to `/admin/people`, which shows the same funnel with approve/edit/revoke attached per row. Everything else this sprint shipped carries forward unchanged and is still live: the `tournament_invites` table, the `admin_auth_activity()` RPC, `lib/roster.ts`, and `lib/format.ts`. History below is left as it was written.
+
 **Goal:** one read-only admin page that answers "who's in, who's stuck, and who's missing" at a glance — replacing the Sprint 5 chase SQL run by hand in Studio.
 **Target:** as time allows before the Aug 28 feature freeze — most useful if it lands before betting opens · **Blockers:** none hard. Needs the same server-side admin trust boundary as `/admin/import`; auth data comes from a `SECURITY DEFINER` RPC gated on `is_admin()`, not a service-role client.
 

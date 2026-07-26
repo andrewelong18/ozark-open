@@ -16,7 +16,7 @@ The unit + round-trip + CI stack already proves the *pure logic* and the *DB lay
 - [ ] **E2E magic-link sign-in helper.** A fixture that logs a test in **without email** by minting an action link with the service-role key (the `scripts/dev-magiclink.ts` `admin.generateLink` path) and navigating to it — so specs start already-authed as a chosen seeded account. Service-role key comes from the local stack's env, never committed.
 - [ ] **E2E critical journeys** (each drives a seeded `@ozark.test` account against the `seed-sample-phase1.sql` menu):
   - New member: `newbie@` → forced `/onboarding` → sets display name → walkthrough → lands on `/bets` **view-only** (can't place).
-  - Admin approval: `admin@` → `/admin/participants` → the newly-onboarded account under *Awaiting approval* → set fee + player flag → *Approve to bet*.
+  - Admin approval: `admin@` → `/admin/people` → the newly-onboarded account at *Awaiting approval* → **Approve** → set fee + player flag → *Approve to bet*.
   - Place / edit / remove: the just-approved account places a valid wager on `/bets`, edits it, removes it; `/my-bets` reflects each step; a §7-violating slip is rejected with the server error surfaced.
   - Reveal-at-close: others' picks on an **open** bet stay hidden, become visible once the bet is `closed` (drives the closed-bet + `deleted_at` visibility contract end-to-end, not just in the RLS round-trip).
   - Payouts render: after results upload, `/results` and the My Bets per-pick payout rollup show numbers (asserted against the same worked example `lib/payouts.test.ts` already pins).

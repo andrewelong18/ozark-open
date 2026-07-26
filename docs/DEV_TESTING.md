@@ -41,7 +41,7 @@ in order into the **SQL editor**). Then, in the hosted **SQL editor**, run:
 with real emails you control — Gmail aliases like `you+admin@gmail.com`, `you+approved@gmail.com`
 all land in your one inbox and each becomes its own account. Then promote one to admin in the
 SQL editor (`update public.users set is_admin = true where email = 'you+admin@gmail.com';`) and
-approve the rest from `/admin/participants`.
+approve the rest from `/admin/people`.
 
 ### 4. Run the app
 ```bash
@@ -104,7 +104,7 @@ Re-running `seed-dev-accounts.sql` resets all five to exactly these states.
 | `newbie@ozark.test` | **Un-onboarded** | Forced through the required onboarding flow (set display name → walkthrough → `/bets` view-only). |
 
 **Full happy path in one sitting:** sign in as `newbie@` → complete onboarding → confirm
-you're view-only on `/bets`. Then sign in as `admin@` → `/admin/participants` → the newly
+you're view-only on `/bets`. Then sign in as `admin@` → `/admin/people` → the newly
 onboarded account is under **Awaiting approval** → set an entry fee + player flag →
 **Approve to bet**. Back as that account, you can now place a wager.
 

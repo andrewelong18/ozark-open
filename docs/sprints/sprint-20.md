@@ -16,10 +16,10 @@ Sprint 10's roster page was specced Jul 18, two days before Sprint 16 shipped `/
 - **The derivation is duplicated.** `/admin/participants` builds its pending/approved split with an ad-hoc `Map` + `filter`; `lib/roster.ts` derives the same split plus three states it doesn't know about (`not_onboarded`, `fee_unset`, off-roster). One of these is redundant.
 - **Seeing and acting are separated.** The page that tells you someone is stuck is not the page where you unstick them.
 
-- [ ] **One route.** New `app/admin/people/page.tsx` — the honest name, since it covers people who are *not* participants. `/admin/roster` and `/admin/participants` become redirects (`redirect()` one-liners) so the README's links and muscle memory keep working. Admin panel in `components/profile/profile-tabs.tsx` drops from four buttons to three: **People** · Import Bets · View All.
-- [ ] **One derivation.** `lib/roster.ts`'s `buildRoster` becomes the single source for the page — delete the ad-hoc pending/approved `Map` in the old participants page. Drop the `onboarded_at` filter on the users query so abandoned-onboarding members stop being invisible. No new status logic; the existing `RosterStatus` + `RosterReason` already cover every stage.
-- [ ] **Funnel header.** Counts across the top as a funnel, not four unrelated tiles: **No account → Signed in, not onboarded → Awaiting approval → Approved.** Each count is the same filter the table sorts by, so the header and the table can't disagree.
-- [ ] **Row actions, attached per stage.** One table, worst-first, with the lever only where a lever exists — the action column is empty by design for the top two stages, which is itself the information ("nothing to click; go text them"):
+- [x] **One route.** New `app/admin/people/page.tsx` — the honest name, since it covers people who are *not* participants. `/admin/roster` and `/admin/participants` become redirects (`redirect()` one-liners) so the README's links and muscle memory keep working. Admin panel in `components/profile/profile-tabs.tsx` drops from four buttons to three: **People** · Import Bets · View All.
+- [x] **One derivation.** `lib/roster.ts`'s `buildRoster` becomes the single source for the page — delete the ad-hoc pending/approved `Map` in the old participants page. Drop the `onboarded_at` filter on the users query so abandoned-onboarding members stop being invisible. No new status logic; the existing `RosterStatus` + `RosterReason` already cover every stage.
+- [x] **Funnel header.** Counts across the top as a funnel, not four unrelated tiles: **No account → Signed in, not onboarded → Awaiting approval → Approved.** Each count is the same filter the table sorts by, so the header and the table can't disagree.
+- [x] **Row actions, attached per stage.** One table, worst-first, with the lever only where a lever exists — the action column is empty by design for the top two stages, which is itself the information ("nothing to click; go text them"):
 
   | Stage | Action |
   |---|---|
@@ -29,22 +29,35 @@ Sprint 10's roster page was specced Jul 18, two days before Sprint 16 shipped `/
   | Approved | **Edit** (fee / player flag) · **Revoke** |
 
   Reuse `components/admin/participants-manager.tsx`'s approve/edit/revoke UI as the client island; **`/api/admin/participants` needs no change** — same POST/PATCH/DELETE contract, same server-side `is_admin` re-check and fee validation against the `tournaments` row.
-- [ ] **Bulk invite entry** (folds in [#82](https://github.com/andrewelong18/ozark-open/issues/82)). A paste-a-list box on this page: one `name, email` per line → upsert into `tournament_invites`. The `(tournament_id, lower(email))` unique index makes it idempotent and re-runnable, so a re-paste is safe. This is what makes the invite roster cheap enough to actually fill — without it, the "no account" stage stays empty and the funnel starts one step in.
-- [ ] **Keep the read-only guarantees that made the roster useful.** Last login (relative, absolute on hover, "Never" for invite-only rows), the off-roster flag, and the copyable plain-text chase lists. Destructive actions (**Revoke**) must not be a bare inline button next to a name — put it behind the row's edit affordance so a glance-and-scroll page can't lose someone their access by mis-tap.
-- [ ] **Docs:** this file; `README.md` Track 2 (one page, not two); `CLAUDE.md` lines 42 + 54 (the admin-UI list shrinks); `docs/DATA_MODEL.md` §3.8 (the roster page reference); `ROADMAP.md` index + status summary; mark Sprint 10 and Sprint 16's page references as superseded rather than rewriting their history.
+- [x] **Bulk invite entry** (folds in [#82](https://github.com/andrewelong18/ozark-open/issues/82)). A paste-a-list box on this page: one `name, email` per line → upsert into `tournament_invites`. The `(tournament_id, lower(email))` unique index makes it idempotent and re-runnable, so a re-paste is safe. This is what makes the invite roster cheap enough to actually fill — without it, the "no account" stage stays empty and the funnel starts one step in.
+- [x] **Keep the read-only guarantees that made the roster useful.** Last login (relative, absolute on hover, "Never" for invite-only rows), the off-roster flag, and the copyable plain-text chase lists. Destructive actions (**Revoke**) must not be a bare inline button next to a name — put it behind the row's edit affordance so a glance-and-scroll page can't lose someone their access by mis-tap.
+- [x] **Docs:** this file; `README.md` Track 2 (one page, not two); `CLAUDE.md` lines 42 + 54 (the admin-UI list shrinks); `docs/DATA_MODEL.md` §3.8 (the roster page reference); `ROADMAP.md` index + status summary; mark Sprint 10 and Sprint 16's page references as superseded rather than rewriting their history.
 
 **Done when:** from one page an admin can see every person's stage in the funnel — invited-but-absent, signed-in-but-stalled, awaiting approval, approved — and approve, edit, or revoke the ones that need it, without opening a second admin page or Studio. Loading the page with an empty `tournament_invites` still works and simply starts the funnel at "signed in".
 
-### Open decision — how much governance?
+### Open decision — how much governance? → **(a), resolved Jul 26, 2026**
 
 The sprint above delivers **"see and control access."** It does not deliver **"prove how access was granted."** `tournament_participants` records no `created_at`, no `approved_by` — so after the fact there's no way to show who approved Jake or when.
 
-Decide before building:
+- **(a) Access control only ✅ — Pat's call, Jul 26, 2026.** Built exactly as specced. No migration, no schema change; `tournament_participants` and `tournament_invites` are used as they already exist.
+- **(b) Add an audit trail** — a small migration adding `approved_by uuid REFERENCES users(id)` + `approved_at timestamptz` to `tournament_participants`, stamped in the POST/PATCH handlers, surfaced as "Approved by Pat, Aug 3" on the row. **Not built.** If a dispute about how someone got in ever needs answering, this is the change to make.
 
-- **(a) Access control only** — build as specced above. Right answer if "governance" means one place to see and change who can bet.
-- **(b) Add an audit trail** — a small migration adding `approved_by uuid REFERENCES users(id)` + `approved_at timestamptz` to `tournament_participants`, stamped in the POST/PATCH handlers, surfaced as "Approved by Pat, Aug 3" on the row. ~One extra checkbox. Right answer if you'd ever need to answer a dispute about how someone got in.
+### Shipped — Jul 26, 2026
 
-Pat's call — this is a real-money pool, so (b) is cheap insurance, but it's a genuine scope addition and not required by anything in the PRD.
+| What | Where |
+|---|---|
+| The console | `app/admin/people/page.tsx` + `components/admin/people-console.tsx` |
+| The one derivation | `lib/roster.ts` — `funnelStage()` + `Roster.funnel`, `is_player` carried through (`lib/roster.test.ts`) |
+| Bulk invite entry (#82) | `lib/invites.ts` + `lib/invites.test.ts` → `app/api/admin/invites/route.ts` |
+| Redirects | `app/admin/roster/page.tsx`, `app/admin/participants/page.tsx` → `/admin/people` |
+| Deleted | `components/admin/participants-manager.tsx` (its UI moved into the console) |
+| Unchanged, as specced | `app/api/admin/participants/route.ts` |
+
+Notes for whoever reads this next:
+
+- **A `fee_unset` row counts under "Awaiting approval"** — it is awaiting a *valid* approval — but keeps the **Edit/Revoke** lever rather than Approve, because its `tournament_participants` row already exists. Anomaly state; a hand-edit is the only way to reach it.
+- **No prod SQL to run.** This sprint added no migration.
+- Verified by `npm run test` (186 pass), `npm run lint`, `npm run build`. The browser walkthrough is filed as its own issue — this environment has no Supabase env vars.
 
 ### Out of scope (don't build)
 

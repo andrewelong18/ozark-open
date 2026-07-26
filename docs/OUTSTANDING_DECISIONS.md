@@ -42,7 +42,7 @@ explicit confirm-or-supersede rather than a silent default:
 - **Per-user betting toggle + non-player cap.** The betting-toggle half is ✅
   **superseded Jul 20, 2026 (Sprint 16 / A12).** Rather than a `betting_enabled`
   column, betting eligibility is gated by whether a `tournament_participants` row
-  exists, and admins grant/revoke it on `/admin/participants` (approving creates the
+  exists, and admins grant/revoke it on `/admin/people` (approving creates the
   row). The **non-player stricter cap** (#2) is still open.
 
 ## 2. Stricter betting maximum for non-playing bettors

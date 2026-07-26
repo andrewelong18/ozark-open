@@ -2,6 +2,8 @@
 
 > Part of the [Ozark Open roadmap](../ROADMAP.md). **Bonus wish-list sprint** — an enhancement, never an MVP blocker. Work it only when no MVP sprint (0–9) is waiting. Grew out of `docs/COMPETITIVE_ANALYSIS.md` §1.2 / §6 (first-run onboarding / "How it works"), expanded on Andrew's direction (Jul 20, 2026) to also cover self-set identity and an in-app bettor-approval step.
 
+> **⚠️ One page superseded by [Sprint 20](sprint-20.md) (Jul 26, 2026).** `/admin/participants` is now a redirect to `/admin/people`, which merges this approval UI with the Sprint 10 roster — and drops the `onboarded_at` filter that hid members who abandoned onboarding. The `/api/admin/participants` route, the onboarding flow, and everything else this sprint shipped are unchanged. History below is left as it was written.
+
 **Goal:** turn "registration" from an invisible Studio chore into a real product flow. A first-time member is required to set their own **display name** (optional nickname + photo) before entering the app, reads a dismissible **"how this pool works"** walkthrough, and can immediately **browse the bet menu** — but can only **place bets once an admin approves them** from a new `/admin/participants` page. Approving a member is what creates their `tournament_participants` row (entry fee + player flag), replacing the manual Studio add.
 
 **Target:** as time allows before the Aug 28 feature freeze · **Blockers:** none hard. Builds on Sprint 1 (participants schema), Sprint 4 (placements), Sprint 15 (profile/avatar plumbing).
