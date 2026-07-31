@@ -121,8 +121,17 @@ entire evening — reset → sim pool → four uploads → both placement seeds 
 payouts → teardown — and asserts 50+ facts along the way. It ends by printing the payout table
 this session should land on (reproduced in [Appendix A](#appendix-a--the-expected-payout-table)).
 
-- [ ] All 186 unit tests pass
-- [ ] `dry-run-verify.sh` ends with "The whole dry-run script passes end to end."
+- [x] All 186 unit tests pass
+- [x] `dry-run-verify.sh` ends with "The whole dry-run script passes end to end."
+
+> **macOS:** the script's defaults are Linux-shaped. On this Mac it needs three
+> env vars, or `pg_ctl` fails with an unhelpful "could not start server":
+> ```bash
+> LC_ALL=C TMPDIR=/tmp PGBIN=/opt/homebrew/opt/postgresql@16/bin bash scripts/dry-run-verify.sh
+> ```
+> `PGBIN` because the default globs `/usr/lib/postgresql/*/bin`; `LC_ALL=C`
+> because the postmaster otherwise "became multithreaded during startup";
+> `TMPDIR=/tmp` because the default temp path exceeds the 103-byte socket limit.
 
 > **Known:** `npx tsc --noEmit` currently fails on `lib/profile.test.ts:61`. It is pre-existing
 > on `main`, unrelated to the dry run, and does not affect the app — but it means CI is red.
