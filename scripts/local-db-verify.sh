@@ -46,7 +46,9 @@ run_sql() { psql "$PGURI" -X -q -v ON_ERROR_STOP=1 "$@"; }
 echo "==> stub Supabase auth schema"
 run_sql -c "
   CREATE SCHEMA auth;
-  CREATE TABLE auth.users (id uuid PRIMARY KEY, email text);
+  -- last_sign_in_at is read by admin_auth_activity() in the Sprint 10
+  -- tournament_invites migration, so the stub has to carry it.
+  CREATE TABLE auth.users (id uuid PRIMARY KEY, email text, last_sign_in_at timestamptz);
   CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS 'SELECT NULL::uuid';
   CREATE ROLE authenticated; CREATE ROLE anon;"
 
