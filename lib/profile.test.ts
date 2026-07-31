@@ -58,7 +58,9 @@ test("parseProfileBody rejects a non-string nickname and non-object bodies", () 
 })
 
 test("parseProfileBody only treats avatarUpdated === true as an update", () => {
-  assert.equal(parseProfileBody({ avatarUpdated: "true" }).ok && parseProfileBody({ avatarUpdated: "true" }).value.avatarUpdated, false)
+  const parsed = parseProfileBody({ avatarUpdated: "true" })
+  assert.ok(parsed.ok)
+  assert.equal(parsed.value.avatarUpdated, false)
 })
 
 // ---------------------------------------------------------------------------
