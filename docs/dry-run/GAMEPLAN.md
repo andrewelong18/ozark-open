@@ -142,7 +142,7 @@ this session should land on (reproduced in [Appendix A](#appendix-a--the-expecte
 The free Supabase tier has no automated backups, and Part 0 is about to delete every placement.
 The data is small, so a JSON dump is plenty.
 
-- [ ] In the Supabase SQL editor, run each of these and save the output to a file:
+- [x] In the Supabase SQL editor, run each of these and save the output to a file:
   ```sql
   SELECT json_agg(t) FROM (SELECT * FROM public.users) t;
   SELECT json_agg(t) FROM (SELECT * FROM public.tournament_participants) t;
@@ -150,16 +150,16 @@ The data is small, so a JSON dump is plenty.
   SELECT json_agg(t) FROM (SELECT * FROM public.bets) t;
   SELECT json_agg(t) FROM (SELECT * FROM public.bet_picks) t;
   ```
-- [ ] Saved to somewhere that isn't this laptop
+- [x] Saved to somewhere that isn't this laptop — Google Drive, 2026-07-31
 
 ### 0.3 Reset production and seed the pool · P0
 
 Run in order, in the Supabase SQL editor (or via the Supabase MCP from Claude Code):
 
-- [ ] `supabase/dry-run/00-reset.sql` — clears placements, hides the menu, sets every result
+- [x] `supabase/dry-run/00-reset.sql` — clears placements, hides the menu, sets every result
       back to `pending`, flips the tournament to `active`
-- [ ] `supabase/dry-run/10-accounts.sql` — creates the twelve simulated accounts
-- [ ] Both verification queries at the bottom of those files return what their comments say
+- [x] `supabase/dry-run/10-accounts.sql` — creates the twelve simulated accounts
+- [x] Both verification queries at the bottom of those files return what their comments say
 
 **Why the reset is needed:** production currently holds the sample menu with every Phase 1
 result already filled in, plus a dozen stale test wagers. Starting there would mean opening a
@@ -227,9 +227,12 @@ service-role key and **sends no email at all**.
       session within a window group). Label the profiles by name.
 - [ ] Leave Pat's own account for Act 1 — his login is a real test of the real email path.
 
-> **Session length.** Prod sessions may be time-boxed. Run
-> `SESSION_TIMEBOX_HOURS=0 bash scripts/prod-auth-config.sh --apply` first so nobody gets
-> logged out at the worst moment. (This is open issue #17 anyway.)
+> **Session length — already done, no action needed.** Verified against prod auth config on
+> 2026-07-31: `sessions_timebox = 0` and `sessions_inactivity_timeout = 0`. Issue #17 was
+> closed 2026-07-20. Do **not** re-run `prod-auth-config.sh`; nobody will be logged out.
+>
+> **Magic links expire after 1 hour** (`mailer_otp_exp = 3600`) and are single-use. Mint them
+> when Pat is nearly at the door, not hours ahead, or you'll be re-minting five links.
 
 ### 0.6 Stage everything · P0
 
@@ -273,8 +276,13 @@ September.
 - [ ] Click the link → lands on `/dashboard`, signed in as Pat
 
 **Log it if:** the email takes more than a minute, lands in spam, or the sender name looks
-untrustworthy. This is exactly what issue #16 (custom SMTP via Resend, sending from
-`ozark-open.com`) is for — the dry run should settle whether it's optional.
+untrustworthy.
+
+> **Resend is already live** — verified against prod auth config on 2026-07-31:
+> `external_email_enabled = true`, `smtp_host = smtp.resend.com`, `rate_limit_email_sent = 30/hr`.
+> Issue #16 was closed 2026-07-20. So this step is no longer "will the built-in dev mailer
+> cope?" — it's an acceptance test of Resend's deliverability and sender reputation. Judge it
+> on **speed, inbox-vs-spam, and what the From line says**.
 
 ### 1.3 A brand-new member onboards · P0
 - [ ] Switch to the **newbie** Chrome profile
