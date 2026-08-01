@@ -11,6 +11,16 @@ decision into `PRD.md` §12 and delete the row.
 ADR 0001; and the void → pool math (old #3) — confirmed as
 `pool = Σ entry fees − Σ voided stakes` (PRD §12 A7, ADR 0001 §9).
 
+**Resolved in the July 31, 2026 full-lifecycle dry run with Pat** (see
+`docs/dry-run/ISSUE_LOG.md` for the session record):
+
+| Decision | Pat's answer |
+|---|---|
+| **#2 — stricter cap for non-playing bettors** | **No stricter limit** — same min and max rules as players. Marked resolved below; no code change. |
+| **The 5–10 pick span** (was: per phase, or per tournament?) | **Minimum 5 across the whole tournament; maximum 10 per phase.** The minimum is only evaluated before Phase 2 close. This *is* a code change — schema, `checkPhaseMinimums()`, the chase query, PRD §7/§8.1 and ADR 0001 all move together. |
+| **Do published lines ever move?** | **Never.** The lifecycle sheets were regenerated so they no longer carry a reprice (`24ea20a`). The odds-snapshot rule stays in the code regardless — correcting a typo means re-uploading, which is a reprice whether or not it was intended. |
+| **Admin UI scope** | **Expanded** beyond `/admin/import` + `/admin/people` + `/admin/view`. Pat asked for a house-rules editor, admin-editable display names, and the ability to add a member and bet on their behalf. `CLAUDE.md` and the ROADMAP out-of-scope list are updated accordingly. |
+
 Legend: **Owner** = who needs to decide · **Blocks** = what can't proceed until then.
 
 ---
@@ -45,16 +55,41 @@ explicit confirm-or-supersede rather than a silent default:
   exists, and admins grant/revoke it on `/admin/people` (approving creates the
   row). The **non-player stricter cap** (#2) is still open.
 
-## 2. Stricter betting maximum for non-playing bettors
-**Owner:** Pat + Jake · **Blocks:** the non-player path in `lib/validation.ts` (Sprint 3).
+## 2. Stricter betting maximum for non-playing bettors — ✅ RESOLVED 2026-07-31
+**Owner:** Pat · **Resolved in:** the full-lifecycle dry run, Act 4.8.
 
-Pat: non-playing participants "should have a stricter betting max limit." No number
-or formula was given. Need: the actual cap (a flat dollar amount? a lower
-`max_single`/`max_self`? a lower entry ceiling?) and whether it's a per-tournament
-param or a per-participant override.
+**Pat's answer: no stricter limit. Non-playing bettors get the same min and max
+rules as players.**
 
-**Decided so far:** non-players are supported (any number; expect 0–5), exempt from
-the self-bet rule (Q14).
+Rationale, walked through with Casey Sideline (the $50 non-player in the simulated
+pool): non-players already get identical entry-fee bounds, max single bet and pick
+counts. The only rule they are exempt from is the self-bet cap (Q14), and that is
+inapplicable rather than lenient — no pick in the menu bears a non-player's name, so
+there is nothing for the cap to bind against.
+
+**No code change.** The `is_player` exemption branch in `validateSelfBetTotal`
+(`lib/validation.ts:156`) stays as-is; it is a correct no-op for non-players.
+
+*(Original ask: Pat, July 11 — non-playing participants "should have a stricter
+betting max limit", with no number or formula given.)*
+
+## 2b. Four questions the Jul 31 dry run raised but didn't get to ask
+**Owner:** Pat · **Blocks:** #4 blocks the largest available scope cut; the rest are policy.
+
+Acts 9.1, 10.2, 10.4 and 11.1 weren't reached, so these went unasked. Ten minutes with
+Pat closes all four. Tracked as [#111](https://github.com/andrewelong18/ozark-open/issues/111).
+
+1. **Devin Arand's case** — someone is $2 short of their entry at Phase 2 close and isn't
+   answering. Bets stand? (Documented answer is Q3 — *whatever stands, stands* — but never
+   confirmed aloud. Their full entry funds the pool while only part works for them; Devin
+   finished the dry run at −$2.04, almost entirely from this.)
+2. **Steve Esswein's case** — someone pays the entry and never wagers. He appeared on the
+   board at **$0.00 / −$20.00**. Is that what Pat wants when it's a real person?
+3. **Cents** — payouts display to the cent. How does $29.03 get paid over Venmo? Decides
+   whether to round or show a suggested-payment column.
+4. **The participant leaderboard** — Pat suggested dropping it in July. Still his view? If so,
+   **Sprint 8 and the whole Google Sheets integration can be cut**, along with issues #66–#68.
+   The single largest scope reduction available.
 
 ## 3. Entry collection mechanism
 **Owner:** Pat (+ tournament treasurer) · **Blocks:** nothing in the app (payments are out of band) — documentation accuracy only.

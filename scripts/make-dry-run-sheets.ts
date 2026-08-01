@@ -195,15 +195,21 @@ async function main() {
   // no voids anywhere, so without this the one place where void ≠ push — the
   // pool itself shrinking — would never be exercised.
   //
-  // Built on `repriced`, not `phase1Open`: a line that moved on Wednesday
-  // stays moved. Rebuilding these from the pre-reprice odds would silently
-  // undo Act 5 on the next upload.
+  // Built on `phase1Open`, NOT `repriced`. Pat confirmed on 2026-07-31 that a
+  // published line never moves, so the lifecycle sheets must not carry the
+  // Act 5 reprice forward — otherwise uploading this file silently shortens
+  // Dan Mercer from +110 to -140 in the middle of the close, which is both a
+  // surprise and a workflow the book will never actually run.
+  //
+  // 1b-phase1-repriced.xlsx is still generated above, for anyone who does want
+  // to exercise the odds-snapshot rule deliberately. Payouts are unaffected
+  // either way: lib/payouts.ts reads odds_at_placement, never the live pick.
   const round1Results: Record<number, string> = Object.fromEntries(
     source.filter((r) => r.phase === 1).map((r) => [r.pick_id, r.result])
   )
   round1Results[46] = "Void" // Brendan Nulsen (E)
   round1Results[47] = "Void" // Austin Davis (-10) — withdrew
-  const phase1Closed = withStatus(withResults(repriced, round1Results), 1, "closed")
+  const phase1Closed = withStatus(withResults(phase1Open, round1Results), 1, "closed")
   await write("2-phase1-closed-r1-results.xlsx", phase1Closed)
 
   // ── 3 · Phase 2 opens ────────────────────────────────────────────────────
