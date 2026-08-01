@@ -140,8 +140,18 @@ and it stops the same ground being re-tested in September.
       hand-driven bettor's remaining budget was exact ($15 / $10 / $20 / $12)
 - [x] The compliance query found the straggler — Devin Arand flagged at 3 picks / $8 of $20,
       and he was the only `under_phase_minimum` in the pool
-- [ ] **The payout numbers matched Pat's workbook to the cent** — not yet run; the ledger
-      export for Act 10.3 is still outstanding
+- [x] **The app's payout numbers matched the rehearsal to the cent** — production reproduced
+      Appendix A exactly, all 14 rows (Casey $66.95 / +$19.95 through Steve $0.00 / −$20.00).
+      Pool $425 − $32 = **$393**, and the Actual column sums to exactly $393. Ledger exported
+      to `~/Desktop/ozark-dryrun-ledger-2026-07-31/` for Pat's workbook cross-check, which is
+      still outstanding.
+
+> **Live proof of finding 12 / issue #108.** The first ledger export was taken while 5
+> placements sat on `pending` picks (something was uploaded to prod after the final close).
+> The resulting payout table looked entirely plausible — Casey $67.04, Jake $33.26 — and was
+> wrong by up to $10 a person, because `aggregatePayouts()` splits the whole pool across only
+> the settled wagers. Nothing warned. This is the exact failure mode that makes the
+> unguarded `status = 'completed'` flip dangerous.
 - [ ] Everything usable on a phone
 
 ---
