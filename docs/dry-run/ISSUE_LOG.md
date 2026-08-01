@@ -1,6 +1,6 @@
 # Dry Run — Issue Log
 
-**Session:** _____________  ·  **Driver:** Pat  ·  **Navigator:** Andrew
+**Session:** 2026-07-31, started 5:30 PM  ·  **Driver:** Pat  ·  **Navigator:** Andrew
 
 Keep this open in a second window for the whole session.
 
@@ -55,10 +55,12 @@ Screenshot anything visual. Paste the exact error text, don't paraphrase it.
 _Fast capture. Messy is fine._
 
 ```
-
-
-
-
+[0.5][P1] dev-magiclink.ts emits legacy /auth/v1/verify link -> callback says
+  "Login link was missing its token." Needs token_hash shape.
+[1.4/2.2][P2] gameplan orders these before Act 3, but 00-reset hides every
+  bet, so /bets is empty for everyone. Both checks unverifiable as ordered.
+[2.2][P2] empty state "No bets published yet / The book opens when an admin
+  publishes the menu" reads well — no change needed, just re-order the test.
 ```
 
 ---
@@ -67,10 +69,10 @@ _Fast capture. Messy is fine._
 
 | # | Act | Tier | What should have happened | What actually happened | Repro | Shot? |
 |---|---|---|---|---|---|---|
-| 1 |  |  |  |  |  |  |
-| 2 |  |  |  |  |  |  |
-| 3 |  |  |  |  |  |  |
-| 4 |  |  |  |  |  |  |
+| 1 | 0.5 | P1 | `scripts/dev-magiclink.ts` mints a working login link | Prints `properties.action_link` — the legacy `/auth/v1/verify?token=` URL, which returns the session as a hash fragment a server route can't read. `/auth/callback` correctly rejects it: *"Login link was missing its token. Request a new one."* | Run the script per Appendix B, open the link. Fix: emit `{SITE_URL}/auth/callback?token_hash=<properties.hashed_token>&type=magiclink` | — |
+| 2 | 1.4 / 2.2 | P2 | The gameplan's ordering is runnable as written | Both steps assume the menu is visible, but `00-reset.sql` sets all 19 bets to `hidden`, so `/bets` is empty for every account until Act 3.1's upload. "Menu visible, no stake inputs" (1.4) and "stake inputs have appeared" (2.2) can't be checked when the doc says to check them. The empty state itself reads well and needs no change. | Reset → approve anyone → `/bets`. Fix: move both checks to just after 3.1 | — |
+| 3 | 4.18 | **P1** | `25-phase1-handdriven-fallback.sql` fills in partially-placed slates | Fails with `duplicate key value violates unique constraint "bet_placements_user_id_pick_id_key"`. Its `wiped` CTE deletes in the same statement as the INSERT, so both see one snapshot and the delete isn't visible to the insert. It therefore only works on bettors with **no** existing Phase 1 rows — the opposite of the documented "Act 4 has eaten its time box" case. | Place any Phase 1 wager by hand as Dan Mercer, then run the file. Fix: make the DELETE its own statement before the INSERT. Same latent issue likely in `35-phase2-handdriven-fallback.sql`. | — |
+| 4 | 2.3 | P2 | The gameplan says to restore the entry fee after the bounds test | It doesn't. Casey Sideline was left at **$35** after the `$35 → accepted` step, which silently breaks 4.6's cap case (at $35 his max is $17, not $20) and Appendix A's reconciliation. Caught only because the DB was checked directly. | Run 2.3 against Casey, then 4.6. Fix: add an explicit "set it back to $50" checkbox to 2.3, or tell testers to use a bettor not referenced later | — |
 | 5 |  |  |  |  |  |  |
 | 6 |  |  |  |  |  |  |
 | 7 |  |  |  |  |  |  |
