@@ -73,6 +73,24 @@ there is nothing for the cap to bind against.
 *(Original ask: Pat, July 11 — non-playing participants "should have a stricter
 betting max limit", with no number or formula given.)*
 
+## 2b. Four questions the Jul 31 dry run raised but didn't get to ask
+**Owner:** Pat · **Blocks:** #4 blocks the largest available scope cut; the rest are policy.
+
+Acts 9.1, 10.2, 10.4 and 11.1 weren't reached, so these went unasked. Ten minutes with
+Pat closes all four. Tracked as [#111](https://github.com/andrewelong18/ozark-open/issues/111).
+
+1. **Devin Arand's case** — someone is $2 short of their entry at Phase 2 close and isn't
+   answering. Bets stand? (Documented answer is Q3 — *whatever stands, stands* — but never
+   confirmed aloud. Their full entry funds the pool while only part works for them; Devin
+   finished the dry run at −$2.04, almost entirely from this.)
+2. **Steve Esswein's case** — someone pays the entry and never wagers. He appeared on the
+   board at **$0.00 / −$20.00**. Is that what Pat wants when it's a real person?
+3. **Cents** — payouts display to the cent. How does $29.03 get paid over Venmo? Decides
+   whether to round or show a suggested-payment column.
+4. **The participant leaderboard** — Pat suggested dropping it in July. Still his view? If so,
+   **Sprint 8 and the whole Google Sheets integration can be cut**, along with issues #66–#68.
+   The single largest scope reduction available.
+
 ## 3. Entry collection mechanism
 **Owner:** Pat (+ tournament treasurer) · **Blocks:** nothing in the app (payments are out of band) — documentation accuracy only.
 

@@ -156,11 +156,52 @@ and it stops the same ground being re-tested in September.
 
 ---
 
+## What this session did NOT exercise
+
+**The unticked boxes above are not failures — they are untested ground**, and the gameplan
+asks that skipped tests be recorded rather than assumed. Two things drove the gaps: Act 4's
+hand-driven slates were filled in by the fallback SQL (`25-…`/`35-…`) rather than placed in the
+browser, and Acts 11–12 were not reached.
+
+**The §7 money rules were never fired by hand.** They pass 186 unit tests and every seeded
+wager validated cleanly, but the following were not exercised through the real UI — meaning the
+error strings, the two-tap confirm, the toasts and the edit/remove/revive path are unverified
+against a human:
+
+- 4.5 the $25-entry **floor** ($13 rejected, $12 accepted) — the subtlest rule in the book
+- 4.7 the **self-bet cap** across both phases
+- 4.10 the **opponent block**, including on a stroke-suffixed label
+- 4.13 **remove then re-place revives the same row** rather than creating a second
+- 4.14 **privacy** — that no bettor can see another's money while a phase is open
+- 3.3 upload **idempotency** and 3.4 the **broken file** (both verified in the local rehearsal,
+  not in the browser)
+- 1.2 the **magic-link email round trip** — the only test of Resend, and the flow all ~32
+  people hit in September
+- 11.2 the **mobile pass** — nearly everyone uses this app only from a phone
+
+**Act 5 was skipped deliberately** (Pat: lines never move) and the reprice was removed from the
+lifecycle sheets, so odds-snapshot integrity was never demonstrated live. The rule remains in
+the code and is covered by `scripts/dry-run-verify.sh`.
+
+Tracked as a Sprint 9 carryover — see the GitHub issue titled *"dry run coverage gaps"*.
+`scripts/dry-run-verify.sh` reproduces the whole lifecycle locally in about a minute, so the
+seeded half needs no second session; the browser half does.
+
+---
+
 ## After the session
 
-- [ ] `supabase/dry-run/90-teardown.sql` has been run and verified
-- [ ] Every scratch line has become a table row
-- [ ] Paste the Issues table into Claude Code: **"file these as GitHub issues"**
-      (they'll be titled `Sprint 9: …`, one per row, each self-contained)
-- [ ] Pat's answers copied into `docs/OUTSTANDING_DECISIONS.md`
-- [ ] `docs/ROADMAP.md` updated — Sprint 9's row and every phase this session actually verified
+- [x] `supabase/dry-run/90-teardown.sql` has been run and verified — sim accounts 0 ·
+      placements 0 · real accounts 3 · status `upcoming` · visible bets 0 · settled picks 0,
+      with the 19-bet / 87-pick menu intact. The script was also **fixed** in the same pass:
+      it reset the tournament row but left every bet closed and every pick carrying a verdict,
+      so the menu stayed in the dry run's end state
+- [x] Every scratch line has become a table row
+- [x] Filed as GitHub issues — [#90–#109](https://github.com/andrewelong18/ozark-open/issues)
+      for the 21 findings, plus [#110](https://github.com/andrewelong18/ozark-open/issues/110)
+      (coverage gaps) and [#111](https://github.com/andrewelong18/ozark-open/issues/111)
+      (the seven unasked questions)
+- [x] Pat's answers copied into `docs/OUTSTANDING_DECISIONS.md` — four resolved, four new
+      questions added as §2b
+- [x] `docs/ROADMAP.md` updated — Sprint 9 flipped to 🔶 with the reconciliation result, and
+      Sprints [21](../sprints/sprint-21.md)–[25](../sprints/sprint-25.md) indexed

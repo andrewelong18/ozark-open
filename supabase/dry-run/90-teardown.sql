@@ -56,6 +56,28 @@ BEGIN
   RAISE NOTICE 'Removed % simulated account(s) and everything they cascaded to.', n_users;
 END $$;
 
+-- ── PUT THE MENU BACK BEHIND THE CURTAIN ──────────────────────────────────
+--
+-- Deleting the wagers is not enough on its own. The dry run walks the book all
+-- the way to "closed and settled", so without this the menu is left with every
+-- bet closed and every pick carrying a verdict — including the two voids the
+-- session injects, which never existed in the real data. Anyone logging in
+-- afterwards sees a fully revealed, settled book with nobody's money on it.
+--
+-- This mirrors steps 2 and 3 of 00-reset.sql, so teardown returns the menu to
+-- the same "opening night" shape the dry run starts from. The menu STRUCTURE
+-- survives — bets, picks, labels and odds are untouched — because it is the
+-- sample book Pat's September upload will overwrite anyway.
+--
+-- Note this cannot restore whatever results production held *before* the dry
+-- run; 00-reset.sql already discarded those. Pre-run state lives only in the
+-- Part 0 snapshot, which is why taking it is a P0 step.
+UPDATE public.bet_picks pk SET result = 'pending'
+  FROM public.bets b
+ WHERE pk.bet_id = b.id AND pk.result <> 'pending';
+
+UPDATE public.bets SET status = 'hidden' WHERE status <> 'hidden';
+
 -- Back to pre-tournament. Flip this to 'active' the week of the tournament
 -- and 'completed' once final payouts are posted.
 UPDATE public.tournaments SET status = 'upcoming' WHERE year = 2026;
@@ -64,11 +86,16 @@ COMMIT;
 
 -- ── Verify ──────────────────────────────────────────────────────────────────
 -- Expect: sim_accounts 0 · placements 0 · real_accounts 3 · status upcoming
+--         · visible_bets 0 · settled_picks 0  (the menu itself survives intact)
 SELECT
   (SELECT count(*) FROM public.users WHERE email LIKE '%@dryrun.ozark.test') AS sim_accounts,
   (SELECT count(*) FROM public.bet_placements)                                AS placements,
   (SELECT count(*) FROM public.users)                                         AS real_accounts,
-  (SELECT status FROM public.tournaments WHERE year = 2026)                   AS tournament_status;
+  (SELECT status FROM public.tournaments WHERE year = 2026)                   AS tournament_status,
+  (SELECT count(*) FROM public.bets WHERE status <> 'hidden')                 AS visible_bets,
+  (SELECT count(*) FROM public.bet_picks WHERE result <> 'pending')           AS settled_picks,
+  (SELECT count(*) FROM public.bets)                                          AS bets_kept,
+  (SELECT count(*) FROM public.bet_picks)                                     AS picks_kept;
 
 -- Optional: also clear the invite list Pat pasted in Act 2.
 --   DELETE FROM public.tournament_invites;
