@@ -41,30 +41,8 @@ const CATEGORY_ORDER = [
   "Prop Bet",
 ]
 
-// Implied probability from the American price — the payout-math field, which
-// is always present, rather than the sheet's display `probability` column
-// (which is verbatim and may be blank). Favourite = highest implied.
-function impliedProbability(americanOdds: number): number {
-  if (americanOdds > 0) return 100 / (americanOdds + 100)
-  if (americanOdds < 0) return Math.abs(americanOdds) / (Math.abs(americanOdds) + 100)
-  return 0
-}
-
-// Favourites first, so a bet reads best-to-worst however the sheet was typed.
-// sheet_pick_id breaks ties, which also makes the order deterministic — the
-// query has no ORDER BY, so without this picks render in whatever order
-// Postgres returns them.
-function sortPicks(picks: Pick[]): Pick[] {
-  return [...picks].sort(
-    (a, b) =>
-      impliedProbability(b.american_odds) - impliedProbability(a.american_odds) ||
-      a.sheet_pick_id - b.sheet_pick_id
-  )
-}
-
 // The sheet arrives unsorted; the menu orders phase → round → category
-// (ADR 0001 §7), bets by their stable sheet IDs, and picks by implied
-// probability.
+// (ADR 0001 §7), bets and picks by their stable sheet IDs.
 function groupBets(bets: Bet[]): PhaseGroup[] {
   const phases = new Map<number, Map<string, Map<string, Bet[]>>>()
   for (const bet of bets) {
@@ -98,9 +76,7 @@ function groupBets(bets: Bet[]): PhaseGroup[] {
             .sort(([a], [b]) => catRank(a) - catRank(b))
             .map(([name, bets]) => ({
               name,
-              bets: bets
-                .sort((a, b) => a.sheet_bet_id - b.sheet_bet_id)
-                .map((bet) => ({ ...bet, bet_picks: sortPicks(bet.bet_picks) })),
+              bets: bets.sort((a, b) => a.sheet_bet_id - b.sheet_bet_id),
             })),
         })),
     }))
