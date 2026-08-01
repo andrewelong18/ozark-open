@@ -73,17 +73,23 @@ _Fast capture. Messy is fine._
 | 2 | 1.4 / 2.2 | P2 | The gameplan's ordering is runnable as written | Both steps assume the menu is visible, but `00-reset.sql` sets all 19 bets to `hidden`, so `/bets` is empty for every account until Act 3.1's upload. "Menu visible, no stake inputs" (1.4) and "stake inputs have appeared" (2.2) can't be checked when the doc says to check them. The empty state itself reads well and needs no change. | Reset → approve anyone → `/bets`. Fix: move both checks to just after 3.1 | — |
 | 3 | 4.18 | **P1** | `25-phase1-handdriven-fallback.sql` fills in partially-placed slates | Fails with `duplicate key value violates unique constraint "bet_placements_user_id_pick_id_key"`. Its `wiped` CTE deletes in the same statement as the INSERT, so both see one snapshot and the delete isn't visible to the insert. It therefore only works on bettors with **no** existing Phase 1 rows — the opposite of the documented "Act 4 has eaten its time box" case. | Place any Phase 1 wager by hand as Dan Mercer, then run the file. Fix: make the DELETE its own statement before the INSERT. Same latent issue likely in `35-phase2-handdriven-fallback.sql`. | — |
 | 4 | 2.3 | P2 | The gameplan says to restore the entry fee after the bounds test | It doesn't. Casey Sideline was left at **$35** after the `$35 → accepted` step, which silently breaks 4.6's cap case (at $35 his max is $17, not $20) and Appendix A's reconciliation. Caught only because the DB was checked directly. | Run 2.3 against Casey, then 4.6. Fix: add an explicit "set it back to $50" checkbox to 2.3, or tell testers to use a bettor not referenced later | — |
-| 5 |  |  |  |  |  |  |
-| 6 |  |  |  |  |  |  |
-| 7 |  |  |  |  |  |  |
-| 8 |  |  |  |  |  |  |
-| 9 |  |  |  |  |  |  |
-| 10 |  |  |  |  |  |  |
-| 11 |  |  |  |  |  |  |
-| 12 |  |  |  |  |  |  |
-| 13 |  |  |  |  |  |  |
-| 14 |  |  |  |  |  |  |
-| 15 |  |  |  |  |  |  |
+| 5 | 1.3 | **P0** | Uploading an avatar during onboarding succeeds | Fails with *"new row violates row-level security policy"*. The storage policies exist in prod (4 on `storage.objects`), the upload path `${userId}/avatar` matches `(storage.foldername(name))[1] = auth.uid()::text`, and `userId` is `user.id` from `getUser()` — so the obvious causes are ruled out and this needs a captured failing request. Same code in `components/onboarding/onboarding-form.tsx:70` and `components/profile/profile-form.tsx:69` | Onboard a new account, attach a photo, submit | — |
+| 6 | 1.3 | P2 | — | **Feature:** crop the photo during upload, and allow removing an attachment before submitting if you don't like it | Same two components | — |
+| 7 | 2.5 | **P0** | Revoking betting access leaves the entry fee recoverable; admin copy says "they drop out but their bets stay" | Entry fee went **$20 → $0**. `app/api/admin/participants/route.ts:160` DELETEs the participant row, so the fee is genuinely gone. **Money consequence:** placements survive the revoke, so a revoked bettor keeps wagers in the pool while their entry fee no longer funds it — `poolTotal()` (`lib/payouts.ts:86`) silently shrinks. Decide: soft revoke (`revoked_at`, row retained) vs. preserving the fee for re-approval | Approve someone at $20, revoke, re-approve | — |
+| 8 | 4.3 | P1 | Betting $0 shows an error message | Correctly refused, but **silently** — no message. Server-side validation in `lib/validation.ts` is right; the client swallows the rejection. Other rejections do surface | `/bets` → any pick → enter `0` → confirm | — |
+| 9 | 3.1 | P1 | A golfer's name and its profile link exclude the handicap | `(E)` / `(-10)` are rendered as part of the name and inside the link. Should be a small badge beside the name. The importer already strips exactly this suffix for player matching — reuse that regex so display and matching can't drift | Any Group Match or Match pick on `/bets` | — |
+| 10 | 6.3 | **P0** | Uploading a results sheet whose bets are still marked `Open` is caught | Accepted silently. Pat uploaded a results-bearing file with `status = open`; the app published verdicts on a live book with no warning. **Two separate checks wanted:** (a) hard block — a non-closed bet carrying a result is invalid; (b) soft warning — a bet marked Open after its phase has closed, Pat confirms and proceeds | Upload any sheet with `status=open` and a non-pending `result` | — |
+| 11 | 6.1 | P1 | The chase list points at who needs chasing | At Phase 1 close `docs/admin/phase-compliance.sql` flags **13 of 14 people** on `off_exact_total`, burying Devin Arand — the one real straggler. `off_exact_total` is only meaningful at Phase 2 close. This is Pat's only chase tool and he reads it on a phone at 7am | Run the query at Phase 1 close | — |
+| 12 | 6.1 / 10.1 | **P0** | Pat can run the tournament without database access | Two time-critical moments have no UI at all: the chase list is SQL-only, and unlocking `/results` needs `UPDATE tournaments SET status='completed'`. Both currently route through Andrew. Needs controls, or a runbook Pat can follow unaided | — | — |
+| 13 | 3.x | P1 | The dashboard badge reflects whether betting is actually open | Says **"Betting Open"** while `/bets` shows *"No bets published yet"*. `app/dashboard/page.tsx:119` derives it from `tournaments.status`, which does **not** gate betting (landmine #2). Wanted: per-phase open/closed indicators for Phase 1 and Phase 2, wired to a countdown | Reset the menu to hidden, load `/dashboard` | — |
+| 14 | 4.x | P1 | — | **Rule change:** minimum **5 picks across both phases combined** (not per phase); maximum stays **10 per phase**; the minimum is only evaluated **before Phase 2 close**. Today `min_picks_per_phase` is enforced per phase, so betting in both phases forces ≥10 picks. Ripples: migration, `checkPhaseMinimums()` (`lib/validation.ts:257`), `phase-compliance.sql`, `/my-bets` banner, PRD §7/§8.1, ADR 0001, and the existing unit tests which encode the old rule | — | — |
+| 15 | 2.x | P1 | — | **Feature:** admins can change a member's display name. The DB already allows it (`guard_users_self_update` exempts admins); only the `/admin/people` edit form lacks the field | — | — |
+| 16 | 2.x | P1 | — | **Feature:** admins can adjust the house rules. All parameters already live on the `tournaments` row and are read via `TOURNAMENT_RULE_COLUMNS` / `toTournamentRules()`, so no hardcoded figures to hunt | — | — |
+| 17 | 1.2 | P1 | — | **Feature:** for members who can't manage email, an admin can add them and place bets on their behalf. **Integrity requirements:** every §7 rule must evaluate against the *bettor*, not the acting admin (self-bet cap, opponent block, budget), and placements need an audit trail of who actually placed them | — | — |
+| 18 | 6.x | P1 | — | **Feature:** schedule Phase 1 close for **Thu Sept 24 2026, 11:00 CT** and Phase 2 for **Sat Sept 26 2026, 11:00 CT**; let admins change those times, close a phase manually, and toggle whether members see the countdown. **Architecturally significant** — today a bet's status changes *only* via spreadsheet upload (ADR 0001, landmine #2); this adds two more mechanisms | — | — |
+| 19 | 6.4 | P1 | — | **Feature:** on the reveal, don't list every bettor up front. Show a tertiary "x bettors" link per bet row that expands accordion-style and collapses again; collapsed by default | — | — |
+| 20 | 3.1 | P1 | — | **Feature:** refactor the filters. One filter at a time; replace the All/Open/Closed triple (`components/betting/bets-menu.tsx:76`) with a binary open/closed toggle defaulting to open, falling back to closed when nothing is open. Too many filter patterns competing today | — | — |
+| 21 | 3.1 | P2 | Picks within a bet render in a predictable order | `app/bets/page.tsx` fetches `bet_picks` with **no `ORDER BY` at any layer** — order is whatever Postgres returns, and an upsert that rewrites a row can reshuffle it. The comment above `groupBets` claims picks are ordered by sheet ID; they never were. `/my-bets` and `/admin/view` *do* sort by `sheet_pick_id`, so the menu is the odd one out. **Wanted:** sort by implied probability, favourites first. Written during the session as `e045a99`, then reverted (`bc9447f`) rather than ship an untested mid-session change | Any multi-pick bet on `/bets` | — |
 
 ---
 
@@ -94,8 +100,10 @@ in Pat's own words — a decision that only exists in someone's memory isn't a d
 
 | Question | Surfaces at | Pat's answer |
 |---|---|---|
-| **The 5–10 span** — per phase (what the code does today) or per tournament (what Pat said in July)? | Act 4.17 |  |
-| **The non-player cap** — Pat asked for a stricter maximum for non-playing bettors and never gave a number. Today there is no stricter limit at all. What is it? | Act 4.8 |  |
+| **The 5–10 span** — per phase (what the code does today) or per tournament (what Pat said in July)? | Act 4.17 | **Minimum 5 across the whole tournament; maximum 10 per phase.** The minimum is only checked before Phase 2 close. |
+| **The non-player cap** — Pat asked for a stricter maximum for non-playing bettors and never gave a number. Today there is no stricter limit at all. What is it? | Act 4.8 | **No stricter limit — same min and max rules as players.** Non-players already get identical entry-fee bounds, max single bet and pick counts; the self-bet cap is inapplicable because no pick bears their name. No code change; closes `OUTSTANDING_DECISIONS` §2. |
+| **Do published lines ever move?** | Act 5 | **Never.** Act 5 skipped as a result, and the lifecycle sheets were regenerated so they no longer carry the reprice (`24ea20a`). |
+| **Admin UI scope** — `CLAUDE.md` lists custom admin UI beyond import/people/view as out of scope, but items 15–18 all need it. | Debrief | **Scope expanded.** Update the `CLAUDE.md` line and the ROADMAP out-of-scope list. |
 | **Entry collection** — is "$20 from the deposit, the remainder by Venmo" firm? | Act 12.1 |  |
 | **Tournament dates** — Sept 24–26 confirmed? An earlier draft said 24–27. | Act 12.1 |  |
 | **"Non-Goals — see word doc for more"** — the referenced document has no such section. What was meant? | Act 12.1 |  |
@@ -125,10 +133,15 @@ and it stops the same ground being re-tested in September.
 - [ ] Closing a phase revealed everyone's wagers
 - [ ] Repricing a line left every existing wager's odds untouched
 - [ ] Results uploaded partially, then completely, without trouble
-- [ ] Void behaved differently from push, and the pool shrank by the voided stakes
-- [ ] Phase 2 opened alongside a closed, revealed Phase 1, with budgets carried over
-- [ ] The compliance query found the straggler
-- [ ] **The payout numbers matched Pat's workbook to the cent**
+- [x] Void behaved differently from push, and the pool shrank by the voided stakes — verified
+      in prod: entry fees **$425** − voided stakes **$32** = pool **$393**, 4 voided picks
+      across both phases
+- [x] Phase 2 opened alongside a closed, revealed Phase 1, with budgets carried over — every
+      hand-driven bettor's remaining budget was exact ($15 / $10 / $20 / $12)
+- [x] The compliance query found the straggler — Devin Arand flagged at 3 picks / $8 of $20,
+      and he was the only `under_phase_minimum` in the pool
+- [ ] **The payout numbers matched Pat's workbook to the cent** — not yet run; the ledger
+      export for Act 10.3 is still outstanding
 - [ ] Everything usable on a phone
 
 ---
