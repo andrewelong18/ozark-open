@@ -268,6 +268,49 @@ function main() {
     ) === "2"
   )
 
+  // --- Soft revoke (Sprint 21 / #91) ----------------------------------------
+  // Revoke is now an UPDATE of tournament_participants, not a DELETE, so the
+  // "Admins can write participants" policy has to allow the stamp — and
+  // nobody else may revoke, or grant themselves access back.
+  check(
+    "a bettor cannot revoke anyone, themselves included",
+    asUserExpectFail(
+      BOB,
+      `UPDATE public.tournament_participants SET revoked_at = now()
+       WHERE user_id = '${ALICE}' AND tournament_id = '${tournamentId}'`
+    ) ||
+      asUser(
+        ADMIN,
+        `SELECT count(*) FROM public.tournament_participants
+         WHERE user_id = '${ALICE}' AND revoked_at IS NOT NULL`
+      ) === "0"
+  )
+  asUser(
+    ADMIN,
+    `UPDATE public.tournament_participants SET revoked_at = now()
+     WHERE user_id = '${ALICE}' AND tournament_id = '${tournamentId}'`
+  )
+  check(
+    "an admin can stamp revoked_at, and the row and its fee survive",
+    asUser(
+      ADMIN,
+      `SELECT count(*) FROM public.tournament_participants
+       WHERE user_id = '${ALICE}' AND entry_fee = 40 AND revoked_at IS NOT NULL`
+    ) === "1"
+  )
+  check(
+    "the revoked bettor's placements are untouched — re-approval restores them",
+    asUser(
+      ADMIN,
+      `SELECT count(*) FROM public.bet_placements WHERE user_id = '${ALICE}'`
+    ) === "2"
+  )
+  asUser(
+    ADMIN,
+    `UPDATE public.tournament_participants SET revoked_at = NULL
+     WHERE user_id = '${ALICE}' AND tournament_id = '${tournamentId}'`
+  )
+
   if (failures > 0) {
     console.error(`\n${failures} check(s) failed.`)
     process.exit(1)

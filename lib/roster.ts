@@ -25,6 +25,7 @@ export type RosterReason =
   | "not_onboarded" // signed in, never finished /onboarding
   | "not_approved" // onboarded, but no tournament_participants row
   | "fee_unset" // participant row with a non-positive fee (hand-edited)
+  | "revoked" // approved once, access revoked — the row and fee are kept
   | "ready"
 
 export type InviteQueryRow = {
@@ -47,6 +48,8 @@ export type ParticipantQueryRow = {
   user_id: string
   entry_fee?: number | string | null
   is_player?: boolean | null
+  /** Non-null = access revoked; the row and its fee are kept (Sprint 21 / #91). */
+  revoked_at?: string | null
 }
 
 export type AuthActivityQueryRow = {
@@ -92,6 +95,9 @@ export type FunnelStage =
  * approval. Its row still gets Edit/Revoke rather than Approve, because the
  * participant row already exists — a hand-edit anomaly that should approximately
  * never fire, surfaced honestly rather than hidden.
+ *
+ * `revoked` lands there too, and deliberately gets Approve: re-approving is
+ * exactly what an admin wants next, and the POST clears `revoked_at`.
  */
 export function funnelStage(person: RosterPerson): FunnelStage {
   if (person.status === "not_registered") return "no_account"
@@ -172,13 +178,21 @@ export function buildRoster(input: {
     const participant = participantByUser.get(user.id)
     const fee = Number(participant?.entry_fee)
     const hasFee = participant !== undefined && Number.isFinite(fee) && fee > 0
+    const revoked =
+      participant !== undefined && trimmed(participant.revoked_at) !== ""
 
     let status: RosterStatus
     let reason: RosterReason
-    if (hasFee) {
-      // A participant row is the betting gate (PRD §12 A11) — a member the
-      // admin approved is ready even if they never finished onboarding. This
-      // page must not disagree with what the app actually allows.
+    if (revoked) {
+      // The row survives a revoke so the fee comes back on re-approval, but
+      // it no longer means "approved to bet" (Sprint 21 / #91).
+      status = "not_ready"
+      reason = "revoked"
+    } else if (hasFee) {
+      // A live participant row is the betting gate (PRD §12 A11, refined by
+      // #91: row exists AND not revoked) — a member the admin approved is
+      // ready even if they never finished onboarding. This page must not
+      // disagree with what the app actually allows.
       status = "ready"
       reason = "ready"
     } else if (participant !== undefined) {

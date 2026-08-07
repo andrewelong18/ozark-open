@@ -112,6 +112,8 @@ async function placeOrEdit(request: Request) {
     .select("user_id, entry_fee, is_player")
     .eq("user_id", user.id)
     .eq("tournament_id", target.tournament_id)
+    // Eligibility is "row exists AND not revoked" (Sprint 21 / #91).
+    .is("revoked_at", null)
     .maybeSingle()
   if (!participantData) {
     return NextResponse.json(

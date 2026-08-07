@@ -8,9 +8,15 @@ import { normalizeDisplayName, validateDisplayName } from "@/lib/profile"
 // replacement for hand-adding a tournament_participants row in Studio:
 //   POST   — approve a registrant (verify/correct their display_name, then
 //            CREATE the participant row with an entry fee + player flag).
-//            Row existing = approved to bet (PRD §12 "approval creates the row").
+//            Also RE-approves: it clears revoked_at on an existing row, which
+//            the UNIQUE (user_id, tournament_id) constraint requires anyway.
 //   PATCH  — edit an existing participant's entry fee / player flag.
-//   DELETE — revoke (remove the row → back to view-only).
+//   DELETE — revoke (stamp revoked_at → back to view-only).
+//
+// Revoke is a SOFT revoke (Sprint 21 / #91). A hard DELETE took the entry fee
+// with it while the bettor's placements survived, so the pool silently shrank.
+// Eligibility is now "row exists AND revoked_at IS NULL"; the row keeps the fee
+// so re-approval restores the member, their fee and their wagers exactly.
 //
 // Writes to tournament_participants are already admin-only at the DB (RLS);
 // the users.display_name write bypasses the self-update guard because it runs
@@ -96,14 +102,20 @@ export async function POST(request: Request) {
     }
   }
 
+  // Upsert, not insert: re-approving someone who was revoked has to reuse
+  // their row (UNIQUE (user_id, tournament_id)) and clear revoked_at.
   const { data, error } = await supabase
     .from("tournament_participants")
-    .insert({
-      user_id: body.userId,
-      tournament_id: tournament.id,
-      entry_fee: entryFee,
-      is_player: isPlayer,
-    })
+    .upsert(
+      {
+        user_id: body.userId,
+        tournament_id: tournament.id,
+        entry_fee: entryFee,
+        is_player: isPlayer,
+        revoked_at: null,
+      },
+      { onConflict: "user_id,tournament_id" }
+    )
     .select("user_id, entry_fee, is_player")
     .single()
   if (error) {
@@ -157,7 +169,7 @@ export async function PATCH(request: Request) {
   return NextResponse.json({ participant: data })
 }
 
-// Revoke betting access — remove the participant row.
+// Revoke betting access — stamp revoked_at, keep the row (and the entry fee).
 export async function DELETE(request: Request) {
   const gate = await requireAdmin()
   if (gate.error) return gate.error
@@ -173,13 +185,24 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "No tournament." }, { status: 400 })
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("tournament_participants")
-    .delete()
+    .update({ revoked_at: new Date().toISOString() })
     .eq("user_id", body.userId)
     .eq("tournament_id", tournament.id)
+    .is("revoked_at", null)
+    .select("user_id")
+    .maybeSingle()
   if (error) {
     return NextResponse.json({ error: `Couldn't revoke: ${error.message}` }, { status: 500 })
+  }
+  // No row matched: they were never approved, or they're already revoked. The
+  // old hard-DELETE reported success either way; say so instead.
+  if (!data) {
+    return NextResponse.json(
+      { error: "Nothing to revoke — they aren't an approved bettor." },
+      { status: 400 }
+    )
   }
   return NextResponse.json({ revoked: true })
 }

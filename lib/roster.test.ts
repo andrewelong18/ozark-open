@@ -161,6 +161,46 @@ test("the participant row is the gate — approved but not onboarded is ready", 
 })
 
 // ---------------------------------------------------------------------------
+// Revoked access (Sprint 21 / #91) — the row survives, the access doesn't
+// ---------------------------------------------------------------------------
+
+test("a revoked row is not ready, and says why", () => {
+  const r = roster({
+    users: [user("u-a", "a@x.com")],
+    participants: [
+      { user_id: "u-a", entry_fee: 40, revoked_at: "2026-08-07T12:00:00Z" },
+    ],
+  })
+  assert.equal(r.people[0].status, "not_ready")
+  assert.equal(r.people[0].reason, "revoked")
+  // The fee is preserved on the row and still shown — that's the whole point
+  // of the soft revoke; re-approval pre-fills from it.
+  assert.equal(r.people[0].entry_fee, 40)
+})
+
+test("a revoked person sits in awaiting_approval, so the console offers Approve", () => {
+  const r = roster({
+    users: [user("u-a", "a@x.com")],
+    participants: [
+      { user_id: "u-a", entry_fee: 40, revoked_at: "2026-08-07T12:00:00Z" },
+    ],
+  })
+  assert.equal(funnelStage(r.people[0]), "awaiting_approval")
+  assert.equal(r.funnel.approved.length, 0)
+  assert.equal(r.funnel.awaitingApproval.length, 1)
+  assert.equal(r.counts.ready, 0)
+})
+
+test("clearing revoked_at puts them straight back to ready", () => {
+  const r = roster({
+    users: [user("u-a", "a@x.com")],
+    participants: [{ user_id: "u-a", entry_fee: 40, revoked_at: null }],
+  })
+  assert.equal(r.people[0].status, "ready")
+  assert.equal(r.people[0].reason, "ready")
+})
+
+// ---------------------------------------------------------------------------
 // Admin is a badge, not a status
 // ---------------------------------------------------------------------------
 

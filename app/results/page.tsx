@@ -51,7 +51,10 @@ export default async function ResultsPage() {
     supabase
       .from("tournament_participants")
       .select("user_id, entry_fee, users ( display_name, nickname, avatar_url )")
-      .eq("tournament_id", tournament.id),
+      .eq("tournament_id", tournament.id)
+      // Revoked bettors leave the pool entirely — fee and wagers together
+      // (Sprint 21 / #91; buildResultsTable drops their payout rows to match).
+      .is("revoked_at", null),
     supabase
       .from("placement_payouts_view")
       .select(

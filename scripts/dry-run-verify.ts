@@ -496,7 +496,7 @@ async function main() {
   const participants = queryJson<ResultsParticipant[]>(
     `SELECT tp.user_id, u.display_name, tp.entry_fee
        FROM public.tournament_participants tp JOIN public.users u ON u.id = tp.user_id
-      WHERE tp.tournament_id = ${lit(tid)}`
+      WHERE tp.tournament_id = ${lit(tid)} AND tp.revoked_at IS NULL`
   )
   const table = buildResultsTable(participants, payoutRows)
 

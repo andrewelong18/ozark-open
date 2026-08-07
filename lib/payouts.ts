@@ -187,19 +187,29 @@ export type ResultsTable = {
  * participant's actual share, sorted biggest payout first (ties by name).
  * Participants with no placements still belong to the pool — their entry
  * fees fund it and they appear with a 0 share.
+ *
+ * Placements belonging to someone who is NOT in `participants` are ignored
+ * entirely (Sprint 21 / #91). A revoked bettor's fee stops funding the pool,
+ * so their wagers must stop counting toward the denominator in the same
+ * breath — otherwise the split silently shifts under everyone else. Callers
+ * filter revoked rows out of `participants`; this keeps the arithmetic
+ * balanced even if one of them forgets.
  */
 export function buildResultsTable(
   participants: ResultsParticipant[],
   rows: PayoutRow[]
 ): ResultsTable {
-  const all = aggregatePayouts(rows)
+  const inPool = new Set(participants.map((p) => p.user_id))
+  const funded = rows.filter((row) => inPool.has(row.user_id))
+
+  const all = aggregatePayouts(funded)
   const pool = poolTotal(
     participants.map((p) => p.entry_fee),
     all.refunded
   )
 
   const byUser = new Map<string, PayoutRow[]>()
-  for (const row of rows) {
+  for (const row of funded) {
     const list = byUser.get(row.user_id)
     if (list) list.push(row)
     else byUser.set(row.user_id, [row])

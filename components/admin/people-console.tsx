@@ -81,8 +81,10 @@ function StatusPill({ person }: { person: RosterPerson }) {
   if (stage === "approved") return <Badge variant="green">Approved</Badge>
   if (stage === "no_account") return <Badge variant="red">No account</Badge>
   if (stage === "not_onboarded") return <Badge variant="amber">Not onboarded</Badge>
-  // fee_unset is a hand-edited participant row with a non-positive fee — still
-  // awaiting a valid approval, so it says so plainly.
+  // Revoked is its own state: the row and the entry fee are still there, the
+  // access isn't (#91). fee_unset is a hand-edited participant row with a
+  // non-positive fee — still awaiting a valid approval, so it says so plainly.
+  if (person.reason === "revoked") return <Badge variant="red">Revoked</Badge>
   return (
     <Badge variant="amber">
       {person.reason === "fee_unset" ? "Fee unset" : "Needs approval"}
@@ -166,8 +168,10 @@ function ApprovePanel({
   // admin confirms/corrects it here so it matches the field (and so the bet
   // importer's name matching lands).
   const [name, setName] = useState(person.name)
-  const [entryFee, setEntryFee] = useState(String(entryFeeMin))
-  const [isPlayer, setIsPlayer] = useState(true)
+  // Re-approving someone who was revoked pre-fills their preserved entry fee
+  // and player flag, so the round trip restores them exactly (#91).
+  const [entryFee, setEntryFee] = useState(String(person.entry_fee ?? entryFeeMin))
+  const [isPlayer, setIsPlayer] = useState(person.is_player ?? true)
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
 
@@ -299,14 +303,16 @@ function EditPanel({
         </Button>
       </div>
 
-      {/* Revoke lives down here, behind its own confirm — it deletes the
-          participant row, which is what betting access IS (PRD §12 A11). */}
+      {/* Revoke lives down here, behind its own confirm. It stamps revoked_at
+          on the participant row rather than deleting it (Sprint 21 / #91): the
+          entry fee is a pool input, so deleting the row moved money. */}
       <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
         {confirmingRevoke ? (
           <>
             <span className="text-sm text-text-body">
-              Revoke {person.name}&apos;s access? Their placements stay, but they
-              drop out of the pool.
+              Revoke {person.name}&apos;s access? They drop out of the pool —
+              their ${person.entry_fee ?? 0} entry and their wagers both stop
+              counting. Nothing is deleted: re-approving brings all of it back.
             </span>
             <Button size="sm" variant="destructive" onClick={revoke} disabled={busy}>
               {busy ? "Revoking…" : "Yes, revoke"}
@@ -472,9 +478,9 @@ export function PeopleConsole({
 
         {people.map((person) => {
           const stage = funnelStage(person)
-          // A fee_unset row counts as awaiting approval but already HAS a
-          // participant row, so its lever is Edit — approving again would
-          // collide on the primary key.
+          // A fee_unset row counts as awaiting approval but already HAS a live
+          // participant row, so its lever is Edit — the fee just needs
+          // correcting. A revoked row keeps Approve: that's the way back in.
           const action =
             stage === "approved" || person.reason === "fee_unset"
               ? "edit"

@@ -293,3 +293,75 @@ test("pending placements are counted, not summed into anyone's theoretical", () 
   assert.equal(table.rows[0].theoretical, 12)
   assert.equal(table.rows[0].pending, 1)
 })
+
+// ---------------------------------------------------------------------------
+// Revoked bettors (Sprint 21 / #91) — a revoke must not move anyone's money
+// ---------------------------------------------------------------------------
+
+test("a revoked bettor's wagers leave the pool with their entry fee", () => {
+  // Same table twice: once with a 3rd bettor who is in the pool, once with
+  // that bettor revoked (dropped from `participants`, placements still live —
+  // exactly what the DB hands us, since placements survive a revoke).
+  const rows = [payoutRow("a", 30), payoutRow("b", 10), payoutRow("c", 60)]
+  const withThem = buildResultsTable(
+    [
+      { user_id: "a", display_name: "Ann", entry_fee: 40 },
+      { user_id: "b", display_name: "Bo", entry_fee: 20 },
+      { user_id: "c", display_name: "Cy", entry_fee: 30 },
+    ],
+    rows
+  )
+  const revoked = buildResultsTable(
+    [
+      { user_id: "a", display_name: "Ann", entry_fee: 40 },
+      { user_id: "b", display_name: "Bo", entry_fee: 20 },
+    ],
+    rows
+  )
+
+  // The fee left the pool AND the wagers left the denominator.
+  assert.equal(withThem.pool, 90)
+  assert.equal(revoked.pool, 60)
+  assert.equal(withThem.sum_theoretical, 100)
+  assert.equal(revoked.sum_theoretical, 40)
+
+  // Cy is gone entirely — no orphaned row, no share.
+  assert.equal(revoked.rows.find((r) => r.user_id === "c"), undefined)
+
+  // And the whole pool is still paid out: this is the invariant the hard
+  // DELETE broke, since Cy's theoretical stayed in the denominator while his
+  // fee stopped funding the numerator.
+  const paid = revoked.rows.reduce((sum, r) => sum + r.actual, 0)
+  assert.ok(Math.abs(paid - revoked.pool) < 1e-9)
+  assert.ok(Math.abs(withThem.rows.reduce((s, r) => s + r.actual, 0) - 90) < 1e-9)
+})
+
+test("revoking is arithmetically identical to that bettor never having bet", () => {
+  const others = [
+    { user_id: "a", display_name: "Ann", entry_fee: 40 },
+    { user_id: "b", display_name: "Bo", entry_fee: 20 },
+  ]
+  const withoutCy = buildResultsTable(others, [payoutRow("a", 30), payoutRow("b", 10)])
+  const cyRevoked = buildResultsTable(others, [
+    payoutRow("a", 30),
+    payoutRow("b", 10),
+    payoutRow("c", 60),
+  ])
+  assert.equal(cyRevoked.pool, withoutCy.pool)
+  assert.deepEqual(
+    cyRevoked.rows.map((r) => r.actual),
+    withoutCy.rows.map((r) => r.actual)
+  )
+})
+
+test("a revoked bettor's voided stakes stop shrinking the pool too", () => {
+  const rows = [
+    payoutRow("a", 30),
+    { placement_id: "pl-void", user_id: "c", amount: 8, result: "void", theoretical: 0, refunded: 8 },
+  ]
+  const table = buildResultsTable([{ user_id: "a", display_name: "Ann", entry_fee: 40 }], rows)
+  // Their refund came out of an entry fee that no longer funds the pool, so
+  // subtracting it again would double-count the loss.
+  assert.equal(table.pool, 40)
+  assert.equal(table.pending, 0)
+})

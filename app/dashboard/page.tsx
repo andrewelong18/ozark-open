@@ -74,6 +74,8 @@ export default async function DashboardPage() {
     .from("tournament_participants")
     .select("entry_fee")
     .eq("tournament_id", tournament.id)
+    // A revoked bettor's fee no longer funds the pool (Sprint 21 / #91).
+    .is("revoked_at", null)
 
   const poolRows = (poolData as { entry_fee: number }[] | null) ?? []
   const poolTotal = poolRows.reduce((sum, r) => sum + Number(r.entry_fee), 0)
@@ -86,6 +88,7 @@ export default async function DashboardPage() {
         .select("entry_fee, is_player")
         .eq("user_id", user.id)
         .eq("tournament_id", tournament.id)
+        .is("revoked_at", null)
         .maybeSingle()
     : { data: null }
 

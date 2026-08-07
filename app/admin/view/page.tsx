@@ -83,7 +83,8 @@ export default async function AdminViewPage() {
       supabase
         .from("tournament_participants")
         .select("user_id, entry_fee, users ( display_name, nickname, avatar_url )")
-        .eq("tournament_id", t.id),
+        .eq("tournament_id", t.id)
+        .is("revoked_at", null),
       supabase
         .from("bet_placements")
         .select(
