@@ -163,15 +163,15 @@ hidden → open → closed
 
 **There is no stored "resolved" status.** Resolution lives per **pick** in its `result` column (`pending` / `hit` / `miss` / `push` / `void`), which arrives via the post-round upload. The UI derives a "resolved" presentation: a pick's result is displayed **only when it is not `pending`** — so nothing shows until the round has been completed and its results uploaded. Storing a resolved flag alongside per-pick results would force every upload to keep two representations in sync; deriving it removes that fat-finger class (which is also why the old `resolved ⇔ outcome` CHECK constraint is gone — there is nothing left to desynchronize).
 
-**Phases are the betting windows.** There is no scheduled cutoff — admins flip statuses in the sheet and re-upload:
+**Phases are the betting windows.** Each phase carries a **deadline on the `tournaments` row** (`phase1_closes_at` / `phase2_closes_at`), and wagering needs both the bet to be `open` *and* its phase's deadline not to have passed. The deadline is admin-editable, closing early is setting it to now, and reopening is pushing it back out — no bet row is touched either way, which is what makes it reversible (ADR 0001 §5a). Admins still flip statuses in the sheet and re-upload to publish the menu; a sheet marked `open` after the deadline does not reopen betting.
 
 | When | What |
 |---|---|
 | Prior to tournament | Phase 1 bets open (Round 1 + Tournament) |
-| Thursday morning | Phase 1 closes at Round 1 tee-off |
+| Thursday morning | Phase 1 closes at Round 1 tee-off — **Thu Sept 24, 2026, 11:00 CT** by default |
 | Thursday night | Round 1 results uploaded → theoretical payouts + actual-as-it-stands computable |
 | Friday night | Phase 2 bets open (Round 3 + updated Tournament odds) |
-| Saturday morning | Phase 2 closes at Round 3 tee-off |
+| Saturday morning | Phase 2 closes at Round 3 tee-off — **Sat Sept 26, 2026, 11:00 CT** by default |
 | Saturday night | Round 3 results uploaded → all payout calculations final |
 
 ### 8.1 Enforcement Timing
@@ -197,6 +197,8 @@ Not all of the §7 rules can be checked at the same moment. They split into two 
 **Intended UX for the completeness rules:** while a phase is `open`, the app shows the participant a running total, remaining tournament budget, and a prominent "incomplete" warning (e.g., "You've wagered $23 of $40 — Phase 2 must bring you to exactly $40"). The app never silently fixes anything. Admins get a view of non-compliant participants before closing each phase so they can chase stragglers, exactly as Pat does today by text — and that view (`docs/admin/phase-compliance.sql`) is phase-aware for the reason above: before a Phase 1 close it chases on the pick minimum only, and ends with a one-line list of who to text.
 
 **Consequence of closing with a non-compliant participant** *(resolved: Q3)*: their placed bets stand as-is. No voiding, no auto-adjustment — the chase-then-accept approach mirrors how the pool already works.
+
+**Finalizing the tournament is guarded** *(Sprint 25 / #108)*. Flipping `tournaments.status` to `completed` is what reveals `/results`, and it must not happen while any pick is still `pending` or any bet is unclosed. The reason is arithmetic, not tidiness: the payout rollup **skips** a pending placement rather than scoring it zero, so finalizing early divides the whole pool across only the settled wagers. Every share comes out too high, every number looks plausible, and the totals still reconcile against the pool — there is nothing on screen that looks wrong. `finalizeReadiness()` (`lib/payouts.ts`) is the check; until it passes, `/results` presents the table as provisional and withholds the winner spotlight.
 
 ### 8.2 Spreadsheet Ingestion (the publishing pipeline)
 
