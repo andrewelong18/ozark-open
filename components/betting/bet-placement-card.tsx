@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
+import { stakeEntryError } from "@/lib/placements"
 import { cn } from "@/lib/utils"
 import { PlayerNameLink } from "@/components/player/player-name-link"
 import { Button } from "@/components/ui/button"
@@ -104,18 +105,27 @@ export function BetPlacementCard({
   const patchRow = (pickId: string, patch: Partial<RowState>) =>
     setRows((r) => ({ ...r, [pickId]: { ...r[pickId], ...patch } }))
 
+  /** Report a bad stake the same way a server rejection is reported: red
+   * border on the row, message in the toast (#92 — this used to be silent). */
+  const rejectStake = (pickId: string, message: string) => {
+    patchRow(pickId, { error: message, confirming: null })
+    onError?.(message)
+  }
+
   // Step 1 of placing: validate the amount is real, then stage the confirm
   // strip instead of writing. The actual POST waits for place() below.
   const requestPlace = (pick: PlacementPick) => {
     const state = rows[pick.id]
-    if (!state.value || Number(state.value) <= 0) return
+    const entryError = stakeEntryError(state.value)
+    if (entryError) return rejectStake(pick.id, entryError)
     patchRow(pick.id, { error: null, confirming: "place" })
   }
 
   const place = async (pick: PlacementPick) => {
     const state = rows[pick.id]
     const amount = Number(state.value)
-    if (!state.value || amount <= 0) return
+    const entryError = stakeEntryError(state.value)
+    if (entryError) return rejectStake(pick.id, entryError)
     setBusy(pick.id)
     patchRow(pick.id, { error: null, confirming: null })
     try {
