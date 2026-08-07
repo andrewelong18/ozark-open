@@ -387,9 +387,32 @@ async function main() {
   // ── Act 3.5 / 4 · wagers ────────────────────────────────────────────────
   section("Act 3.5 · Phase 1 wagers")
   runSqlFile(path.join(SQL, "20-phase1-placements.sql"))
+  check(
+    "20-phase1-placements.sql seeds 8 bettors / 42 wagers",
+    runSql("SELECT count(*) FROM public.bet_placements") === "42" &&
+      runSql("SELECT count(DISTINCT user_id) FROM public.bet_placements") === "8",
+    `${runSql("SELECT count(*) FROM public.bet_placements")} rows`
+  )
+  // #95: these files claim to be idempotent, and now are — the wipe is its own
+  // statement, so the INSERT can see it. Before the fix a second run aborted on
+  // bet_placements_user_id_pick_id_key, which is exactly the state Act 4's
+  // fallback is reached in. Re-running here is the only positive test for it.
+  runSqlFile(path.join(SQL, "20-phase1-placements.sql"))
+  check(
+    "re-running it is a no-op, not a duplicate-key abort (#95)",
+    runSql("SELECT count(*) FROM public.bet_placements") === "42"
+  )
+
   // The hand-driven slates stand in for Act 4's browser session so the
   // printed payout table is the whole pool, not two thirds of it.
   runSqlFile(path.join(SQL, "25-phase1-handdriven-fallback.sql"))
+  const afterFallback = runSql("SELECT count(*) FROM public.bet_placements")
+  runSqlFile(path.join(SQL, "25-phase1-handdriven-fallback.sql"))
+  check(
+    "the Phase 1 fallback survives being run over its own rows (#95)",
+    runSql("SELECT count(*) FROM public.bet_placements") === afterFallback,
+    `${afterFallback} → ${runSql("SELECT count(*) FROM public.bet_placements")}`
+  )
   auditPlacements(rules, "Phase 1")
 
   check(
@@ -450,8 +473,27 @@ async function main() {
   await upload("3-phase2-open.xlsx", tid)
   check("6 Phase 2 bets open", runSql("SELECT count(*) FROM public.bets WHERE phase = 2 AND status = 'open'") === "6")
 
+  const phase1Rows = runSql(
+    `SELECT count(*) FROM public.bet_placements p
+       JOIN public.bet_picks pk ON pk.id = p.pick_id
+       JOIN public.bets b ON b.id = pk.bet_id WHERE b.phase = 1`
+  )
   runSqlFile(path.join(SQL, "30-phase2-placements.sql"))
   runSqlFile(path.join(SQL, "35-phase2-handdriven-fallback.sql"))
+  const afterPhase2 = runSql("SELECT count(*) FROM public.bet_placements")
+  // Same re-run guard as Phase 1 (#95), plus the promise both files make in
+  // their headers: a Phase 2 re-seed must not touch Phase 1's odds snapshots.
+  runSqlFile(path.join(SQL, "30-phase2-placements.sql"))
+  runSqlFile(path.join(SQL, "35-phase2-handdriven-fallback.sql"))
+  check(
+    "the Phase 2 slates are re-runnable, and leave Phase 1 alone (#95)",
+    runSql("SELECT count(*) FROM public.bet_placements") === afterPhase2 &&
+      runSql(
+        `SELECT count(*) FROM public.bet_placements p
+           JOIN public.bet_picks pk ON pk.id = p.pick_id
+           JOIN public.bets b ON b.id = pk.bet_id WHERE b.phase = 1`
+      ) === phase1Rows
+  )
   auditPlacements(rules, "both phases")
 
   // Rule 6 and rule 2's lower bound, evaluated the way Act 9 will.

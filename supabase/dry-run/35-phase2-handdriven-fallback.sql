@@ -13,6 +13,23 @@
 
 BEGIN;
 
+-- Clear whatever Act 8 placed by hand, as its OWN statement — as a CTE beside
+-- the INSERT the delete was invisible to the insert's snapshot, so the file
+-- failed exactly when it was needed (Sprint 21 / #95). Phase 2 only.
+DELETE FROM public.bet_placements p
+ USING public.bet_picks pk, public.bets bt, public.users u
+ WHERE p.pick_id = pk.id
+   AND pk.bet_id = bt.id
+   AND bt.phase = 2
+   AND u.id = p.user_id
+   AND u.email IN (
+     'dan.mercer@dryrun.ozark.test',
+     'jake.kohne@dryrun.ozark.test',
+     'casey.sideline@dryrun.ozark.test',
+     'pleicht17@gmail.com',
+     'newbie@dryrun.ozark.test'
+   );
+
 WITH bettor AS (
   SELECT u.id AS user_id, u.email FROM public.users u
 ),
@@ -63,13 +80,6 @@ resolved AS (
     JOIN public.bet_picks pk ON pk.sheet_pick_id = s.sheet_pick_id
     JOIN public.bets bt      ON bt.id = pk.bet_id
     JOIN public.tournaments t ON t.id = bt.tournament_id AND t.year = 2026
-),
-wiped AS (
-  DELETE FROM public.bet_placements p
-  USING public.bet_picks pk, public.bets bt
-  WHERE p.pick_id = pk.id AND pk.bet_id = bt.id AND bt.phase = 2
-    AND p.user_id IN (SELECT user_id FROM resolved)
-  RETURNING 1
 )
 INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement, requires_admin_review)
 SELECT user_id, pick_id, amount, odds_at_placement, requires_admin_review FROM resolved;

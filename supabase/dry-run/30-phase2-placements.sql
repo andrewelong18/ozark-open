@@ -23,10 +23,23 @@
 -- control all the way to /results.
 --
 -- Idempotent: only deletes each bettor's PHASE 2 rows, so the Phase 1 wagers
--- (and the odds they snapshotted) survive a re-run untouched.
+-- (and the odds they snapshotted) survive a re-run untouched. The delete is
+-- its own statement (Sprint 21 / #95) — as a CTE beside the INSERT it was
+-- invisible to the insert's snapshot, so a re-run collided on
+-- bet_placements_user_id_pick_id_key.
 
 BEGIN;
 
+-- Step 1: clear Phase 2, as its own statement so the INSERT below sees it.
+DELETE FROM public.bet_placements p
+ USING public.bet_picks pk, public.bets bt, public.users u
+ WHERE p.pick_id = pk.id
+   AND pk.bet_id = bt.id
+   AND bt.phase = 2
+   AND u.id = p.user_id
+   AND (u.email LIKE '%@dryrun.ozark.test' OR u.email = 'andrewelong18@gmail.com');
+
+-- Step 2: seed.
 WITH bettor AS (
   SELECT u.id AS user_id, u.email
   FROM public.users u
@@ -106,16 +119,6 @@ resolved AS (
   JOIN public.bet_picks pk ON pk.sheet_pick_id = s.sheet_pick_id
   JOIN public.bets bt      ON bt.id = pk.bet_id
   JOIN public.tournaments t ON t.id = bt.tournament_id AND t.year = 2026
-),
-wiped AS (
-  -- Phase 2 rows only — Phase 1 wagers and their odds snapshots stay put.
-  DELETE FROM public.bet_placements p
-  USING public.bet_picks pk, public.bets bt
-  WHERE p.pick_id = pk.id
-    AND pk.bet_id = bt.id
-    AND bt.phase = 2
-    AND p.user_id IN (SELECT user_id FROM bettor)
-  RETURNING 1
 )
 INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement, requires_admin_review)
 SELECT user_id, pick_id, amount, odds_at_placement, requires_admin_review FROM resolved;

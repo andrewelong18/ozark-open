@@ -34,10 +34,23 @@
 --     wagered" control. He should surface on /results with $0 theoretical and
 --     a full-entry loss, which is worth showing Pat.
 --
--- Idempotent: deletes these bettors' rows first.
+-- Idempotent: clears these bettors' PHASE 1 rows first, in its own statement.
+-- (Sprint 21 / #95 — it used to do that in a CTE alongside the INSERT, where
+-- the delete is invisible to the insert's snapshot, so a re-run collided on
+-- bet_placements_user_id_pick_id_key. Phase 2 wagers are never touched.)
 
 BEGIN;
 
+-- Step 1: clear, as its own statement so the INSERT below can see it happen.
+DELETE FROM public.bet_placements p
+ USING public.bet_picks pk, public.bets bt, public.users u
+ WHERE p.pick_id = pk.id
+   AND pk.bet_id = bt.id
+   AND bt.phase = 1
+   AND u.id = p.user_id
+   AND (u.email LIKE '%@dryrun.ozark.test' OR u.email = 'andrewelong18@gmail.com');
+
+-- Step 2: seed.
 WITH bettor AS (
   SELECT u.id AS user_id, u.email
   FROM public.users u
@@ -122,11 +135,6 @@ resolved AS (
   JOIN public.bet_picks pk ON pk.sheet_pick_id = s.sheet_pick_id
   JOIN public.bets bt  ON bt.id = pk.bet_id
   JOIN public.tournaments t ON t.id = bt.tournament_id AND t.year = 2026
-),
-wiped AS (
-  DELETE FROM public.bet_placements p
-  WHERE p.user_id IN (SELECT user_id FROM bettor)
-  RETURNING 1
 )
 INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement, requires_admin_review)
 SELECT user_id, pick_id, amount, odds_at_placement, requires_admin_review FROM resolved;
@@ -134,7 +142,7 @@ SELECT user_id, pick_id, amount, odds_at_placement, requires_admin_review FROM r
 COMMIT;
 
 -- ── Verify ──────────────────────────────────────────────────────────────────
--- Expect 8 bettors / 41 placements. Devin Arand must show 3 picks and $8;
+-- Expect 8 bettors / 42 placements. Devin Arand must show 3 picks and $8;
 -- everyone else 5–6 picks and under their entry fee with room left for
 -- Phase 2. over_cap and over_entry must both be 0 everywhere.
 SELECT
