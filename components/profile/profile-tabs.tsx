@@ -207,8 +207,10 @@ function AdminPanel() {
         <p className="text-sm text-text-muted">
           You&apos;re an admin. Manage the pool from here.
         </p>
-        {/* Three pages, clean boundaries: people · menu · money. Sprint 20
-            merged the old Participants and Roster buttons into People. */}
+        {/* Four pages, clean boundaries: people · menu · money · the clock.
+            Sprint 20 merged the old Participants and Roster buttons into
+            People; Sprint 25 added Close & Settle, which is the only one that
+            matters on a deadline. */}
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" render={<Link href="/admin/people" />}>
             People
@@ -218,6 +220,9 @@ function AdminPanel() {
           </Button>
           <Button variant="secondary" size="sm" render={<Link href="/admin/view" />}>
             View All
+          </Button>
+          <Button variant="secondary" size="sm" render={<Link href="/admin/close" />}>
+            Close &amp; Settle
           </Button>
         </div>
       </CardContent>

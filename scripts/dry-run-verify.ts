@@ -48,6 +48,7 @@ import {
 } from "../lib/validation.ts"
 import {
   buildResultsTable,
+  finalizeReadiness,
   normalizePayoutRows,
   roundCents,
   type PayoutViewQueryRow,
@@ -604,6 +605,47 @@ async function main() {
     `Σ actual = ${roundCents(table.rows.reduce((s, r) => s + r.actual, 0))}`
   )
   check("no placement is left pending", table.pending === 0)
+
+  // Sprint 25 / #108: the guard on the Saturday-night unlock. Everything is
+  // settled at this point, so it must say yes — and it must say no the moment
+  // a single verdict is missing. The second half is the one that matters: the
+  // failure it prevents is silent, because aggregatePayouts SKIPS a pending
+  // placement instead of scoring it zero, so the pool divides across only the
+  // settled wagers and every number still reconciles.
+  const settled = finalizeReadiness({
+    pendingPicks: Number(runSql("SELECT count(*) FROM public.bet_picks WHERE result = 'pending'")),
+    unclosedBets: Number(runSql("SELECT count(*) FROM public.bets WHERE status <> 'closed'")),
+  })
+  check("the tournament is safe to finalize", settled.ok, settled.blockers.join(" "))
+
+  const oneUnresolved = finalizeReadiness({ pendingPicks: 1, unclosedBets: 0 })
+  check(
+    "one unresolved pick is enough to refuse the unlock",
+    !oneUnresolved.ok && /split the whole pool/.test(oneUnresolved.blockers[0] ?? "")
+  )
+
+  // And prove the hazard is real rather than theoretical, on this very
+  // dataset: drop one pick back to pending and the same table pays out more
+  // than the pool actually holds.
+  const oneBack = runSql(
+    "SELECT sheet_pick_id FROM public.bet_picks WHERE result = 'hit' ORDER BY sheet_pick_id LIMIT 1"
+  )
+  runSql(`UPDATE public.bet_picks SET result = 'pending' WHERE sheet_pick_id = ${oneBack}`)
+  const skewed = buildResultsTable(
+    participants,
+    normalizePayoutRows(
+      queryJson<PayoutViewQueryRow[]>(
+        `SELECT placement_id, user_id, amount, result, theoretical_payout, refunded_stake
+           FROM public.placement_payouts_view WHERE tournament_id = ${lit(tid)}`
+      )
+    )
+  )
+  check(
+    "with one pick unresolved the shares inflate — the exact silent failure (#108)",
+    skewed.pending > 0 && skewed.sum_theoretical < table.sum_theoretical,
+    `${skewed.pending} pending, Σ theo ${roundCents(skewed.sum_theoretical)} vs ${roundCents(table.sum_theoretical)}`
+  )
+  runSql(`UPDATE public.bet_picks SET result = 'hit' WHERE sheet_pick_id = ${oneBack}`)
   const steve = table.rows.find((r) => r.display_name === "Steve Esswein")
   check(
     "the paid-but-never-wagered control gets $0 and loses his entry",
