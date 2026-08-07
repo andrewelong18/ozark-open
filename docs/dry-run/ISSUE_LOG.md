@@ -205,3 +205,21 @@ seeded half needs no second session; the browser half does.
       questions added as §2b
 - [x] `docs/ROADMAP.md` updated — Sprint 9 flipped to 🔶 with the reconciliation result, and
       Sprints [21](../sprints/sprint-21.md)–[25](../sprints/sprint-25.md) indexed
+
+---
+
+## What's been fixed since (Sprint 21, Aug 7, 2026)
+
+Five of the 21 rows are closed in code. The numbers below are this file's row numbers.
+
+| Row | Finding | Status |
+|---|---|---|
+| 1 | `dev-magiclink.ts` emits the legacy verify link | ✅ Fixed — emits `…/auth/callback?token_hash=…&type=magiclink` ([#94](https://github.com/andrewelong18/ozark-open/issues/94)). One live run still owed ([#115](https://github.com/andrewelong18/ozark-open/issues/115)) |
+| 2 | Acts 1.4 / 2.2 ordered before the menu exists | ✅ Fixed — both checks moved into Act 3.1, step numbers deliberately unchanged ([#109](https://github.com/andrewelong18/ozark-open/issues/109)) |
+| 3 | The hand-driven fallback SQL fails when needed | ✅ Fixed in **four** files, not the two named — `20-` and `30-` carry the same pattern, and `20-`'s delete wasn't phase-scoped ([#95](https://github.com/andrewelong18/ozark-open/issues/95)). `dry-run-verify.sh` now runs each file twice to prove it |
+| 4 | Act 2.3 never restores the entry fee | ✅ Fixed — 2.3 names Casey and makes restoring his $50 a step ([#109](https://github.com/andrewelong18/ozark-open/issues/109)) |
+| 5 | Avatar upload fails with an RLS violation | ⏳ **Still open** ([#90](https://github.com/andrewelong18/ozark-open/issues/90)) — diagnosed, not fixed. `scripts/avatar-upload-probe.ts` captures the failing request; it needs prod credentials to run. Row 6 (crop/remove) stays blocked behind it |
+| 7 | Revoking destroys the entry fee | ✅ Fixed as a soft revoke — `revoked_at`, the fee and the wagers now leave and return together ([#91](https://github.com/andrewelong18/ozark-open/issues/91), PRD §12 A13). Prod migration ([#113](https://github.com/andrewelong18/ozark-open/issues/113)) and browser round trip ([#114](https://github.com/andrewelong18/ozark-open/issues/114)) still owed |
+| 8 | A $0 wager is refused silently | ✅ Fixed — every rejected stake reddens the input and toasts the reason ([#92](https://github.com/andrewelong18/ozark-open/issues/92)) |
+
+Rows 9–21 belong to Sprints [22](../sprints/sprint-22.md)–[25](../sprints/sprint-25.md) and are untouched.

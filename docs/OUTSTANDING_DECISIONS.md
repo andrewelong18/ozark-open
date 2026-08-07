@@ -50,10 +50,13 @@ explicit confirm-or-supersede rather than a silent default:
   the **admin verifies/corrects it at approval**, so import name-matching (ADR 0001 §11)
   still only ever sees an admin-owned name. Nothing further needed here.
 - **Per-user betting toggle + non-player cap.** The betting-toggle half is ✅
-  **superseded Jul 20, 2026 (Sprint 16 / A12).** Rather than a `betting_enabled`
-  column, betting eligibility is gated by whether a `tournament_participants` row
-  exists, and admins grant/revoke it on `/admin/people` (approving creates the
-  row). The **non-player stricter cap** (#2) is still open.
+  **superseded Jul 20, 2026 (Sprint 16 / A12), refined Aug 7, 2026 (Sprint 21 /
+  A13).** Rather than a `betting_enabled` column, betting eligibility is gated by
+  whether a **live** `tournament_participants` row exists — one with
+  `revoked_at IS NULL` — and admins grant/revoke it on `/admin/people`
+  (approving creates or un-revokes the row; revoking stamps `revoked_at` and
+  keeps it, so the entry fee survives). The **non-player stricter cap** (#2) is
+  still open.
 
 ## 2. Stricter betting maximum for non-playing bettors — ✅ RESOLVED 2026-07-31
 **Owner:** Pat · **Resolved in:** the full-lifecycle dry run, Act 4.8.

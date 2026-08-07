@@ -178,12 +178,15 @@ Join table connecting users to tournaments. A user is "in" a tournament for a gi
 | `tournament_id` | `uuid` NOT NULL FK → `tournaments.id` | |
 | `entry_fee` | `int` NOT NULL CHECK (`entry_fee BETWEEN 20 AND 50`) | The participant's chosen entry, $20–$50 |
 | `is_player` | `boolean` NOT NULL DEFAULT `true` | True if they're playing golf, false if they're only betting (rare) |
+| `revoked_at` | `timestamptz` NULL | Non-null = betting access revoked (Sprint 21 / #91). The row and its `entry_fee` are kept so re-approval restores both; see "How access is revoked" below |
 
 **Constraint:** UNIQUE (`user_id`, `tournament_id`) — a user can only join a tournament once. (The `entry_fee` CHECK was relaxed to `> 0` in `20260717000000_bet_pick_rework.sql`; the $20–$50 bounds live on the `tournaments` row and are enforced in app code — DATA_MODEL §6 known inconsistency.)
 
 **Why `is_player`:** the rules talk about "betting on yourself" — that only matters if the bettor is also a player. Non-playing entrants (if any) are exempt from the self-bet rule.
 
-**How rows are created (Sprint 16 / A12).** A member logging in does **not** create a participant row — they're onboarded but not yet in the pool, so they can view the menu but not bet. An admin approves them on `/admin/people` (Sprint 20; was `/admin/participants`), which sets the entry fee + player flag and **creates the row**. The row existing = approved to bet; there is no separate `betting_enabled` flag. Writes stay admin-only (RLS): `POST/PATCH/DELETE /api/admin/participants` re-checks `is_admin` and validates the fee against the `tournaments` row. This replaces the old manual Supabase Studio row-add.
+**How rows are created (Sprint 16 / A12).** A member logging in does **not** create a participant row — they're onboarded but not yet in the pool, so they can view the menu but not bet. An admin approves them on `/admin/people` (Sprint 20; was `/admin/participants`), which sets the entry fee + player flag and **creates the row**. A live row = approved to bet; there is no separate `betting_enabled` flag. Writes stay admin-only (RLS): `POST/PATCH/DELETE /api/admin/participants` re-checks `is_admin` and validates the fee against the `tournaments` row. This replaces the old manual Supabase Studio row-add.
+
+**How access is revoked (Sprint 21 / A13, `20260807000000_participant_soft_revoke.sql`).** Revoking stamps `revoked_at` and **keeps the row**, so eligibility is "a row exists **and** `revoked_at IS NULL`" — a refinement of A11/A12's bare row-exists. It used to be a hard `DELETE`, which took the `entry_fee` with it while the bettor's placements (soft-deleted, never removed) survived: the pool silently shrank and every other bettor's share moved. A revoked bettor now leaves **both** sides of the arithmetic together — their fee stops funding the pool, and `buildResultsTable` (`lib/payouts.ts`) drops the payout rows of anyone not in `participants` from the denominator. Nothing is deleted, so re-approval restores the member, the fee and the wagers exactly. Every read that means "approved" filters `revoked_at IS NULL`; `/admin/people` is the one exception — it selects the column so it can show a **Revoked** row and offer re-approval.
 
 People who are *expected* in the tournament but haven't registered are deliberately **not** modeled here — they live in `tournament_invites` (§3.8), precisely so a row in this table keeps meaning "approved to bet".
 
@@ -296,7 +299,7 @@ The **expected roster** — who we think is playing this year. Entered before an
 
 **Constraint:** UNIQUE (`tournament_id`, `lower(email)`) — a functional index, so hand-typed `Dan@X.com` and `dan@x.com` collide instead of producing two roster rows.
 
-**Why a separate table rather than a nullable `tournament_participants.user_id`.** Sprint 10 originally proposed widening §3.3 to hold "invited but never registered". That would break the A11 invariant above: a `tournament_participants` row *means* approved to bet, and it's what `/dashboard`, `/results` and `/admin/view` sum the pool from. Invite rows there would either inflate the pool or force a `user_id IS NOT NULL` guard into every tournament-wide query. Keeping them apart costs one table and protects the money math.
+**Why a separate table rather than a nullable `tournament_participants.user_id`.** Sprint 10 originally proposed widening §3.3 to hold "invited but never registered". That would break the A11 invariant above: a live `tournament_participants` row (one with `revoked_at IS NULL` — A13) *means* approved to bet, and it's what `/dashboard`, `/results` and `/admin/view` sum the pool from. Invite rows there would either inflate the pool or force a `user_id IS NOT NULL` guard into every tournament-wide query. Keeping them apart costs one table and protects the money math.
 
 **No FK to `users`** — by design. The whole point of an invite is that the `users` row may not exist yet, so `/admin/people` matches the two by normalized email at read time (`lib/roster.ts`).
 
