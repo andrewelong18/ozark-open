@@ -273,9 +273,11 @@ function auditPlacements(rules: TournamentRules, label: string) {
           bet: {
             id: row.bet_id,
             // The seed writes directly, so judge it against the state the bet
-            // was in when a human would have placed: open.
+            // was in when a human would have placed: open, and inside its
+            // phase's window (the deadline is what Act 6 walks through).
             status: "open",
             phase: row.phase,
+            phase_closed: false,
             allows_multiple_picks: row.allows_multiple_picks,
             pick_player_user_ids: playersByBet.get(row.bet_id) ?? [],
           },

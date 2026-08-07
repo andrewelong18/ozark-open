@@ -13,6 +13,7 @@
 //   requires_admin_review from the validation result.
 
 import { validateAmount } from "./validation.ts"
+import { phaseClosedByClock, type PhaseClock } from "./phases.ts"
 import type {
   Bettor,
   ExistingPlacement,
@@ -91,6 +92,28 @@ export const TOURNAMENT_RULE_COLUMNS =
   "entry_fee_min, entry_fee_max, min_picks_per_tournament, max_picks_per_phase, " +
   "max_single_bet_pct, max_single_bet_cap, max_self_bet_pct, max_self_bet_cap"
 
+/** The clock columns, kept SEPARATE from the rule columns on purpose:
+ * toTournamentRules() below coerces every field with Number(), and a timestamp
+ * through Number() is NaN — silently (Sprint 25 / #106). */
+export const TOURNAMENT_CLOCK_COLUMNS =
+  "phase1_closes_at, phase2_closes_at, show_countdown"
+
+/** The clock half of the tournaments row. Timestamps stay strings; only
+ * lib/phases.ts parses them, and only against an explicit `now`. */
+export function toPhaseClock(row: Record<string, unknown>): PhaseClock {
+  const at = (field: string) => {
+    const value = row[field]
+    return typeof value === "string" && value !== "" ? value : null
+  }
+  return {
+    phase1_closes_at: at("phase1_closes_at"),
+    phase2_closes_at: at("phase2_closes_at"),
+    // Absent column (pre-migration) reads as "show it" — the pre-Sprint-25
+    // behaviour, and a countdown is never the dangerous default.
+    show_countdown: row.show_countdown !== false,
+  }
+}
+
 /** The tournaments row, verbatim. PostgREST may serialize numeric columns as
  * strings; coerce every rule field so the math never concatenates. */
 export function toTournamentRules(row: Record<string, unknown>): TournamentRules {
@@ -140,7 +163,9 @@ export type PickQueryRow = {
 
 export type NormalizedTarget = {
   pick: TargetPick
-  bet: TargetBet
+  /** No phase_closed yet — the target read happens before the tournaments row
+   * is known. buildPlacementContext stamps it. */
+  bet: Omit<TargetBet, "phase_closed">
   tournament_id: string
   /** The pick's live odds — snapshotted into odds_at_placement on write. */
   current_american_odds: number
@@ -225,17 +250,33 @@ export type ParticipantRow = {
   is_player: boolean
 }
 
+/**
+ * Assemble the validation context. The phase clock is stamped onto the bet
+ * here — the only place that has both the target bet and the tournaments row —
+ * so validation.ts stays a pure function of its context and the deadline can't
+ * be forgotten at a call site (TargetBet.phase_closed is required).
+ */
 export function buildPlacementContext(
   participant: ParticipantRow,
   target: NormalizedTarget,
-  existing: ExistingPlacement[]
+  existing: ExistingPlacement[],
+  clock: PhaseClock,
+  now: Date
 ): PlacementContext {
   const bettor: Bettor = {
     user_id: participant.user_id,
     entry_fee: Number(participant.entry_fee),
     is_player: participant.is_player,
   }
-  return { bettor, pick: target.pick, bet: target.bet, existing }
+  return {
+    bettor,
+    pick: target.pick,
+    bet: {
+      ...target.bet,
+      phase_closed: phaseClosedByClock(target.bet.phase, clock, now),
+    },
+    existing,
+  }
 }
 
 // ---------------------------------------------------------------------------

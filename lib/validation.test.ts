@@ -59,6 +59,10 @@ function ctx(overrides: {
       id: "bet-target",
       status: "open",
       phase: 1,
+      // The clock is stamped by buildPlacementContext in the real path; here
+      // the default is "deadline not reached" so every other rule is tested
+      // against a live phase (Sprint 25 / #106).
+      phase_closed: false,
       allows_multiple_picks: true,
       pick_player_user_ids: [null],
       ...overrides.bet,
@@ -335,9 +339,21 @@ test("opponent block: doesn't apply in multi-pick categories", () => {
 // ---------------------------------------------------------------------------
 
 test("bet status: hidden and closed bets reject wagers", () => {
-  assert.equal(validateBetOpen("open"), null)
-  assert.match(validateBetOpen("closed")!, /not open/)
-  assert.match(validateBetOpen("hidden")!, /not open/)
+  const live = { phase: 1, phase_closed: false } as const
+  assert.equal(validateBetOpen({ status: "open", ...live }), null)
+  assert.match(validateBetOpen({ status: "closed", ...live })!, /not open/)
+  assert.match(validateBetOpen({ status: "hidden", ...live })!, /not open/)
+
+  // The deadline closes wagering even on a bet the sheet still calls open —
+  // the two gates are independent, and the message says which one bit.
+  assert.match(
+    validateBetOpen({ status: "open", phase: 1, phase_closed: true })!,
+    /^Phase 1 is closed — the deadline has passed\.$/
+  )
+  assert.match(
+    validateBetOpen({ status: "open", phase: 2, phase_closed: true })!,
+    /^Phase 2 is closed/
+  )
 })
 
 test("validatePlacement: a legal wager passes with no review flag", () => {

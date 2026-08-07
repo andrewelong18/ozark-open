@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { validateBetOpen, validatePlacement } from "@/lib/validation"
+import { phaseClosedByClock } from "@/lib/phases"
 import {
   buildPlacementContext,
   normalizeExistingPlacements,
@@ -10,6 +11,8 @@ import {
   planWrite,
   toTournamentRules,
   TOURNAMENT_RULE_COLUMNS,
+  TOURNAMENT_CLOCK_COLUMNS,
+  toPhaseClock,
   type OwnPlacementRow,
   type ParticipantRow,
   type PickQueryRow,
@@ -93,7 +96,7 @@ async function placeOrEdit(request: Request) {
   // The tournaments row is the rulebook — passed verbatim to validation.
   const { data: tournamentData } = await supabase
     .from("tournaments")
-    .select(TOURNAMENT_RULE_COLUMNS)
+    .select(`${TOURNAMENT_RULE_COLUMNS}, ${TOURNAMENT_CLOCK_COLUMNS}`)
     .eq("id", target.tournament_id)
     .maybeSingle()
   if (!tournamentData) {
@@ -102,9 +105,12 @@ async function placeOrEdit(request: Request) {
       { status: 500 }
     )
   }
-  const rules = toTournamentRules(
-    tournamentData as unknown as Record<string, unknown>
-  )
+  const tournamentRow = tournamentData as unknown as Record<string, unknown>
+  const rules = toTournamentRules(tournamentRow)
+  // One `now` for the whole request, so the deadline can't fall between two
+  // checks of it (Sprint 25 / #106).
+  const clock = toPhaseClock(tournamentRow)
+  const now = new Date()
 
   // Non-participants can browse the menu but never wager.
   const { data: participantData } = await supabase
@@ -146,7 +152,9 @@ async function placeOrEdit(request: Request) {
   const ctx = buildPlacementContext(
     participantData as ParticipantRow,
     target,
-    existing
+    existing,
+    clock,
+    now
   )
   // Rule violations surface validation's messages verbatim — the client
   // renders them as-is.
@@ -233,7 +241,7 @@ export async function DELETE(request: Request) {
 
   const { data: rowData, error: rowError } = await supabase
     .from("bet_placements")
-    .select("id, deleted_at, bet_picks ( bets ( status ) )")
+    .select("id, deleted_at, bet_picks ( bets ( status, phase, tournament_id ) )")
     .eq("user_id", user.id)
     .eq("pick_id", body.pick_id)
     .maybeSingle()
@@ -243,13 +251,14 @@ export async function DELETE(request: Request) {
       { status: 500 }
     )
   }
+  type DeleteBetJoin = { status: string; phase: number; tournament_id: string }
   const row = rowData as
     | {
         id: string
         deleted_at: string | null
         bet_picks:
-          | { bets: { status: string } | { status: string }[] | null }
-          | { bets: { status: string } | { status: string }[] | null }[]
+          | { bets: DeleteBetJoin | DeleteBetJoin[] | null }
+          | { bets: DeleteBetJoin | DeleteBetJoin[] | null }[]
           | null
       }
     | null
@@ -266,9 +275,32 @@ export async function DELETE(request: Request) {
       ? pickJoin.bets[0]
       : pickJoin.bets
     : null
-  const openError = validateBetOpen(
-    (betJoin?.status ?? "closed") as "hidden" | "open" | "closed"
-  )
+
+  // Removing a wager is a write like any other, so it obeys the same gate:
+  // the deadline closes the window in both directions (Sprint 25 / #106).
+  // Without this you could still pull money off the board after the close.
+  const phase = betJoin?.phase === 2 ? 2 : 1
+  let phaseClosed = false
+  if (betJoin?.tournament_id) {
+    const { data: clockData } = await supabase
+      .from("tournaments")
+      .select(TOURNAMENT_CLOCK_COLUMNS)
+      .eq("id", betJoin.tournament_id)
+      .maybeSingle()
+    if (clockData) {
+      phaseClosed = phaseClosedByClock(
+        phase,
+        toPhaseClock(clockData as unknown as Record<string, unknown>),
+        new Date()
+      )
+    }
+  }
+
+  const openError = validateBetOpen({
+    status: (betJoin?.status ?? "closed") as "hidden" | "open" | "closed",
+    phase,
+    phase_closed: phaseClosed,
+  })
   if (openError) {
     return NextResponse.json({ errors: [openError] }, { status: 400 })
   }

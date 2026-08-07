@@ -51,6 +51,13 @@ export type TargetBet = {
   id: string
   status: "hidden" | "open" | "closed"
   phase: 1 | 2
+  /**
+   * Whether this bet's phase deadline has passed (Sprint 25 / #106). Stamped
+   * by buildPlacementContext from the tournaments row's clock — required, not
+   * optional, so a caller that forgets it fails to compile rather than
+   * silently accepting wagers after the close.
+   */
+  phase_closed: boolean
   /** From bet_categories: false for Match / Group Match. */
   allows_multiple_picks: boolean
   /** player_user_id of every pick in the bet (nulls included). */
@@ -117,9 +124,16 @@ export function validateEntryFee(entryFee: number, rules: TournamentRules): stri
   return null
 }
 
-/** PRD §8.1: wagering only while the bet is open. */
-export function validateBetOpen(status: TargetBet["status"]): string | null {
-  return status === "open" ? null : "This bet is not open for wagering."
+/**
+ * PRD §8.1: wagering only while the bet is open AND its phase deadline hasn't
+ * passed (ADR 0001 §5a). Two independent gates, reported separately — "the
+ * phase closed" and "this bet isn't open" send an admin to different places.
+ */
+export function validateBetOpen(
+  bet: Pick<TargetBet, "status" | "phase" | "phase_closed">
+): string | null {
+  if (bet.phase_closed) return `Phase ${bet.phase} is closed — the deadline has passed.`
+  return bet.status === "open" ? null : "This bet is not open for wagering."
 }
 
 /** PRD §7 rule 3: whole dollars, $1 minimum. */
@@ -226,7 +240,7 @@ export function validatePlacement(
   rules: TournamentRules
 ): PlacementValidation {
   const errors = [
-    validateBetOpen(ctx.bet.status),
+    validateBetOpen(ctx.bet),
     validateAmount(amount),
     validateMaxSingleBet(amount, ctx.bettor.entry_fee, rules),
     validatePhasePickCount(ctx, rules),
