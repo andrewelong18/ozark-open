@@ -1,7 +1,7 @@
 // Dev helper: mint a magic-link login URL for an existing account WITHOUT
 // sending any email. Handy when testing against a hosted Supabase project (no
-// local Inbucket to catch mail). Prints an action link — paste it into your
-// browser and you're signed in as that account.
+// local Inbucket to catch mail). Prints a link — paste it into your browser
+// and you're signed in as that account.
 //
 // Usage:
 //   SUPABASE_URL=https://<ref>.supabase.co \
@@ -12,6 +12,13 @@
 // it MUST be in the project's allowed Redirect URLs (Dashboard → Authentication
 // → URL Configuration). The service_role key is admin-level — keep it out of
 // git and out of NEXT_PUBLIC_*.
+//
+// Why not properties.action_link (Sprint 21 / #94): that's the legacy
+// /auth/v1/verify?token=… URL, which hands the session back as a URL *hash
+// fragment*. A hash never reaches the server, so /auth/callback — a server
+// route — correctly answers "Login link was missing its token." We emit the
+// token_hash shape the callback actually verifies (verifyOtp), which is also
+// the shape the production email template uses.
 
 import { createClient } from "@supabase/supabase-js"
 
@@ -19,7 +26,10 @@ async function main() {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const email = process.argv[2]
-  const siteUrl = process.env.SITE_URL ?? "http://localhost:3000"
+  const siteUrl =
+    process.env.SITE_URL ??
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    "http://localhost:3000"
 
   if (!url || !serviceKey) {
     console.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the environment.")
@@ -46,8 +56,20 @@ async function main() {
     process.exit(1)
   }
 
+  const tokenHash = data.properties?.hashed_token
+  if (!tokenHash) {
+    console.error(
+      `Supabase returned no hashed_token for ${email} — can't build a callback link.`
+    )
+    process.exit(1)
+  }
+
+  const link = `${siteUrl.replace(/\/+$/, "")}/auth/callback?token_hash=${encodeURIComponent(
+    tokenHash
+  )}&type=magiclink`
+
   console.log(`\nMagic link for ${email} — open this in your browser to sign in:\n`)
-  console.log(data.properties?.action_link)
+  console.log(link)
   console.log("")
 }
 
