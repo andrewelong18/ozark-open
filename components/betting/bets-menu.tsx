@@ -41,7 +41,17 @@ export type Bet = {
   title: string
   phase: number
   round: string
+  /** The bet's own status, from the sheet. Drives the post-close REVEAL, which
+   * RLS gates on the same value — so this must never be faked. */
   status: string
+  /**
+   * Whether wagers can still be placed, computed server-side from the phase
+   * deadline as well as the status (Sprint 25 / #106). Distinct from `status`
+   * on purpose: the clock closes WAGERING, the upload closes THE BET. Between
+   * the deadline and the admin's closing upload, the stake inputs are gone but
+   * nobody's picks are revealed yet.
+   */
+  wagering_open: boolean
   total_probability: number | null
   bet_categories: BetCategory | null
   bet_picks: Pick[]
@@ -349,7 +359,7 @@ export function BetsMenu({
                         {name}
                       </div>
                       {bets.map((bet) =>
-                        bet.status === "open" && isParticipant ? (
+                        bet.wagering_open && isParticipant ? (
                           <BetPlacementCard
                             key={bet.id}
                             title={bet.title}

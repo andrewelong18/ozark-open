@@ -17,7 +17,13 @@ import {
   type PickPlacements,
 } from "@/lib/closed-bets"
 import { checkTournamentTotal } from "@/lib/validation"
-import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
+import {
+  toPhaseClock,
+  toTournamentRules,
+  TOURNAMENT_CLOCK_COLUMNS,
+  TOURNAMENT_RULE_COLUMNS,
+} from "@/lib/placements"
+import { wageringOpen } from "@/lib/phases"
 import {
   buildComplianceSummary,
   normalizeMyBets,
@@ -93,7 +99,7 @@ export default async function BetsPage() {
 
   const { data: tournament } = await supabase
     .from("tournaments")
-    .select(`id, ${TOURNAMENT_RULE_COLUMNS}`)
+    .select(`id, ${TOURNAMENT_RULE_COLUMNS}, ${TOURNAMENT_CLOCK_COLUMNS}`)
     .in("status", ["upcoming", "active"])
     .order("year", { ascending: false })
     .limit(1)
@@ -110,6 +116,10 @@ export default async function BetsPage() {
 
   if (!tournament) return emptyState
   const tournamentId = (tournament as { id: string }).id
+  // One `now` for the render, so two bets in the same phase can't disagree
+  // about whether the deadline has passed (Sprint 25 / #106).
+  const clock = toPhaseClock(tournament as unknown as Record<string, unknown>)
+  const now = new Date()
 
   const { data: betsData } = await supabase
     .from("bets")
@@ -180,6 +190,15 @@ export default async function BetsPage() {
 
   const bets: Bet[] = (betsData ?? []).map((bet) => ({
     ...bet,
+    // The deadline closes wagering; only the admin's upload closes the bet
+    // and reveals everyone's picks. Keeping these separate means the stake
+    // inputs vanish at 11:00 without the reveal firing early — which RLS
+    // would refuse anyway, leaving an empty panel that looked broken.
+    wagering_open: wageringOpen(
+      { phase: bet.phase, status: bet.status },
+      clock,
+      now
+    ),
     bet_categories: Array.isArray(bet.bet_categories)
       ? (bet.bet_categories[0] ?? null)
       : (bet.bet_categories as BetCategory | null),
