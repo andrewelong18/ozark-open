@@ -170,13 +170,17 @@ async function upload(file: string, tid: string, opts: { expectIdempotent?: bool
             WHERE p.deleted_at IS NULL AND p.pick_id IN (${changedUuids.map(lit).join(", ")})`
         ).map((r) => r.sheet_pick_id)
   )
-  const warnings = plan.oddsChanges
-    .filter((c) => withPlacements.has(c.sheetPickId))
-    .map(
-      (c) =>
-        `Odds changed on "${c.pickLabel}" (${c.betTitle}) while it has live placements: ` +
-        `${c.from.fractionalOdds} → ${c.to.fractionalOdds}.`
-    )
+  const warnings = [
+    // Sheet-level warnings (stale-open bets, #97), same as the route reports.
+    ...validation.warnings,
+    ...plan.oddsChanges
+      .filter((c) => withPlacements.has(c.sheetPickId))
+      .map(
+        (c) =>
+          `Odds changed on "${c.pickLabel}" (${c.betTitle}) while it has live placements: ` +
+          `${c.from.fractionalOdds} → ${c.to.fractionalOdds}.`
+      ),
+  ]
 
   applyPlan(plan, tid)
   console.log(
