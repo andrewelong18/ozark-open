@@ -453,8 +453,27 @@ async function main() {
 
   // ── Act 6 · close Phase 1, Round 1 results ──────────────────────────────
   section("Act 6–7 · Phase 1 closes, Round 1 results land")
+  // #98: this used to flag 13 of 14 people on off_exact_total at Phase 1
+  // close, burying the one real straggler. The bar is no longer "Devin is in
+  // there somewhere" — it is that the phone line names him AND NOBODY ELSE.
   const compliance = runSqlFile(path.join(ROOT, "docs/admin/phase-compliance.sql"))
-  check("the chase list flags Devin Arand's 3 picks", /Devin Arand/.test(compliance), "phase-compliance.sql")
+  const chaseLine = compliance
+    .split("\n")
+    .find((l) => l.includes("TEXT THESE PEOPLE"))
+    ?.trim() ?? ""
+  console.log(`      ${chaseLine}`)
+  check("the chase list is scoped to the Phase 1 close", /Closing Phase 1/.test(chaseLine), chaseLine)
+  check("it names Devin Arand's 3 picks", /Devin Arand \(3 of 5 picks\)/.test(chaseLine), chaseLine)
+  check(
+    "and nobody else — one name on the line",
+    chaseLine.split(" — TEXT THESE PEOPLE: ")[1]?.split("), ").length === 1,
+    chaseLine
+  )
+  check(
+    "off-exact-total alone doesn't chase anyone at Phase 1 close (#98)",
+    !/of \$/.test(chaseLine),
+    chaseLine
+  )
 
   await upload("2-phase1-closed-r1-results.xlsx", tid)
   check("13 Phase 1 bets closed", runSql("SELECT count(*) FROM public.bets WHERE phase = 1 AND status = 'closed'") === "13")
