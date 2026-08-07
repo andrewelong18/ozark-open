@@ -81,7 +81,11 @@ from **$628.67 to $525.77** while the pool stays **$393** — every share inflat
 
 - **Neither migration is applied to production.** The Supabase MCP returns `Unauthorized`
   in this environment — no `SUPABASE_ACCESS_TOKEN`. Sprint 22's is
-  [#117](https://github.com/andrewelong18/ozark-open/issues/117); this one is filed with it.
+  [#117](https://github.com/andrewelong18/ozark-open/issues/117), this sprint's is
+  [#120](https://github.com/andrewelong18/ozark-open/issues/120); apply in that order.
+  Browser pass is [#121](https://github.com/andrewelong18/ozark-open/issues/121), and the
+  importer's clock-informed warning — anticipated by ADR 0001 §5a but not wired, since
+  `validateSheet()` is pure — is [#122](https://github.com/andrewelong18/ozark-open/issues/122).
 - `/bets` gates stake inputs through a new `wagering_open` field rather than by faking the
   bet's `status`. Faking it would have fired the post-close **reveal** early, and RLS gates
   those rows on the real DB status — so it would have rendered an empty panel that looked
