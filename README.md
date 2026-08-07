@@ -131,7 +131,7 @@ Everything an admin does during tournament week runs on **two tracks** (full rat
 | Track | Tool | Owns |
 |---|---|---|
 | 1 | The bets spreadsheet → **`/admin/import`** | The entire menu: bets, picks, odds, probabilities, **statuses** (`hidden`/`open`/`closed`), **results** (`hit`/`miss`/`push`/`void`) |
-| 1b | **`/admin/people`** | The whole access funnel in one page: who's invited but absent, signed in but stalled, awaiting approval, approved — plus approving bettors (verify display name, set entry fee + player flag, create/edit/revoke their pool entry) and pasting in the invite list (Sprint 20, merging Sprints 10 + 16) |
+| 1b | **`/admin/people`** | The whole access funnel in one page: who's invited but absent, signed in but stalled, awaiting approval, approved — plus approving bettors (verify display name, set entry fee + player flag, create/edit/revoke their pool entry — revoke is soft, so the entry fee and their wagers leave the pool together and both return on re-approval) and pasting in the invite list (Sprint 20, merging Sprints 10 + 16) |
 | 2 | **Supabase Studio** (Table Editor) | Remaining fixes: promoting admins, one-off data fixes, pick→player links |
 
 Three rules make the whole thing safe:

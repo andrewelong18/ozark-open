@@ -46,7 +46,7 @@ Do **not** re-read all foundation docs by default — each `docs/sprints/sprint-
 - **Validation is server-side** in `lib/validation.ts`, called from API routes. Client checks are UX, not security.
 - **Payout math:** `placement_payouts_view` computes theoretical payouts **from `odds_at_placement`** (snapshotted at write — never the live pick odds) against each **pick's** result; `lib/payouts.ts` does the proportional split at render with a void-adjusted pool (pool = entry fees − voided stakes).
 - **Rule parameters live on the `tournaments` row** — never hardcode entry-fee bounds, pick counts, or caps.
-- **Placements are soft-deleted** (`deleted_at`) and odds-snapshotted; money rows keep their history.
+- **Placements are soft-deleted** (`deleted_at`) and odds-snapshotted; money rows keep their history. **Revokes are soft too** (`tournament_participants.revoked_at`, Sprint 21 / PRD §12 A13) — the row carries the entry fee, which is a pool input, so betting eligibility means "a row exists **and** `revoked_at IS NULL`", never bare row-existence.
 - **The PRD §7 bet rules, the five-category pick rules (PRD §6), and the §12 decision log (incl. ADR 0001's A1–A10) are settled.** Don't relax, reorder, or reinterpret them without asking.
 - **Docs beat code.** When they disagree, flag the drift — don't silently align to the code.
 

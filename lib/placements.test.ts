@@ -11,11 +11,12 @@ import {
   parseDeleteBody,
   parsePlacementBody,
   planWrite,
+  stakeEntryError,
   toTournamentRules,
   type PickQueryRow,
   type PlacementQueryRow,
 } from "./placements.ts"
-import { validatePlacement } from "./validation.ts"
+import { validateAmount, validatePlacement } from "./validation.ts"
 
 // ---------------------------------------------------------------------------
 // Body parsing
@@ -532,4 +533,34 @@ test("planWrite revives a soft-deleted row: clears deleted_at, re-snapshots odds
   assert.equal(plan.fields.deleted_at, null)
   assert.equal(plan.fields.odds_at_placement, 135)
   assert.equal(plan.fields.amount, 8)
+})
+
+// ---------------------------------------------------------------------------
+// stakeEntryError — the stake box's own check (#92)
+// ---------------------------------------------------------------------------
+
+test("stakeEntryError lets a real stake through", () => {
+  assert.equal(stakeEntryError("25"), null)
+  assert.equal(stakeEntryError("1"), null)
+  assert.equal(stakeEntryError("007"), null)
+  assert.equal(stakeEntryError(" 25 "), null)
+})
+
+test("stakeEntryError reports the whole boundary set instead of failing silently", () => {
+  // $0 is the one from the dry run: the button was enabled and the press did
+  // nothing at all. Every one of these must produce a message to show.
+  assert.match(stakeEntryError("0")!, /Minimum bet is \$1/)
+  assert.match(stakeEntryError("-5")!, /Minimum bet is \$1/)
+  assert.match(stakeEntryError("2.50")!, /whole dollars/)
+  assert.match(stakeEntryError("")!, /Enter an amount/)
+  assert.match(stakeEntryError("   ")!, /Enter an amount/)
+  assert.match(stakeEntryError("abc")!, /whole dollars/)
+})
+
+test("stakeEntryError says exactly what the server would say", () => {
+  // The client must never invent its own wording for a §7 rule — drift here
+  // is how "the app says one thing, the API says another" starts.
+  for (const raw of ["0", "-5", "2.50"]) {
+    assert.equal(stakeEntryError(raw), validateAmount(Number(raw)))
+  }
 })

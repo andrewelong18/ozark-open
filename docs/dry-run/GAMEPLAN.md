@@ -225,6 +225,11 @@ service-role key and **sends no email at all**.
   ```
 - [ ] Paste each link into its **own Chrome profile** (not incognito windows — those share a
       session within a window group). Label the profiles by name.
+
+> **Fixed since Jul 31 (#94):** the script used to print Supabase's legacy `action_link`, which
+> `/auth/callback` rightly rejected with *"Login link was missing its token."* It now emits
+> `…/auth/callback?token_hash=…&type=magiclink`. If you see that error again, the link is stale
+> or already used — mint a fresh one.
 - [ ] Leave Pat's own account for Act 1 — his login is a real test of the real email path.
 
 > **Session length — already done, no action needed.** Verified against prod auth config on
@@ -304,11 +309,15 @@ untrustworthy.
 once. After that it's admin-only. The nickname stays editable forever.
 
 ### 1.4 The approval-pending state · P0
-- [ ] Still as Mike Yenzer, visit `/bets` → the menu is visible, **no stake inputs**, a notice
-      explains approval is pending
+- [ ] Still as Mike Yenzer, visit `/bets` → *"No bets published yet — the book opens when an
+      admin publishes the menu."* The menu is empty for **everyone** until Act 3.1, because
+      `00-reset.sql` hides all 19 bets
 - [ ] `/my-bets` and `/dashboard` show "approval pending" empty states
 - [ ] Visit `/admin/people` → **404 page not found** (this is correct, not a bug)
 - [ ] Visit `/admin/import` → **404**
+
+> **Deferred to 3.1:** "the menu is visible with no stake inputs" can't be checked here — there
+> is no menu yet. Act 3.1 checks it once the upload lands.
 
 **Log it if:** the notice doesn't make it obvious what to do next ("text Pat"), or a stake input
 appears anywhere.
@@ -342,18 +351,22 @@ approved. Invites never touch pool math; they exist so Pat can see who hasn't sh
 - [ ] Find Mike Yenzer under "Awaiting approval"
 - [ ] Approve with entry fee **$20**, player = yes
 - [ ] The stat cards move: awaiting approval down one, approved up one
-- [ ] Switch to the Mike Yenzer window, reload `/bets` → **stake inputs have appeared**
+
+> **Deferred to 3.1:** "stake inputs have appeared" needs a menu to appear in. Check it there.
 
 **This is the moment to point out to Pat:** nothing else changed. One row in one table is the
 entire difference between browsing and betting.
 
 ### 2.3 Entry fee bounds · P0
-Try each of these on any participant and note exactly what happens:
+Try each of these on **Casey Sideline** and note exactly what happens:
 
 - [ ] **$15** → rejected: *"Entry fee must be between $20 and $50."*
 - [ ] **$60** → rejected, same message
 - [ ] **$22.50** → rejected: *"Entry fee must be a whole-dollar amount."*
 - [ ] **$35** → accepted
+- [ ] **Put it back to $50.** Not optional: at $35 his max single bet floors to $17, so Act 4.6's
+      cap case (*"Max single bet is $20 for your $50 entry"*) can't fire, and Appendix A's
+      reconciliation is $15 light. This step was missing on Jul 31 and silently broke both.
 
 > **Worth knowing:** the database itself only enforces `entry_fee > 0`. The $20–$50 bounds live
 > on the tournament row and are enforced in application code only — the original schema
@@ -365,11 +378,15 @@ Try each of these on any participant and note exactly what happens:
 - [ ] Confirm it sticks after a reload
 
 ### 2.5 Revoke and re-grant · P1
-- [ ] Revoke Mike Yenzer's access → his window reloads to the browse-only state
-- [ ] Re-approve at **$20** → betting is back
+- [ ] Revoke Mike Yenzer's access → his window reloads to the browse-only state, and his row
+      reads **Revoked** (not "No account")
+- [ ] `/dashboard`'s pool total drops by exactly his $20 while he's revoked
+- [ ] Re-approve → the form **pre-fills $20**, his preserved fee. Betting is back and the pool
+      total returns to where it was
 
-**Log it if:** revoking loses his entry fee silently, or any already-placed wagers vanish from
-view. (They shouldn't — placements are never deleted.)
+**Log it if:** the re-approve form has forgotten his fee, or the pool total doesn't come back to
+the cent. (Revoke stamps `revoked_at`; nothing is deleted — Sprint 21 / #91. On Jul 31 this was
+a hard DELETE, so his $20 went to $0 and the pool silently shrank while his wagers stayed in it.)
 
 ### 2.6 The chase view · P1
 - [ ] Read the two "chase" blocks at the top. Do they tell Pat who to text, in plain language?
@@ -404,6 +421,15 @@ bad cell rejects the whole file. Valid files are then *upserted* by the sheet's 
       the fractional odds, the probability to one decimal, and the total probability banner.
       **These are displayed verbatim from the sheet — the app never recalculates them.**
 
+**The two checks deferred from Acts 1.4 and 2.2** — they need a published menu, which only
+exists from here on (moved Jul 31, #109):
+
+- [ ] Switch to the **pending** window (still unapproved): `/bets` shows the whole menu with
+      **no stake inputs**, and a notice explaining approval is pending
+- [ ] Switch to the **Mike Yenzer** window (approved in Act 2.2), reload `/bets` →
+      **stake inputs are there**. Same menu, same page — one participant row is the whole
+      difference between browsing and betting
+
 ### 3.2 The unmatched names · P1
 - [ ] Look at the unmatched-name chips. "Field", "Yes", "No", "Even", "Odd" and any golfer
       without an account should be there — that's correct.
@@ -433,7 +459,7 @@ the guarantee the whole spreadsheet workflow rests on.
 ### 3.5 Load the bulk wagers · P0
 *(Navigator, in SQL — 30 seconds)*
 - [ ] Run `supabase/dry-run/20-phase1-placements.sql`
-- [ ] The verification query at the bottom shows 8 bettors, 41 wagers, Devin Arand at 3 picks
+- [ ] The verification query at the bottom shows 8 bettors, 42 wagers, Devin Arand at 3 picks
       and $8
 
 ---

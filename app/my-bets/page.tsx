@@ -73,6 +73,7 @@ export default async function MyBetsPage() {
         .select("entry_fee, is_player")
         .eq("user_id", user.id)
         .eq("tournament_id", tournament.id)
+        .is("revoked_at", null)
         .maybeSingle()
     : { data: null }
   const participant = participantData as Participant | null

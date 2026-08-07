@@ -142,6 +142,7 @@ export default async function BetsPage() {
       .select("entry_fee, is_player")
       .eq("user_id", user.id)
       .eq("tournament_id", tournamentId)
+      .is("revoked_at", null)
       .maybeSingle()
     isParticipant = participant !== null
     if (participant) {

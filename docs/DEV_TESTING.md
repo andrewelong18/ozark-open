@@ -58,9 +58,16 @@ npm run dev
   SUPABASE_SERVICE_ROLE_KEY=<service_role key, Dashboard → Settings → API> \
   node --experimental-strip-types scripts/dev-magiclink.ts approved@ozark.test
   ```
-  It prints an `action_link` — open it and you're signed in as that account. The account must
-  already exist (seeded, or logged-in once). **Keep the service_role key out of git and out of
+  It prints a `/auth/callback?token_hash=…&type=magiclink` URL — open it and you're signed in as
+  that account. The account must already exist (seeded, or logged-in once). Pass
+  `SITE_URL=` if you're pointing at anything other than `http://localhost:3000`; the host in the
+  printed link is where the callback runs. **Keep the service_role key out of git and out of
   any `NEXT_PUBLIC_*` var** — it's admin-level.
+
+  > The script used to print Supabase's `action_link`, which is the legacy
+  > `/auth/v1/verify?token=…` URL. That returns the session as a hash fragment, which never
+  > reaches a server route, so `/auth/callback` rejected it with *"Login link was missing its
+  > token."* Fixed in Sprint 21 (#94) — it now emits the `token_hash` shape the callback verifies.
 
 ---
 

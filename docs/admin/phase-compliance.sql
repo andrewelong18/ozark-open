@@ -46,6 +46,8 @@ SELECT
   COALESCE(SUM(live.amount), 0) <> tp.entry_fee          AS off_exact_total
 FROM public.tournament_participants tp
 JOIN t ON t.id = tp.tournament_id
+-- Revoked bettors aren't chased: they're out of the pool (Sprint 21 / #91).
+AND tp.revoked_at IS NULL
 JOIN public.users u ON u.id = tp.user_id
 LEFT JOIN live ON live.user_id = tp.user_id
 GROUP BY u.display_name, tp.entry_fee, t.min_picks_per_phase

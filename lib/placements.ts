@@ -12,6 +12,7 @@
 //   american_odds into odds_at_placement and recomputes
 //   requires_admin_review from the validation result.
 
+import { validateAmount } from "./validation.ts"
 import type {
   Bettor,
   ExistingPlacement,
@@ -41,6 +42,23 @@ export function parsePlacementBody(body: unknown): ParsedBody {
   if (typeof amount !== "number" || !Number.isFinite(amount))
     return { ok: false, error: "amount must be a number." }
   return { ok: true, pick_id, amount }
+}
+
+/**
+ * The stake box's own check, for what the user typed rather than a number
+ * (Sprint 21 / #92). The card used to bail out of `$0` with a bare `return`:
+ * the button was enabled, the press did nothing, and no message ever appeared
+ * because the request was never sent. Now it reports, using validateAmount's
+ * own strings so the client can never drift from what the server would say.
+ *
+ * Returns null when the entry is worth sending.
+ */
+export function stakeEntryError(raw: string): string | null {
+  const value = raw.trim()
+  if (value === "") return "Enter an amount to bet."
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return "Bet amounts must be whole dollars."
+  return validateAmount(amount)
 }
 
 export type ParsedDeleteBody =

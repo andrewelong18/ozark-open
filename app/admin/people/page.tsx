@@ -110,8 +110,10 @@ export default async function AdminPeoplePage() {
       .from("users")
       .select("id, email, display_name, nickname, avatar_url, is_admin, onboarded_at"),
     supabase
+      // Revoked rows are NOT filtered out here — the console has to show a
+      // revoked person so an admin can re-approve them (Sprint 21 / #91).
       .from("tournament_participants")
-      .select("user_id, entry_fee, is_player")
+      .select("user_id, entry_fee, is_player, revoked_at")
       .eq("tournament_id", tournament.id),
     // Degrades to "Never" everywhere if it fails — losing last-login must not
     // take down the chase page.
@@ -192,8 +194,10 @@ export default async function AdminPeoplePage() {
 
       <p className="text-center text-xs text-text-muted">
         Approving creates the <code>tournament_participants</code> row that
-        grants betting access. Invites only say who we expect — they never touch
-        pool math.
+        grants betting access; revoking marks that row revoked rather than
+        deleting it, so the entry fee and the bettor&apos;s wagers leave the
+        pool together and both come back on re-approval. Invites only say who we
+        expect — they never touch pool math.
       </p>
     </div>
   )
