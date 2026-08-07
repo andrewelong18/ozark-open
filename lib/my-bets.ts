@@ -5,12 +5,12 @@
 // node:test suite exercises the exact code the page runs.
 //
 // A normalized MyBetEntry is structurally an ExistingPlacement, so the
-// §8.1 phase-close checks in validation.ts (checkPhaseMinimums /
+// §8.1 phase-close checks in validation.ts (checkPickMinimum /
 // checkTournamentTotal) run directly on the same rows the page renders —
 // the compliance numbers can never drift from the list.
 
 import {
-  checkPhaseMinimums,
+  checkPickMinimum,
   checkTournamentTotal,
   maxSelfBet,
   maxSingleBet,
@@ -213,7 +213,8 @@ export type RulesModel = {
   /** null for non-playing bettors — exempt from the self-bet cap (Q14), so
    * the rules card shows no "max on yourself" line. */
   max_self_bet: number | null
-  min_picks_per_phase: number
+  /** Across both phases combined (#96); the max below is per phase. */
+  min_picks_per_tournament: number
   max_picks_per_phase: number
 }
 
@@ -226,7 +227,7 @@ export function buildRulesModel(
     entry_fee: entryFee,
     max_single_bet: maxSingleBet(entryFee, rules),
     max_self_bet: participant.is_player ? maxSelfBet(entryFee, rules) : null,
-    min_picks_per_phase: rules.min_picks_per_phase,
+    min_picks_per_tournament: rules.min_picks_per_tournament,
     max_picks_per_phase: rules.max_picks_per_phase,
   }
 }
@@ -246,8 +247,9 @@ export type ComplianceItem = {
 /**
  * Banner items for the participant's current standing. With no placements at
  * all there is nothing to warn about yet — the empty state carries that
- * message. Once they've bet: one warning per under-minimum phase (Q2: phases
- * without placements are fine), one for an off-exact total, or a single
+ * message. Once they've bet: one warning if they're short of the
+ * tournament-wide pick minimum (#96 — the count spans both phases, so a
+ * one-phase slate of 5 is complete), one for an off-exact total, or a single
  * success banner when every check passes.
  */
 export function buildComplianceSummary(
@@ -257,14 +259,13 @@ export function buildComplianceSummary(
 ): ComplianceItem[] {
   if (existing.length === 0) return []
   const items: ComplianceItem[] = []
-  for (const phase of checkPhaseMinimums(existing, rules)) {
-    if (!phase.meets_minimum && phase.message)
-      items.push({
-        tone: "warning",
-        title: `Phase ${phase.phase} incomplete`,
-        message: phase.message,
-      })
-  }
+  const picks = checkPickMinimum(existing, rules)
+  if (!picks.meets_minimum && picks.message)
+    items.push({
+      tone: "warning",
+      title: "Not enough picks yet",
+      message: picks.message,
+    })
   const total = checkTournamentTotal(existing, entryFee)
   if (!total.exact && total.message)
     items.push({ tone: "warning", title: "Not balanced yet", message: total.message })
@@ -272,7 +273,7 @@ export function buildComplianceSummary(
     items.push({
       tone: "success",
       title: "You're balanced",
-      message: `You've wagered your full $${entryFee} and met every phase minimum. You're locked in.`,
+      message: `You've wagered your full $${entryFee} and made the pick minimum. You're locked in.`,
     })
   return items
 }

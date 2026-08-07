@@ -25,12 +25,12 @@ export default async function OnboardingPage() {
   // The pick-count range is a tournament rule — read it, never hardcode it.
   const { data: tournament } = await supabase
     .from("tournaments")
-    .select("min_picks_per_phase, max_picks_per_phase")
+    .select("min_picks_per_tournament, max_picks_per_phase")
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
   const rules = tournament as {
-    min_picks_per_phase: number
+    min_picks_per_tournament: number
     max_picks_per_phase: number
   } | null
 
@@ -42,7 +42,7 @@ export default async function OnboardingPage() {
         <OnboardingForm
           userId={user.id}
           email={user.email ?? ""}
-          minPicks={rules?.min_picks_per_phase ?? 5}
+          minPicks={rules?.min_picks_per_tournament ?? 5}
           maxPicks={rules?.max_picks_per_phase ?? 10}
         />
       </div>

@@ -7,9 +7,12 @@
 // hardcodes a dollar figure or pick count.
 //
 // Two groups per §8.1: per-placement rules hard-block a write
-// (validatePlacement); phase-completeness rules only report status at phase
-// close (checkPhaseMinimums / checkTournamentTotal) — a participant is
-// legitimately incomplete while still placing bets.
+// (validatePlacement); completeness rules only report status at phase close
+// (checkPickMinimum / checkTournamentTotal) — a participant is legitimately
+// incomplete while still placing bets.
+//
+// Note the deliberate asymmetry in rule 2 (Sprint 22 / #96): the MAXIMUM is
+// per phase, the MINIMUM spans both phases combined.
 
 // ---------------------------------------------------------------------------
 // Types (snake_case mirrors the DB rows so routes can pass them straight in)
@@ -19,7 +22,9 @@
 export type TournamentRules = {
   entry_fee_min: number
   entry_fee_max: number
-  min_picks_per_phase: number
+  /** Rule 2 lower bound — across BOTH phases combined (#96). */
+  min_picks_per_tournament: number
+  /** Rule 2 upper bound — per phase, still. */
   max_picks_per_phase: number
   max_single_bet_pct: number
   max_single_bet_cap: number
@@ -243,37 +248,37 @@ export function validatePlacement(
 // (PRD §8.1: admins chase stragglers; whatever stands, stands — Q3)
 // ---------------------------------------------------------------------------
 
-export type PhaseCompliance = {
-  phase: 1 | 2
+export type PickMinimumCompliance = {
+  /** Wagered picks across both phases. */
   pick_count: number
   meets_minimum: boolean
   message: string | null
 }
 
 /**
- * PRD §7 rule 2 lower bound: ≥ min picks in any phase the participant bet in.
- * Phases with no placements are fine (Q2) and aren't reported.
+ * PRD §7 rule 2 lower bound: ≥ min picks across BOTH phases combined, due by
+ * Phase 2 close (#96 — Pat, Jul 31). Counting per phase, as this did before,
+ * forced anyone who bet in both phases to ≥10 picks; the split between phases
+ * is the participant's call (Q2), so only the tournament-wide total binds.
+ *
+ * A participant with no placements at all isn't reported: putting everything
+ * in one phase — or not having started yet — is legitimate (Q2), and someone
+ * who never wagers is already caught by checkTournamentTotal, which sees their
+ * whole entry fee outstanding.
  */
-export function checkPhaseMinimums(
+export function checkPickMinimum(
   existing: ExistingPlacement[],
   rules: TournamentRules
-): PhaseCompliance[] {
-  const phases: (1 | 2)[] = [1, 2]
-  return phases
-    .map((phase) => {
-      const count = existing.filter((p) => p.phase === phase).length
-      return { phase, count }
-    })
-    .filter(({ count }) => count > 0)
-    .map(({ phase, count }) => ({
-      phase,
-      pick_count: count,
-      meets_minimum: count >= rules.min_picks_per_phase,
-      message:
-        count >= rules.min_picks_per_phase
-          ? null
-          : `Only ${count} of the ${rules.min_picks_per_phase} minimum picks in Phase ${phase}.`,
-    }))
+): PickMinimumCompliance {
+  const count = existing.length
+  const meets = count === 0 || count >= rules.min_picks_per_tournament
+  return {
+    pick_count: count,
+    meets_minimum: meets,
+    message: meets
+      ? null
+      : `Only ${count} of the ${rules.min_picks_per_tournament} minimum picks across both phases — you have until Phase 2 closes.`,
+  }
 }
 
 export type TotalCompliance = {

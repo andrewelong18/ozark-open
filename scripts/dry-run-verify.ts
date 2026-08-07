@@ -39,7 +39,7 @@ import {
 } from "../lib/import.ts"
 import {
   validatePlacement,
-  checkPhaseMinimums,
+  checkPickMinimum,
   checkTournamentTotal,
   maxSingleBet,
   maxSelfBet,
@@ -303,7 +303,7 @@ async function main() {
   const tid = runSql("SELECT id FROM public.tournaments WHERE year = 2026")
   if (!tid) throw new Error("No 2026 tournament — apply the migrations first.")
   const rules = queryJson<TournamentRules[]>(
-    `SELECT entry_fee_min, entry_fee_max, min_picks_per_phase, max_picks_per_phase,
+    `SELECT entry_fee_min, entry_fee_max, min_picks_per_tournament, max_picks_per_phase,
             max_single_bet_pct::float8 AS max_single_bet_pct, max_single_bet_cap,
             max_self_bet_pct::float8 AS max_self_bet_pct, max_self_bet_cap
        FROM public.tournaments WHERE year = 2026`
@@ -512,10 +512,19 @@ async function main() {
       pick_player_user_id: r.pick_player_user_id,
     }))
     if (!checkTournamentTotal(existing, slate[0].entry_fee).exact) offExact++
-    if (checkPhaseMinimums(existing, rules).some((p) => !p.meets_minimum)) underMin++
+    if (!checkPickMinimum(existing, rules).meets_minimum) underMin++
   }
   check("exactly one bettor is off the exact total (Devin)", offExact === 1, `${offExact} off`)
-  check("exactly one bettor is under a phase minimum (Devin)", underMin === 1, `${underMin} under`)
+  // Deliberately changed by #96, not relaxed. Devin's 3 Phase 1 + 5 Phase 2 = 8
+  // picks used to flag on the per-phase minimum; against a tournament-wide
+  // minimum of 5 his split is legal, which is the whole point of the rule
+  // change. He is STILL the one bettor who needs a text — on the exact total,
+  // asserted above. If this ever reads 1 again, a per-phase minimum is back.
+  check(
+    "no bettor is under the tournament-wide minimum — Devin's 3+5 split is legal now (#96)",
+    underMin === 0,
+    `${underMin} under`
+  )
 
   await upload("4-phase2-closed-final.xlsx", tid)
   check("every bet is closed", runSql("SELECT count(*) FROM public.bets WHERE status <> 'closed'") === "0")

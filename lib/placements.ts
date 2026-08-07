@@ -88,7 +88,7 @@ function one<T>(value: T | T[] | null | undefined): T | null {
 /** The select list matching TournamentRules — every page/route that feeds
  * toTournamentRules uses this so the rule set stays in one place. */
 export const TOURNAMENT_RULE_COLUMNS =
-  "entry_fee_min, entry_fee_max, min_picks_per_phase, max_picks_per_phase, " +
+  "entry_fee_min, entry_fee_max, min_picks_per_tournament, max_picks_per_phase, " +
   "max_single_bet_pct, max_single_bet_cap, max_self_bet_pct, max_self_bet_cap"
 
 /** The tournaments row, verbatim. PostgREST may serialize numeric columns as
@@ -98,7 +98,7 @@ export function toTournamentRules(row: Record<string, unknown>): TournamentRules
   return {
     entry_fee_min: n("entry_fee_min"),
     entry_fee_max: n("entry_fee_max"),
-    min_picks_per_phase: n("min_picks_per_phase"),
+    min_picks_per_tournament: n("min_picks_per_tournament"),
     max_picks_per_phase: n("max_picks_per_phase"),
     max_single_bet_pct: n("max_single_bet_pct"),
     max_single_bet_cap: n("max_single_bet_cap"),

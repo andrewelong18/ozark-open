@@ -68,7 +68,7 @@ test("toTournamentRules coerces string numerics", () => {
   const rules = toTournamentRules({
     entry_fee_min: 20,
     entry_fee_max: 50,
-    min_picks_per_phase: 5,
+    min_picks_per_tournament: 5,
     max_picks_per_phase: 10,
     max_single_bet_pct: "0.50",
     max_single_bet_cap: 20,
@@ -211,7 +211,7 @@ test("normalizeExistingPlacements coerces string amounts", () => {
 const seedRules = {
   entry_fee_min: 20,
   entry_fee_max: 50,
-  min_picks_per_phase: 5,
+  min_picks_per_tournament: 5,
   max_picks_per_phase: 10,
   max_single_bet_pct: 0.5,
   max_single_bet_cap: 20,

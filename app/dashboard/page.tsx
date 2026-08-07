@@ -10,7 +10,7 @@ import { HowItWorksLauncher } from "@/components/onboarding/how-it-works-launche
 import { Countdown } from "@/components/countdown"
 import Link from "next/link"
 import {
-  checkPhaseMinimums,
+  checkPickMinimum,
   checkTournamentTotal,
 } from "@/lib/validation"
 import {
@@ -115,8 +115,7 @@ export default async function DashboardPage() {
     Number(participant?.entry_fee ?? 0)
   )
   const balanced =
-    totals.exact &&
-    checkPhaseMinimums(existing, rules).every((p) => p.meets_minimum)
+    totals.exact && checkPickMinimum(existing, rules).meets_minimum
   const betCount = existing.length
 
   const statusOpen = tournament.status === "active"
@@ -195,7 +194,7 @@ export default async function DashboardPage() {
             entryFee={myRules.entry_fee}
             maxSingle={myRules.max_single_bet}
             maxSelf={myRules.max_self_bet}
-            minBets={myRules.min_picks_per_phase}
+            minBets={myRules.min_picks_per_tournament}
             maxBets={myRules.max_picks_per_phase}
           />
         </>
@@ -209,7 +208,7 @@ export default async function DashboardPage() {
 
       <div className="flex justify-center">
         <HowItWorksLauncher
-          minPicks={rules.min_picks_per_phase}
+          minPicks={rules.min_picks_per_tournament}
           maxPicks={rules.max_picks_per_phase}
         />
       </div>
