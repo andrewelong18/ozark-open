@@ -16,8 +16,8 @@ ADR 0001; and the void → pool math (old #3) — confirmed as
 
 | Decision | Pat's answer |
 |---|---|
-| **#2 — stricter cap for non-playing bettors** | **No stricter limit** — same min and max rules as players. Marked resolved below; no code change. |
-| **The 5–10 pick span** (was: per phase, or per tournament?) | **Minimum 5 across the whole tournament; maximum 10 per phase.** The minimum is only evaluated before Phase 2 close. This *is* a code change — schema, `checkPhaseMinimums()`, the chase query, PRD §7/§8.1 and ADR 0001 all move together. |
+| **#2 — stricter cap for non-playing bettors** | **No stricter limit** — same min and max rules as players. ✅ Folded into `PRD.md` §12 A15 on Aug 8, 2026 (Sprint 22); §2 below is now just a pointer. No code change. |
+| **The 5–10 pick span** (was: per phase, or per tournament?) | **Minimum 5 across the whole tournament; maximum 10 per phase.** The minimum is only evaluated before Phase 2 close. ✅ Shipped Aug 8, 2026 (Sprint 22 / #96) — `tournaments.min_picks_per_tournament`, `checkPickMinimum()`, the chase query, PRD §7/§8.1 + §12 A14 and ADR 0001 §10 all moved together. |
 | **Do published lines ever move?** | **Never.** The lifecycle sheets were regenerated so they no longer carry a reprice (`24ea20a`). The odds-snapshot rule stays in the code regardless — correcting a typo means re-uploading, which is a reprice whether or not it was intended. |
 | **Admin UI scope** | **Expanded** beyond `/admin/import` + `/admin/people` + `/admin/view`. Pat asked for a house-rules editor, admin-editable display names, and the ability to add a member and bet on their behalf. `CLAUDE.md` and the ROADMAP out-of-scope list are updated accordingly. |
 
@@ -32,12 +32,11 @@ The July 15 architecture rev (ADR 0001) is the current source of truth. Pat's
 July 11 PRD review contained rulings that the rev did **not** adopt; each needs an
 explicit confirm-or-supersede rather than a silent default:
 
-- **5–10 bet-count span.** Pat (Jul 11): the 5–10 count spans the **whole
-  tournament** ("all 5–10 in one round, zero in the other" is fine). Current docs
-  (Jul 15): **min 5 / max 10 wagered picks per phase**, each pick counting
-  individually. Confirm which span governs under the new phase structure —
-  changes `lib/validation.ts` and the `tournaments` params (`min/max_picks_per_phase`
-  vs `..._per_tournament`).
+- **5–10 bet-count span.** ✅ **Resolved Jul 31, 2026 (PRD §12 A14, Sprint 22 / #96).**
+  Pat's Jul 11 reading won, with a refinement: the **minimum of 5 spans the whole
+  tournament** and is evaluated only before Phase 2 close, while the **maximum of 10
+  stays per phase**. Shipped Aug 8, 2026 — `tournaments.min_picks_per_tournament`,
+  `checkPickMinimum()` in `lib/validation.ts`, and `docs/admin/phase-compliance.sql`.
 - **Participant leaderboard.** Pat (Jul 11): drop it (workbook stays the
   leaderboard's home; Sheets mirror repurposed for outcome entry). Current docs:
   leaderboard kept (Sprint 8, Google Sheets read-only). Note: results now arrive
@@ -56,25 +55,18 @@ explicit confirm-or-supersede rather than a silent default:
   `revoked_at IS NULL` — and admins grant/revoke it on `/admin/people`
   (approving creates or un-revokes the row; revoking stamps `revoked_at` and
   keeps it, so the entry fee survives). The **non-player stricter cap** (#2) is
-  still open.
+  ✅ **resolved too** — no stricter limit (PRD §12 A15).
 
-## 2. Stricter betting maximum for non-playing bettors — ✅ RESOLVED 2026-07-31
-**Owner:** Pat · **Resolved in:** the full-lifecycle dry run, Act 4.8.
+## 2. Stricter betting maximum for non-playing bettors — ✅ RESOLVED 2026-07-31, closed 2026-08-08
 
 **Pat's answer: no stricter limit. Non-playing bettors get the same min and max
-rules as players.**
+rules as players.** Recorded in `PRD.md` §12 A15 with the reasoning; nothing
+further is open here, and per this file's own rule the decision now lives there.
 
-Rationale, walked through with Casey Sideline (the $50 non-player in the simulated
-pool): non-players already get identical entry-fee bounds, max single bet and pick
-counts. The only rule they are exempt from is the self-bet cap (Q14), and that is
-inapplicable rather than lenient — no pick in the menu bears a non-player's name, so
-there is nothing for the cap to bind against.
-
-**No code change.** The `is_player` exemption branch in `validateSelfBetTotal`
-(`lib/validation.ts:156`) stays as-is; it is a correct no-op for non-players.
-
-*(Original ask: Pat, July 11 — non-playing participants "should have a stricter
-betting max limit", with no number or formula given.)*
+No code change was needed: the `is_player` exemption branch in
+`validateSelfBetTotal` (`lib/validation.ts`) is a correct no-op for non-players —
+the self-bet cap is the one rule they are exempt from, and it is inapplicable
+rather than lenient, since no pick in the menu bears a non-player's name.
 
 ## 2b. Four questions the Jul 31 dry run raised but didn't get to ask
 **Owner:** Pat · **Blocks:** #4 blocks the largest available scope cut; the rest are policy.

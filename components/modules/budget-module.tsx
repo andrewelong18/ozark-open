@@ -8,7 +8,7 @@ export type BudgetModuleProps = {
    * picks". Counts only — rule spans belong to the rules card, and
    * shortfalls to the compliance banner. */
   picksLine?: string
-  /** Fully balanced per §8.1 (exact total + phase minimums met) — turns the
+  /** Fully balanced per §8.1 (exact total + the pick minimum met) — turns the
    * bar green. Defaults to wagered === entryFee. */
   balanced?: boolean
   compact?: boolean

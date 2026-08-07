@@ -57,9 +57,11 @@ WITH bettor AS (
   WHERE u.email LIKE '%@dryrun.ozark.test' OR u.email = 'andrewelong18@gmail.com'
 ),
 -- (email, sheet_pick_id, amount). Cross-checked against lib/validation.ts:
--- whole dollars ≥ $1 · amount ≤ maxSingleBet(entry) · 5–10 picks per phase
--- (Devin excepted) · self-pick total ≤ maxSelfBet(entry) · running total ≤
--- entry fee · one pick per Match/Group Match · never on an opponent.
+-- whole dollars ≥ $1 · amount ≤ maxSingleBet(entry) · at most 10 picks in a
+-- phase · at least 5 picks ACROSS BOTH PHASES, due only by Phase 2 close
+-- (Devin lands there via Phase 2 — see 30-phase2-placements.sql) · self-pick
+-- total ≤ maxSelfBet(entry) · running total ≤ entry fee · one pick per
+-- Match/Group Match · never on an opponent.
 slate (email, sheet_pick_id, amount) AS (
   VALUES
     -- Garrett Klenke · $20 entry · max single $10 · self cap $5

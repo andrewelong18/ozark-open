@@ -13,7 +13,7 @@ The original PRD modeled each bet as a single row with one set of American odds 
 
 The spreadsheet is the admin's native tool — odds, probabilities, and results are all computed there (helper columns adjudicate outcomes). The app's job shifts from *adjudicating bets* to *collecting wagers and faithfully displaying what the spreadsheet says*.
 
-This memo is the design meeting that Pat's July 11 PRD review called for: his proposed category/subcategory/`group_id` taxonomy (old PRD §6.1, "Spike A") evolved into the structure below, and his void ruling is confirmed in §9. Pat's July 11 revisions that this rev did **not** carry forward (5–10 count span, leaderboard drop, user-set display names, `betting_enabled`) are queued in `OUTSTANDING_DECISIONS.md` #1 for explicit confirm-or-supersede.
+This memo is the design meeting that Pat's July 11 PRD review called for: his proposed category/subcategory/`group_id` taxonomy (old PRD §6.1, "Spike A") evolved into the structure below, and his void ruling is confirmed in §9. Pat's July 11 revisions that this rev did **not** carry forward (5–10 count span, leaderboard drop, user-set display names, `betting_enabled`) were queued in `OUTSTANDING_DECISIONS.md` #1 for explicit confirm-or-supersede; all but the leaderboard have since been resolved — see §10 below and PRD §12 A12–A15.
 
 This ADR memorializes the resulting structure and the implementation decisions Andrew confirmed on July 15, 2026. It supersedes parts of PRD §6/§8 (Draft v3) and entries in the §12 decision log (noted below).
 
@@ -108,7 +108,7 @@ This is the **single exception** to the "Supabase Studio is the CMS, no custom a
 
 The PRD §7 rules survive with "betting round" → "phase":
 
-- Min 5 / max 10 **pick-placements per phase** — each pick wagered on counts individually ($3 on three "Win Tournament" picks = 3 bets toward the count).
+- ~~Min 5 / max 10 **pick-placements per phase**~~ — **amended Jul 31, 2026 (PRD §12 A14, Sprint 22):** the two bounds have different spans. **Minimum 5 across both phases combined**, evaluated only before Phase 2 closes; **maximum 10 per phase**, hard-blocked at submission. Reading both as per-phase made a bettor who used both phases owe ≥10 picks, contradicting Q2's promise that the split is theirs. Either way each pick wagered on counts individually ($3 on three "Win Tournament" picks = 3 bets toward the count).
 - Entry fee funds **both phases combined**; exact total due by Phase 2 close.
 - Single-bet cap applies **per pick placement**; self-bet cap totals across the tournament. (Both unchanged.)
 

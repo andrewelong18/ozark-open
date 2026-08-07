@@ -127,7 +127,9 @@ COMMIT;
 
 -- ── Verify ──────────────────────────────────────────────────────────────────
 -- Expect every bulk bettor at exactly their entry fee EXCEPT Devin Arand at
--- $18 of $20. Phase counts 5–6 each; Devin's phase 1 count stays at 3.
+-- $18 of $20. Phase counts 5–6 each; Devin's phase 1 count stays at 3, which
+-- with his 5 Phase 2 picks puts him at 8 across the tournament — over the
+-- 5-pick minimum (#96), so the exact total is his only outstanding rule.
 SELECT
   u.display_name,
   tp.entry_fee,
