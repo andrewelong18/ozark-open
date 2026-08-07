@@ -108,6 +108,56 @@ export function roundCents(value: number): number {
 }
 
 // ---------------------------------------------------------------------------
+// Finalizing the tournament — the guard on `tournaments.status = 'completed'`
+// (Sprint 25 / #108, superseding #36)
+// ---------------------------------------------------------------------------
+
+export type FinalizeReadiness = {
+  ok: boolean
+  /** Human-readable reasons, worst first. Empty when ok. */
+  blockers: string[]
+}
+
+/**
+ * Whether the tournament can safely be flipped to `completed` — the Saturday-
+ * night unlock that reveals /results.
+ *
+ * This exists because the failure mode is silent arithmetic, not an error.
+ * aggregatePayouts() SKIPS a pending placement rather than scoring it zero, so
+ * finalizing while any pick is unresolved divides the whole pool across only
+ * the settled wagers: everybody's share is inflated, every number is plausible,
+ * and the totals still reconcile against the pool. /results does warn once
+ * you're in that state, but by then the flip has happened and the winner
+ * spotlight is already wrong.
+ *
+ * Counts are of PICKS, not placements — a pick nobody wagered on still has to
+ * carry a verdict before the book is closed, and it wouldn't show up in a
+ * placement-level count at all.
+ */
+export function finalizeReadiness(state: {
+  /** bet_picks with result = 'pending' across the tournament. */
+  pendingPicks: number
+  /** bets whose status is not yet 'closed'. */
+  unclosedBets: number
+}): FinalizeReadiness {
+  const blockers: string[] = []
+  if (state.pendingPicks > 0) {
+    blockers.push(
+      `${state.pendingPicks} pick${state.pendingPicks === 1 ? " has" : "s have"} no result yet. ` +
+        `Finalizing now would split the whole pool across only the settled wagers — ` +
+        `every payout would be too high, and nothing about the numbers would look wrong.`
+    )
+  }
+  if (state.unclosedBets > 0) {
+    blockers.push(
+      `${state.unclosedBets} bet${state.unclosedBets === 1 ? " is" : "s are"} still open or hidden. ` +
+        `Upload the final sheet with every bet closed first.`
+    )
+  }
+  return { ok: blockers.length === 0, blockers }
+}
+
+// ---------------------------------------------------------------------------
 // View-row normalization — placement_payouts_view via PostgREST (numerics
 // may arrive as strings; same caveat as lib/my-bets.ts)
 // ---------------------------------------------------------------------------

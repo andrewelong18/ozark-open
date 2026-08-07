@@ -107,10 +107,20 @@ export default async function ResultsPage() {
         </Badge>
       </div>
 
+      {/* Provisional state (Sprint 25 / #108): the tournament was finalized
+          while picks were still unresolved. aggregatePayouts SKIPS a pending
+          placement rather than scoring it zero, so every share below is
+          computed against a shrunken denominator and reads too high. Say so
+          in those terms — "not final" undersells it — and suppress the winner
+          spotlight, which is the screenshot that would travel. */}
       {table.pending > 0 && (
         <Card className="border-caution-border bg-caution-surface p-4 text-sm text-caution-strong">
-          {table.pending} pick{table.pending === 1 ? "" : "s"} still pending —
-          these numbers aren&apos;t final until every result is uploaded.
+          <span className="font-semibold">
+            Provisional — {table.pending} wager{table.pending === 1 ? "" : "s"}{" "}
+            still {table.pending === 1 ? "has" : "have"} no result.
+          </span>{" "}
+          Every share below is split across only the settled wagers, so the
+          numbers read high. They settle once the last results are uploaded.
         </Card>
       )}
 
@@ -121,7 +131,9 @@ export default async function ResultsPage() {
         />
       ) : (
         <>
-          {/* Winner spotlight — the screenshot people share. */}
+          {/* Winner spotlight — the screenshot people share, which is exactly
+              why it waits for a settled table. */}
+          {table.pending === 0 && (
           <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-inverse p-5 shadow-md">
             <div className="flex min-w-0 items-center gap-3">
               <Avatar src={winner.avatar_url} name={winner.display_name} size="md" />
@@ -160,6 +172,7 @@ export default async function ResultsPage() {
               </div>
             </div>
           </div>
+          )}
 
           <Card className="gap-0 overflow-x-auto p-0">
             <div className="min-w-[480px]">
@@ -176,7 +189,9 @@ export default async function ResultsPage() {
                   key={row.user_id}
                   className={
                     "grid grid-cols-[24px_1fr_repeat(4,68px)] items-center gap-2 border-t border-border px-4 py-3 first:border-t-0" +
-                    (i === 0 ? " bg-gold-100" : "")
+                    // Gold on the leader is a verdict too — hold it until the
+                    // ordering is settled rather than provisional (#108).
+                    (i === 0 && table.pending === 0 ? " bg-gold-100" : "")
                   }
                 >
                   <span

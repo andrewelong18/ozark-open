@@ -13,6 +13,7 @@ import {
   actualShare,
   aggregatePayouts,
   buildResultsTable,
+  finalizeReadiness,
   normalizePayoutRows,
   poolTotal,
   refundedStake,
@@ -364,4 +365,56 @@ test("a revoked bettor's voided stakes stop shrinking the pool too", () => {
   // subtracting it again would double-count the loss.
   assert.equal(table.pool, 40)
   assert.equal(table.pending, 0)
+})
+
+// ---------------------------------------------------------------------------
+// finalizeReadiness — the guard on the Saturday-night unlock (Sprint 25 / #108)
+// ---------------------------------------------------------------------------
+
+test("finalize is allowed once every pick has a verdict and every bet is closed", () => {
+  assert.deepEqual(finalizeReadiness({ pendingPicks: 0, unclosedBets: 0 }), {
+    ok: true,
+    blockers: [],
+  })
+})
+
+test("finalize is refused while any pick is pending, and says why in money terms", () => {
+  const verdict = finalizeReadiness({ pendingPicks: 12, unclosedBets: 0 })
+  assert.equal(verdict.ok, false)
+  assert.equal(verdict.blockers.length, 1)
+  assert.match(verdict.blockers[0], /^12 picks have no result yet\./)
+  // The reason has to name the arithmetic, not just say "not ready" — the
+  // whole hazard is that the wrong numbers look right.
+  assert.match(verdict.blockers[0], /split the whole pool across only the settled wagers/)
+})
+
+test("one pending pick is enough, and reads as singular", () => {
+  const verdict = finalizeReadiness({ pendingPicks: 1, unclosedBets: 0 })
+  assert.equal(verdict.ok, false)
+  assert.match(verdict.blockers[0], /^1 pick has no result yet\./)
+})
+
+test("an unclosed bet blocks finalizing on its own", () => {
+  const verdict = finalizeReadiness({ pendingPicks: 0, unclosedBets: 3 })
+  assert.equal(verdict.ok, false)
+  assert.equal(verdict.blockers.length, 1)
+  assert.match(verdict.blockers[0], /3 bets are still open or hidden/)
+})
+
+test("both blockers report together, pending picks first", () => {
+  const verdict = finalizeReadiness({ pendingPicks: 4, unclosedBets: 2 })
+  assert.equal(verdict.blockers.length, 2)
+  assert.match(verdict.blockers[0], /no result yet/)
+  assert.match(verdict.blockers[1], /still open or hidden/)
+})
+
+test("the guard counts PICKS, not placements — a pick nobody bet on still blocks", () => {
+  // buildResultsTable's `pending` counts placements, so a pick with no wagers
+  // is invisible to it. That is exactly the gap finalizeReadiness closes.
+  const table = buildResultsTable(
+    [{ user_id: "a", display_name: "Ann", entry_fee: 40 }],
+    [payoutRow("a", 30)]
+  )
+  assert.equal(table.pending, 0, "no pending PLACEMENTS")
+  assert.equal(finalizeReadiness({ pendingPicks: 1, unclosedBets: 0 }).ok, false)
 })
