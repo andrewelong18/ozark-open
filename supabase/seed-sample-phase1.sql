@@ -2,6 +2,12 @@
 -- (Sprint 1). 13 bets / 57 picks, values verbatim from the sheet — odds
 -- display strings and probabilities are sheet-calculated, never recomputed.
 --
+-- The bets are `closed`, matching the sheet: every pick carries a Round 1
+-- verdict, and results only belong on a closed bet (Sprint 22 / #97 — the
+-- importer now refuses a sheet that publishes them onto a live book). Both
+-- files read `open` until Aug 8, 2026; harnesses that need an open bet to
+-- wager against open one themselves (scripts/placement-roundtrip.ts).
+--
 -- Apply by pasting into the Supabase SQL editor AFTER the bet/pick rework
 -- migration. Safe to re-run: bets and picks upsert by their sheet IDs, and
 -- the player-link UPDATE at the bottom only fills in missing links — re-run
@@ -16,19 +22,19 @@ INSERT INTO public.bets
 SELECT t.id, c.id, v.sheet_bet_id, v.title, v.phase, v.round, v.status, v.total_probability
 FROM (
   VALUES
-    (1, 'Win Tournament', 1, 'tournament', 'open', 1.548063562820406, 'Top Finisher'),
-    (2, 'Top 4 Finish', 1, 'tournament', 'open', 3.631730769230769, 'Top X Finisher'),
-    (3, 'Medalist - Round 1', 1, 'round_1', 'open', 1.6087778485346915, 'Top Finisher'),
-    (4, 'Match - Round 1', 1, 'round_1', 'open', 1, 'Match'),
-    (5, 'Group Match - Round 1', 1, 'round_1', 'open', 1.2523809523809526, 'Group Match'),
-    (6, 'Match - Round 1', 1, 'round_1', 'open', 1, 'Match'),
-    (7, 'Group Match - Round 1', 1, 'round_1', 'open', 1.2000000000000002, 'Group Match'),
-    (8, 'Match - Round 1', 1, 'round_1', 'open', 1, 'Match'),
-    (9, 'Lowest 18 hole score will be lower than highest 9 hole score', 1, 'round_1', 'open', 1, 'Prop Bet'),
-    (10, 'Jake Kohne, Steve Jones, and Mike Yenzer best ball is under 80.5', 1, 'round_1', 'open', 1, 'Prop Bet'),
-    (11, 'Alex Leslie, Devin Arand, Ethan Kipping, and Pat Leicht''s best ball will beat Dan Mercer and Garrett Klenke''s best ball', 1, 'round_1', 'open', 1, 'Prop Bet'),
-    (12, 'Worst score to par to win a hole in match play is triple bogey or worse.', 1, 'round_1', 'open', 1, 'Prop Bet'),
-    (13, 'More Even or Odd hole scores', 1, 'round_1', 'open', 1, 'Prop Bet')
+    (1, 'Win Tournament', 1, 'tournament', 'closed', 1.548063562820406, 'Top Finisher'),
+    (2, 'Top 4 Finish', 1, 'tournament', 'closed', 3.631730769230769, 'Top X Finisher'),
+    (3, 'Medalist - Round 1', 1, 'round_1', 'closed', 1.6087778485346915, 'Top Finisher'),
+    (4, 'Match - Round 1', 1, 'round_1', 'closed', 1, 'Match'),
+    (5, 'Group Match - Round 1', 1, 'round_1', 'closed', 1.2523809523809526, 'Group Match'),
+    (6, 'Match - Round 1', 1, 'round_1', 'closed', 1, 'Match'),
+    (7, 'Group Match - Round 1', 1, 'round_1', 'closed', 1.2000000000000002, 'Group Match'),
+    (8, 'Match - Round 1', 1, 'round_1', 'closed', 1, 'Match'),
+    (9, 'Lowest 18 hole score will be lower than highest 9 hole score', 1, 'round_1', 'closed', 1, 'Prop Bet'),
+    (10, 'Jake Kohne, Steve Jones, and Mike Yenzer best ball is under 80.5', 1, 'round_1', 'closed', 1, 'Prop Bet'),
+    (11, 'Alex Leslie, Devin Arand, Ethan Kipping, and Pat Leicht''s best ball will beat Dan Mercer and Garrett Klenke''s best ball', 1, 'round_1', 'closed', 1, 'Prop Bet'),
+    (12, 'Worst score to par to win a hole in match play is triple bogey or worse.', 1, 'round_1', 'closed', 1, 'Prop Bet'),
+    (13, 'More Even or Odd hole scores', 1, 'round_1', 'closed', 1, 'Prop Bet')
 ) AS v (sheet_bet_id, title, phase, round, status, total_probability, category_name)
 CROSS JOIN t
 JOIN public.bet_categories c ON c.name = v.category_name

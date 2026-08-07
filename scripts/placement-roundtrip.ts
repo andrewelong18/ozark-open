@@ -103,20 +103,30 @@ function main() {
     ON CONFLICT (user_id, tournament_id) DO NOTHING;
   `)
 
-  // The sample menu ships only open and hidden bets; a closed one is needed
-  // for the post-close visibility rules, so close the highest-numbered open
-  // bet (an admin action in prod; this DB is throwaway). Idempotent —
-  // re-runs find it already closed.
+  // These RLS rules are all about a bet's status, so the fixture needs one of
+  // each. The sample menu ships closed Phase 1 bets (Round 1 has been played —
+  // its picks carry results) and hidden Phase 2 ones, so open the
+  // lowest-numbered Phase 1 bet here. Opening and closing a bet is an admin
+  // action in prod; this DB is throwaway. Idempotent — a re-run finds an open
+  // bet already there and does nothing.
   runSql(
-    `UPDATE public.bets SET status = 'closed'
+    `UPDATE public.bets SET status = 'open'
      WHERE id = (
        SELECT id FROM public.bets
-       WHERE tournament_id = '${tournamentId}' AND status = 'open'
-       ORDER BY sheet_bet_id DESC LIMIT 1
+       WHERE tournament_id = '${tournamentId}' AND status = 'closed'
+       ORDER BY sheet_bet_id LIMIT 1
      ) AND NOT EXISTS (
        SELECT 1 FROM public.bets
-       WHERE tournament_id = '${tournamentId}' AND status = 'closed'
-     )`
+       WHERE tournament_id = '${tournamentId}' AND status = 'open'
+     );
+
+     -- Reopening withdraws the verdicts with it: an open bet whose picks carry
+     -- results is precisely the state the Sprint 22 import guard (#97) refuses.
+     UPDATE public.bet_picks SET result = 'pending'
+      WHERE bet_id IN (
+        SELECT id FROM public.bets
+        WHERE tournament_id = '${tournamentId}' AND status = 'open'
+      )`
   )
 
   // Picks to aim at, by parent bet status.

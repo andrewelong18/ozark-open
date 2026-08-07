@@ -40,7 +40,7 @@ export type ParsedSheet = {
 type CellValue = string | number | null
 
 export type ValidationResult =
-  | { ok: true; rows: SheetRow[] }
+  | { ok: true; rows: SheetRow[]; warnings: string[] }
   | { ok: false; errors: string[] }
 
 // The 13 contract columns (PRD §8.2). Helper columns to the right are ignored.
@@ -219,14 +219,16 @@ function asText(value: CellValue): string {
 
 /**
  * Validate raw rows against the 13-column contract. Returns either the fully
- * typed, normalized rows or the complete error list — a file with any
- * contract error is rejected whole; the caller must not partially import.
+ * typed, normalized rows (plus any non-blocking warnings) or the complete
+ * error list — a file with any contract error is rejected whole; the caller
+ * must not partially import.
  */
 export function validateSheet(
   parsed: ParsedSheet,
   categoryNames: string[]
 ): ValidationResult {
   const errors: string[] = []
+  const warnings: string[] = []
 
   const missing = REQUIRED_COLUMNS.filter((c) => !parsed.header.includes(c))
   if (missing.length > 0) {
@@ -396,8 +398,62 @@ export function validateSheet(
     }
   }
 
+  // Results may only be published on a CLOSED bet (Sprint 22 / #97). This is
+  // the one that bit us on Jul 31: Pat uploaded a results-bearing sheet whose
+  // bets still read status = open, and the app took it silently — publishing
+  // hit/miss verdicts onto a book that was still showing stake inputs. Hard
+  // block, per row, so the whole file is refused like any other contract
+  // error; a half-applied results sheet is worse than none.
+  for (const row of rows) {
+    if (row.status !== "closed" && row.result !== "pending") {
+      errors.push(
+        `Row ${row.rowNumber}: result "${row.result}" on bet_id ${row.sheetBetId}, ` +
+          `which is still ${row.status} — results may only be published on a closed bet. ` +
+          `Close the bet in the sheet, or set the result back to Pending.`
+      )
+    }
+  }
+
+  // A bet left open after its phase is done (#97). Only a warning: reopening a
+  // bet may be a legitimate call, so this is reported for the admin to confirm
+  // — same treatment as the "odds changed on a pick with live placements"
+  // warning the route already raises.
+  //
+  // Nothing stores when a phase closed, so the sheet is the only evidence.
+  // Two shapes say "this phase is done and this bet didn't get the memo":
+  //   1. the rest of the bet's own phase has closed around it, and
+  //   2. it sits in Phase 1 while Phase 2 is open — Phase 2 only opens once
+  //      Phase 1 has closed.
+  const statusByBet = new Map<number, SheetRow["status"]>()
+  const phaseByBet = new Map<number, 1 | 2>()
+  for (const row of rows) {
+    statusByBet.set(row.sheetBetId, row.status)
+    phaseByBet.set(row.sheetBetId, row.phase)
+  }
+  const phase2IsOpen = [...statusByBet.entries()].some(
+    ([betId, status]) => phaseByBet.get(betId) === 2 && status === "open"
+  )
+  const titleByBet = new Map(rows.map((r) => [r.sheetBetId, r.betTitle]))
+  for (const [betId, status] of statusByBet) {
+    if (status !== "open") continue
+    const phase = phaseByBet.get(betId)!
+    const siblings = [...statusByBet.entries()].filter(
+      ([otherId]) => otherId !== betId && phaseByBet.get(otherId) === phase
+    )
+    const phaseClosedAround =
+      siblings.length > 0 && siblings.every(([, s]) => s === "closed")
+    const strandedByPhase2 = phase === 1 && phase2IsOpen
+    if (phaseClosedAround || strandedByPhase2) {
+      warnings.push(
+        `bet_id ${betId} ("${titleByBet.get(betId)}") is still open, but Phase ${phase} ` +
+          `looks closed${strandedByPhase2 ? " — Phase 2 is already open" : " — every other Phase " + phase + " bet is closed"}. ` +
+          `Reopening a bet is allowed; confirm this one is meant to keep taking wagers.`
+      )
+    }
+  }
+
   if (errors.length > 0) return { ok: false, errors }
-  return { ok: true, rows }
+  return { ok: true, rows, warnings }
 }
 
 // ---------------------------------------------------------------------------

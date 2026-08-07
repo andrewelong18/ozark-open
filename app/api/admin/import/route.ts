@@ -241,14 +241,19 @@ export async function POST(request: Request) {
       if (sheetPickId !== undefined) pickIdsWithPlacements.add(sheetPickId)
     }
   }
-  const warnings = plan.oddsChanges
-    .filter((change) => pickIdsWithPlacements.has(change.sheetPickId))
-    .map(
-      (change) =>
-        `Odds changed on "${change.pickLabel}" (${change.betTitle}) while it has live placements: ` +
-        `${change.from.fractionalOdds} → ${change.to.fractionalOdds}. Existing placements keep ` +
-        `their snapshotted odds; only future placements get the new price.`
-    )
+  const warnings = [
+    // Sheet-level warnings from the contract pass (stale-open bets, #97) —
+    // non-blocking by design, reported the same way as the odds change below.
+    ...validation.warnings,
+    ...plan.oddsChanges
+      .filter((change) => pickIdsWithPlacements.has(change.sheetPickId))
+      .map(
+        (change) =>
+          `Odds changed on "${change.pickLabel}" (${change.betTitle}) while it has live placements: ` +
+          `${change.from.fractionalOdds} → ${change.to.fractionalOdds}. Existing placements keep ` +
+          `their snapshotted odds; only future placements get the new price.`
+      ),
+  ]
 
   return NextResponse.json({
     report: {

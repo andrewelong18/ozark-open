@@ -257,6 +257,15 @@ async function main() {
   const duplicate: Row = { ...phase1Open[0], pick_id: 13, pick: "Duplicate Pick ID" }
   await write("X-broken.xlsx", broken, [duplicate])
 
+  // ── X · Results on a live book ───────────────────────────────────────────
+  // The mistake that actually happened on Jul 31: Round 1 verdicts pasted in
+  // while the Phase 1 bets still read `open`. Before Sprint 22 (#97) the app
+  // took this silently and published hit/miss onto bets that were still
+  // showing stake inputs. Every row of this file is contract-valid on its own;
+  // only the status/result pairing is wrong, which is why it needs a
+  // cross-field check to catch it.
+  await write("X-results-on-open.xlsx", withResults(phase1Open, round1Results))
+
   console.log("\nDone.")
 }
 

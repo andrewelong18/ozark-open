@@ -603,6 +603,35 @@ async function main() {
   }
   check("not one row reached the database", runSql("SELECT count(*) || '/' || (SELECT count(*) FROM public.bet_picks) FROM public.bets") === before, before)
 
+  // ── Results on a live book (#97) ────────────────────────────────────────
+  // The Jul 31 mistake, rehearsed. Every row here is contract-valid on its
+  // own; only the status/result pairing is wrong. Before Sprint 22 this file
+  // imported cleanly and published Round 1 verdicts onto bets that were still
+  // taking stakes.
+  section("Act 3b · results on an open book must be refused")
+  const parsedLive = await parseSheet(
+    fs.readFileSync(path.join(SHEETS, "X-results-on-open.xlsx")),
+    "X-results-on-open.xlsx"
+  )
+  const liveState = fetchState(tid)
+  const liveValidation = validateSheet(parsedLive, liveState.categories.map((c) => c.name))
+  check("the file is rejected outright", !liveValidation.ok)
+  if (!liveValidation.ok) {
+    for (const e of liveValidation.errors.slice(0, 3)) console.log(`      ${e}`)
+    check(
+      "every error names its row and says why",
+      liveValidation.errors.every((e) =>
+        /^Row \d+: result ".+" on bet_id \d+, which is still open — results may only be published on a closed bet\./.test(e)
+      )
+    )
+    check(
+      "one error per verdict-bearing row (57 Phase 1 picks)",
+      liveValidation.errors.length === 57,
+      `${liveValidation.errors.length} errors`
+    )
+  }
+  check("not one row reached the database", runSql("SELECT count(*) || '/' || (SELECT count(*) FROM public.bet_picks) FROM public.bets") === before, before)
+
   // ── Teardown ────────────────────────────────────────────────────────────
   section("Part 2 · teardown")
   runSqlFile(path.join(SQL, "90-teardown.sql"))
