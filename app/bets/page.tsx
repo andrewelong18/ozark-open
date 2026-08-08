@@ -24,6 +24,7 @@ import {
   TOURNAMENT_RULE_COLUMNS,
 } from "@/lib/placements"
 import { wageringOpen } from "@/lib/phases"
+import { sortPicks } from "@/lib/pick-order"
 import {
   buildComplianceSummary,
   normalizeMyBets,
@@ -48,7 +49,9 @@ const CATEGORY_ORDER = [
 ]
 
 // The sheet arrives unsorted; the menu orders phase → round → category
-// (ADR 0001 §7), bets and picks by their stable sheet IDs.
+// (ADR 0001 §7), bets by their stable sheet IDs, and picks favourites-first
+// (#105 — the query has no ORDER BY, so without sortPicks the order is
+// whatever Postgres returns and an upsert can reshuffle it).
 function groupBets(bets: Bet[]): PhaseGroup[] {
   const phases = new Map<number, Map<string, Map<string, Bet[]>>>()
   for (const bet of bets) {
@@ -82,7 +85,9 @@ function groupBets(bets: Bet[]): PhaseGroup[] {
             .sort(([a], [b]) => catRank(a) - catRank(b))
             .map(([name, bets]) => ({
               name,
-              bets: bets.sort((a, b) => a.sheet_bet_id - b.sheet_bet_id),
+              bets: bets
+                .sort((a, b) => a.sheet_bet_id - b.sheet_bet_id)
+                .map((bet) => ({ ...bet, bet_picks: sortPicks(bet.bet_picks) })),
             })),
         })),
     }))
