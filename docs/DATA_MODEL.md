@@ -270,11 +270,14 @@ Each individual wager: one row per (user, pick) pair where money was placed.
 | `amount` | `int` NOT NULL CHECK (`amount > 0`) | Whole dollars, $1 minimum |
 | `odds_at_placement` | `int` NOT NULL | Snapshot of `bet_picks.american_odds` at write time. **Payouts compute from this, never from the live pick row** — a re-uploaded reprice can't silently change existing bettors' payouts (PRD §7.1). |
 | `requires_admin_review` | `boolean` NOT NULL DEFAULT `false` | Set on write when the pick's `player_user_id` is the bettor (self-pick flag, PRD §7). |
+| `placed_by_user_id` | `uuid` NULL FK → `users.id` | Sprint 23 / #101 — the admin who **last wrote this row on the bettor's behalf**. NULL = the bettor placed it themselves, which is the truth for every row written before Sprint 23 (no backfill). The bettor is always `user_id`; this column never changes whose wager it is. Stamped on inserts, edits and the soft delete alike, so it answers "who last touched this row". |
 | `deleted_at` | `timestamptz` | Soft delete — removing a placement sets this instead of deleting the row. Money data keeps its history for dispute resolution. All reads filter `deleted_at IS NULL`. |
 | `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | |
 | `updated_at` | `timestamptz` NOT NULL DEFAULT `now()` | Updated on edit |
 
 **Constraint:** UNIQUE (`user_id`, `pick_id`) — one placement per pick per user. (Editing updates `amount` rather than creating a second row. Re-placing after a soft delete revives the existing row — clears `deleted_at`, updates `amount`, re-snapshots `odds_at_placement` — so the unique constraint holds.) Multiple placements across different picks of the same bet are allowed in the multi-pick categories, and blocked in app code for Match / Group Match.
+
+**Betting on someone's behalf (Sprint 23 / #101, ADR 0001 §13).** An admin can enter a wager for a member who can't work the magic-link flow, from `/bets?for=<userId>` via `POST/PATCH/DELETE /api/admin/placements`. Two properties hold it together. First, **every PRD §7 rule evaluates against the bettor** — `lib/placement-write.ts` takes `{ bettor_id, actor_id }`, and both routes run that one path, so the entry fee, the running total, the self-bet cap, the opponent block and `requires_admin_review` can never silently key off the acting admin. Second, the member's own "only as yourself" policies were **not loosened**: a separate admin-scoped INSERT/UPDATE pair carries `public.is_admin() AND placed_by_user_id = auth.uid()`, so Postgres itself refuses a forged attribution. Eligibility, the bet's `open` status and the phase deadline all still bind — acting for someone is not permission to break the tournament's rules.
 
 **Constraints NOT enforced at the schema level** (these live in app code because they require cross-row checks; semantics per PRD §7/§12/ADR 0001):
 - Between 5 and 10 pick-placements per user in any phase they bet in — each wagered pick counts individually.
@@ -368,7 +371,7 @@ Policies live inline in each table's migration file under `supabase/migrations/`
 
 - **`bets`**: anyone authenticated can `SELECT` rows where `status != 'hidden'`. Only admins can `INSERT` / `UPDATE` / `DELETE` (in practice: the import route, running as the admin).
 - **`bet_picks`**: readable whenever the parent bet is readable (not `hidden`). Write: admins only (the import route).
-- **`bet_placements`**: a user can `SELECT` / `INSERT` / `UPDATE` / soft-delete their own rows while the parent bet is `open`. Other users' placements are visible only when the bet is `closed`. Admins can read all.
+- **`bet_placements`**: a user can `SELECT` / `INSERT` / `UPDATE` / soft-delete their own rows while the parent bet is `open`. Other users' placements are visible only when the bet is `closed`. Admins can read all, and (Sprint 23 / #101) can `INSERT` / `UPDATE` rows for **another** bettor through a separate admin-scoped pair that requires `public.is_admin() AND placed_by_user_id = auth.uid()` — the member's own-rows policies are unchanged, and the attribution clause means the database refuses an admin who claims someone else entered the wager. No `DELETE` policy for anyone, admins included.
 - **`tournament_participants`**: anyone authenticated can `SELECT`. Only admins can `INSERT` / `UPDATE`.
 - **`bet_categories`, `tournaments`**: read by all authenticated users; write by admins only.
 - **`users`**: readable by all authenticated users (`20260717000002_users_read_all.sql` — closed-bet views and payouts show everyone's `display_name`, PRD §12 Q12; fine for a private pool behind login). Writes still admin/trigger only.
@@ -396,6 +399,10 @@ Policies live inline in each table's migration file under `supabase/migrations/`
 - `20260720000000_onboarding_and_bettor_approval.sql` — Sprint 16: `users.onboarded_at`, relaxed self-update guard (A11 "approval creates the row" stands)
 - `20260723000000_player_profiles.sql` — Sprint 18: the admin-owned profile columns behind the player modal
 - `20260725000000_tournament_invites.sql` — Sprint 10: `tournament_invites` (§3.8) + the `admin_auth_activity()` definer function
+- `20260807000000_participant_soft_revoke.sql` — Sprint 21: `tournament_participants.revoked_at` (A13)
+- `20260808000000_tournament_wide_pick_minimum.sql` — Sprint 22: `tournaments.min_picks_per_tournament` (A14)
+- `20260810000000_phase_clock.sql` — Sprint 25: the per-phase deadlines + `show_countdown` (ADR 0001 §5a)
+- `20260811000000_admin_placed_wagers.sql` — Sprint 23: `bet_placements.placed_by_user_id` + the admin-scoped placement policies (ADR 0001 §13)
 
 **Still to come** (see `ROADMAP.md`): nothing scheduled.
 

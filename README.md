@@ -131,9 +131,10 @@ Everything an admin does during tournament week runs on **two tracks** (full rat
 | Track | Tool | Owns |
 |---|---|---|
 | 1 | The bets spreadsheet → **`/admin/import`** | The entire menu: bets, picks, odds, probabilities, **statuses** (`hidden`/`open`/`closed`), **results** (`hit`/`miss`/`push`/`void`) |
-| 1b | **`/admin/people`** | The whole access funnel in one page: who's invited but absent, signed in but stalled, awaiting approval, approved — plus approving bettors (verify display name, set entry fee + player flag, create/edit/revoke their pool entry — revoke is soft, so the entry fee and their wagers leave the pool together and both return on re-approval) and pasting in the invite list (Sprint 20, merging Sprints 10 + 16) |
+| 1b | **`/admin/people`** | The whole access funnel in one page: who's invited but absent, signed in but stalled, awaiting approval, approved — plus approving bettors (verify display name, set entry fee + player flag, create/edit/revoke their pool entry — revoke is soft, so the entry fee and their wagers leave the pool together and both return on re-approval), **correcting a display name after onboarding**, and pasting in the invite list (Sprint 20 + Sprint 23) |
 | 2 | **Supabase Studio** (Table Editor) | Remaining fixes: promoting admins, one-off data fixes, pick→player links |
 | 3 | **`/admin/close`** | The clock and the money: chase list, closing a phase, publishing final results |
+| 4 | **`/admin/rules`** | The house rules: entry-fee bounds, pick counts, bet-size percentages and caps, with the derived per-entry-fee limits shown as you type (Sprint 23) |
 
 Three rules make the whole thing safe:
 
@@ -192,12 +193,29 @@ No deployments, no code, no Git — the app re-renders on the next page load.
 | Saturday morning | Close Phase 2 on `/admin/close` |
 | Saturday night | Final results → re-upload → **Publish final results** on `/admin/close` |
 
+### Recipe: change a house rule
+
+Go to **`/admin/rules`**. Every rule the app enforces is on that page, and the table under the form shows what the numbers actually mean per entry fee — "50%, capped at $20" doesn't tell you that a $25 entry allows $12 (amounts floor, they don't round) or that everything from $40 up allows exactly $20. Bad values are refused with a reason, including the ones that look fine and quietly break the tournament: a percentage that floors to a $0 maximum bet, or a pick minimum nobody can reach in two phases.
+
+**Changing a rule never re-checks wagers already placed.** Whatever stands, stands — every wager keeps the limits it was placed under, and a lowered cap can leave existing slates above it. New values apply from the next placement onward.
+
+### Recipe: place a wager for someone who can't
+
+Some members won't get through the magic-link flow. On **`/admin/people`**, open their **Edit** panel and press **Place bets for them** — that opens the ordinary bet menu at `/bets?for=<them>`, showing **their** entry fee, their remaining budget, their existing slate and their locked odds, with a banner across the top so you can't forget whose menu you're in.
+
+Two things to know:
+
+- **Every rule is checked against them, not you.** Their entry fee, their running total, their self-bet cap, their opponent block. A wager that would break one of their limits is refused, in the same words they would see.
+- **The wager is recorded as entered by you.** `/admin/view` shows "Entered by <name>" on those rows. It's their wager and their money — the attribution just makes a September dispute reconstructable.
+
+This does **not** create accounts. The person needs to have logged in once and been approved; if they never got that far, the magic link is still the only way in.
+
 ### Track 2 — Supabase Studio
 
 Studio (https://supabase.com/dashboard → Project → Table Editor) is the admin UI for everything that isn't the menu — **data only, never schema**:
 
 - **Promote an admin:** `users` → set `is_admin = true`.
-- **Fix a display name:** `users` → `display_name`. Members set their own name **once** at onboarding (Sprint 16); after that a guard trigger pins it, so corrections are an admin job — in Studio, or (cleaner) on the approve panel at **`/admin/people`**. Names matter twice: they're what everyone sees on closed bets, and the importer matches pick labels against them. Members *do* self-manage their own `nickname` + `avatar_url` on `/profile` (Sprint 15) — those are cosmetic and never affect matching, so leave them alone in Studio.
+- **Fix a display name:** do it on **`/admin/people`** — the approve panel for someone awaiting approval, the **Edit** panel for someone already approved (Sprint 23 / #99). Studio (`users` → `display_name`) still works but is no longer the only way. Members set their own name **once** at onboarding (Sprint 16); after that a guard trigger pins it, so corrections are an admin job. Names matter twice: they're what everyone sees on closed bets, and the importer matches pick labels against them. Members *do* self-manage their own `nickname` + `avatar_url` on `/profile` (Sprint 15) — those are cosmetic and never affect matching, so leave them alone in Studio.
 - **Register / approve a participant:** use **`/admin/people`** (Sprint 20), not Studio — approving a member sets their `entry_fee` + `is_player` and creates the `tournament_participants` row that grants betting access. (The row can still be hand-edited in Studio if ever needed; the app's gate is simply whether it exists.) The same page is the read-only chase list it replaced: who still needs to register, who registered but can't bet yet, who's ready, who's an admin, and when each person last logged in. `/admin/roster` and `/admin/participants` redirect here.
 - **Enter the expected roster:** easiest on **`/admin/people`** — paste one `name, email` per line into the invite box and it adds the missing ones (re-pasting the same list is safe). Studio still works for one-off edits and removals: `tournament_invites` → one row per person you expect (`tournament_id` + `email`, optional `invited_name`). No account needed — that's the point: the console matches an invite to a member by email (case-insensitive) the moment they log in, so you can see who hasn't shown up yet. These rows are **not** participants and never touch pool math.
 - **Link an unmatched pick to a player:** `bet_picks` → set `player_user_id` (this powers self-pick flagging). The importer respects hand-set links on every future upload.
