@@ -143,6 +143,28 @@ To flag self-picks and hard-block opponent picks, the importer maps each pick to
 
 Each placement still snapshots odds at write time (`odds_at_placement`, now from the pick), and payouts compute from the snapshot — never from the live pick row. Admins repricing an open bet via re-upload affects future placements only (PRD §7.1).
 
+### 13. Admin-placed wagers — added Aug 2026 (Sprint 23 / [#101](https://github.com/andrewelong18/ozark-open/issues/101))
+
+Some members will not get through the magic-link flow. Pat asked to enter their wagers himself, and every §7 rule then has two candidate identities where it used to have one. This section fixes which is which **before** the code exists, because the failure mode is silent: a wager that passes validation and is wrong.
+
+**Bettor and actor are separate, and only one of them is the subject of the rules.**
+
+```
+bettor  = whose money it is   → every §7 rule, every limit, requires_admin_review
+actor   = who typed it in     → recorded, and nothing else
+```
+
+`bet_placements.user_id` stays the bettor, unchanged — it is what the pool math, the payout view and every compliance read already mean by "whose wager is this". A new nullable `placed_by_user_id` records the actor, and **NULL means the bettor entered it themselves**, which is the truth for every row written before this section existed. No backfill, and no second meaning for `user_id`.
+
+Four things follow, none of them negotiable:
+
+- **The rules evaluate against the bettor.** `validatePlacement` already takes a `PlacementContext` built from a `Bettor`, so the shape was right; what was wrong is that the identity came from `auth.getUser()` at the call site. Identity becomes an explicit parameter of one shared write path, used by both routes. The entry fee, the running total, the self-bet cap, the opponent block and `requires_admin_review` are all identity-sensitive, and a §7 message that says "your" refers to the **bettor's** entry, not the admin's.
+- **Writing for another user is a server route behind an admin gate, never a loosened member policy.** The own-rows `user_id = auth.uid()` policies are untouched. A separate, admin-scoped INSERT/UPDATE policy pair carries `public.is_admin() AND placed_by_user_id = auth.uid()` — so the database itself refuses a forged attribution, rather than trusting the route to be honest about who acted. `is_admin()` is the same boundary that already lets admins read every placement.
+- **Odds still snapshot at write.** Nothing about acting on behalf touches §12 or PRD §7.1. The admin path reuses the same `planWrite` that the member path does, including the insert/update/revive semantics and the soft delete.
+- **Eligibility is still the bettor's.** A revoked participant cannot be wagered for (`revoked_at IS NULL`, PRD §12 A13), and a phase that has closed by the clock stays closed for admins too (§5a) — an admin gate is permission to act *for* someone, not permission to break the tournament's own rules.
+
+**What this does not add:** admin creation of member accounts. `public.users.id` references `auth.users(id)` and the app holds only the anon key, so an account with no email round-trip needs either a service-role key in the runtime or a definer function writing GoTrue's own tables. That is a security-posture decision of its own and is deliberately not made here.
+
 ---
 
 ## Consequences

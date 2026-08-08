@@ -59,6 +59,7 @@ export type AdminViewQueryRow = {
   amount: number
   odds_at_placement: number
   requires_admin_review: boolean
+  placed_by_user_id?: string | null
   users: UserJoin | UserJoin[] | null
   bet_picks: AdminPickJoin | AdminPickJoin[] | null
 }
@@ -84,6 +85,10 @@ export type AdminPlacementRow = {
   /** The §7 self-pick flag, snapshotted at write — the View sheet's review
    * column. */
   requires_admin_review: boolean
+  /** The admin who entered this wager on the bettor's behalf, or null when the
+   * bettor placed it themselves (Sprint 23 / #101). The money page is where
+   * "who entered this" has to be answerable in September. */
+  placed_by_user_id: string | null
   theoretical: number | null
   refunded: number
 }
@@ -126,6 +131,7 @@ export function normalizeAdminRows(
       odds_at_placement: odds,
       result,
       requires_admin_review: Boolean(row.requires_admin_review),
+      placed_by_user_id: row.placed_by_user_id ?? null,
       theoretical: theoreticalPayout(amount, odds, result),
       refunded: refundedStake(amount, result),
     })

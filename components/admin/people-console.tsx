@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 import { Avatar } from "@/components/avatar"
@@ -243,6 +244,11 @@ function EditPanel({
   onClose: () => void
 }) {
   const router = useRouter()
+  // Display name is admin-owned after onboarding (A12) and load-bearing: the
+  // importer matches picks to people by it, so a typo silently disables that
+  // person's self-bet cap, self-pick flag and opponent block (#99). Until
+  // Sprint 23 the only way to fix one was a Studio edit.
+  const [name, setName] = useState(person.name)
   const [entryFee, setEntryFee] = useState(String(person.entry_fee ?? entryFeeMin))
   const [isPlayer, setIsPlayer] = useState(person.is_player !== false)
   const [busy, setBusy] = useState(false)
@@ -250,13 +256,16 @@ function EditPanel({
   const [errors, setErrors] = useState<string[]>([])
 
   const dirty =
-    Number(entryFee) !== person.entry_fee || isPlayer !== (person.is_player !== false)
+    name.trim() !== person.name ||
+    Number(entryFee) !== person.entry_fee ||
+    isPlayer !== (person.is_player !== false)
 
   async function save() {
     setBusy(true)
     setErrors([])
     const errs = await callParticipants("PATCH", {
       userId: person.user_id,
+      displayName: name,
       entryFee: Number(entryFee),
       isPlayer,
     })
@@ -284,6 +293,21 @@ function EditPanel({
 
   return (
     <div className="flex flex-col gap-3 border-t border-border bg-surface-sunken px-4 py-3">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`edit-${person.key}-name`}>
+          Display name (matches the field)
+        </Label>
+        <Input
+          id={`edit-${person.key}-name`}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <p className="text-xs text-text-muted">
+          The importer links picks to people by this name — correcting it here
+          makes the next upload match.
+        </p>
+      </div>
+
       <ParticipantFields
         idPrefix={`edit-${person.key}`}
         entryFee={entryFee}
@@ -294,12 +318,22 @@ function EditPanel({
         entryFeeMax={entryFeeMax}
       />
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={save} disabled={busy || !dirty}>
           Save
         </Button>
         <Button size="sm" variant="ghost" onClick={onClose} disabled={busy}>
           Close
+        </Button>
+        {/* The on-behalf menu (#101) — for the members who never get through
+            the magic-link flow. It's the real bet menu with their budget and
+            their limits, not a stripped-down form. */}
+        <Button
+          size="sm"
+          variant="secondary"
+          render={<Link href={`/bets?for=${person.user_id}`} />}
+        >
+          Place bets for them
         </Button>
       </div>
 

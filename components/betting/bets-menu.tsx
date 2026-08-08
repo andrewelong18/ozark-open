@@ -141,6 +141,11 @@ export type BetsMenuProps = {
   placements: Record<string, number>
   lockedOdds: Record<string, number>
   placementsByPick: Record<string, PickPlacements>
+  /** Set when an admin is entering wagers for a member (Sprint 23 / #101) —
+   * passed straight down to the placement cards, which swap endpoints. Every
+   * other prop already describes the MEMBER in that mode: the page loads their
+   * placements and their locked odds, not the admin's. */
+  onBehalfOf?: { userId: string; name: string } | null
 }
 
 export function BetsMenu({
@@ -149,6 +154,7 @@ export function BetsMenu({
   placements,
   lockedOdds,
   placementsByPick,
+  onBehalfOf = null,
 }: BetsMenuProps) {
   const [status, setStatus] = useState<StatusFilter>("all")
   const [round, setRound] = useState<string>("all")
@@ -388,6 +394,7 @@ export function BetsMenu({
                             placements={placements}
                             lockedOdds={lockedOdds}
                             onError={setToastError}
+                            onBehalfOf={onBehalfOf}
                           />
                         ) : (
                           <Card key={bet.id} className="gap-0 p-0">

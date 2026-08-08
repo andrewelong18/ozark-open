@@ -8,6 +8,8 @@ import {
   buildPlacementContext,
   normalizeExistingPlacements,
   normalizeTargetPick,
+  parseAdminDeleteBody,
+  parseAdminPlacementBody,
   parseDeleteBody,
   parsePlacementBody,
   planWrite,
@@ -52,6 +54,53 @@ test("parsePlacementBody rejects malformed bodies with readable errors", () => {
     assert.equal(parsed.ok, false)
     if (!parsed.ok) assert.equal(parsed.error, expected)
   }
+})
+
+// The on-behalf parsers (#101). The bettor's identity is a REQUIRED field of
+// an admin request: an omitted userId must 400, never fall back to the acting
+// admin, which is precisely how you write a valid wager for the wrong person.
+test("parseAdminPlacementBody requires the bettor's userId", () => {
+  const parsed = parseAdminPlacementBody({ pick_id: "abc", amount: 10 })
+  assert.equal(parsed.ok, false)
+  if (!parsed.ok) assert.match(parsed.error, /userId is required/)
+})
+
+test("parseAdminPlacementBody accepts a well-formed on-behalf body", () => {
+  const parsed = parseAdminPlacementBody({
+    userId: "member-1",
+    pick_id: "abc",
+    amount: 10,
+  })
+  assert.deepEqual(parsed, {
+    ok: true,
+    user_id: "member-1",
+    pick_id: "abc",
+    amount: 10,
+  })
+})
+
+test("parseAdminPlacementBody still applies the base shape rules", () => {
+  assert.equal(parseAdminPlacementBody({ userId: "member-1", amount: 10 }).ok, false)
+  assert.equal(
+    parseAdminPlacementBody({ userId: "member-1", pick_id: "abc", amount: "10" }).ok,
+    false
+  )
+})
+
+test("parseAdminPlacementBody rejects a blank userId, not just a missing one", () => {
+  assert.equal(
+    parseAdminPlacementBody({ userId: "   ", pick_id: "abc", amount: 10 }).ok,
+    false
+  )
+})
+
+test("parseAdminDeleteBody requires the bettor's userId too", () => {
+  assert.equal(parseAdminDeleteBody({ pick_id: "abc" }).ok, false)
+  assert.deepEqual(parseAdminDeleteBody({ userId: "member-1", pick_id: "abc" }), {
+    ok: true,
+    user_id: "member-1",
+    pick_id: "abc",
+  })
 })
 
 test("parsePlacementBody leaves dollar rules to validation", () => {
@@ -531,8 +580,33 @@ test("planWrite inserts when the bettor has no row on the pick", () => {
       odds_at_placement: -110,
       requires_admin_review: false,
       deleted_at: null,
+      // The bettor wrote their own row — that's what NULL means (#101).
+      placed_by_user_id: null,
     },
   })
+})
+
+test("planWrite records the acting admin on an on-behalf write", () => {
+  const plan = planWrite(null, 10, -110, false, "admin-1")
+  assert.equal(plan.fields.placed_by_user_id, "admin-1")
+})
+
+test("planWrite re-stamps the actor on an edit and a revive, not just an insert", () => {
+  // The column answers "who last touched this row", so an admin correcting a
+  // wager the member placed themselves must take the attribution.
+  const edit = planWrite({ id: "row-1", deleted_at: null }, 12, 120, false, "admin-1")
+  assert.equal(edit.kind, "update")
+  assert.equal(edit.fields.placed_by_user_id, "admin-1")
+
+  const revive = planWrite(
+    { id: "row-1", deleted_at: "2026-07-17T00:00:00Z" },
+    12,
+    120,
+    false,
+    "admin-1"
+  )
+  assert.equal(revive.kind, "revive")
+  assert.equal(revive.fields.placed_by_user_id, "admin-1")
 })
 
 test("planWrite updates by key when a live row exists", () => {

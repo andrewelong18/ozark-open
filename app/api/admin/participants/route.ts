@@ -11,7 +11,8 @@ import { normalizeDisplayName, validateDisplayName } from "@/lib/profile"
 //            CREATE the participant row with an entry fee + player flag).
 //            Also RE-approves: it clears revoked_at on an existing row, which
 //            the UNIQUE (user_id, tournament_id) constraint requires anyway.
-//   PATCH  — edit an existing participant's entry fee / player flag.
+//   PATCH  — edit an existing participant's entry fee / player flag, and/or
+//            correct their display_name (Sprint 23 / #99).
 //   DELETE — revoke (stamp revoked_at → back to view-only).
 //
 // Revoke is a SOFT revoke (Sprint 21 / #91). A hard DELETE took the entry fee
@@ -46,6 +47,41 @@ function asObject(raw: unknown): Record<string, unknown> | null {
   return typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : null
 }
 
+/**
+ * Write a corrected display_name, shared by approve (POST) and edit (PATCH).
+ * An absent/blank field means "leave it alone" — only approval has a name box
+ * that's always populated, and a PATCH that only moves the entry fee mustn't
+ * blank the name out.
+ *
+ * The write lands because this runs under an ADMIN session:
+ * `guard_users_self_update` pins display_name once onboarded_at is set, but
+ * exempts admins (Sprint 16 / #99). Don't fight the trigger — this is the path
+ * it was built to allow.
+ */
+async function writeDisplayName(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  raw: unknown
+): Promise<NextResponse | null> {
+  const displayName = normalizeDisplayName(raw)
+  if (displayName === "") return null
+
+  const nameError = validateDisplayName(displayName)
+  if (nameError) return NextResponse.json({ errors: [nameError] }, { status: 400 })
+
+  const { error } = await supabase
+    .from("users")
+    .update({ display_name: displayName })
+    .eq("id", userId)
+  if (error) {
+    return NextResponse.json(
+      { error: `Couldn't update the name: ${error.message}` },
+      { status: 500 }
+    )
+  }
+  return null
+}
+
 // Approve: create the participant row (and verify/correct the display name).
 export async function POST(request: Request) {
   const gate = await requireAdmin()
@@ -70,21 +106,8 @@ export async function POST(request: Request) {
   const isPlayer = body.isPlayer !== false // default true, matches the schema
 
   // Optional name correction — the admin-verify step (import name-matching).
-  const displayName = normalizeDisplayName(body.displayName)
-  if (displayName !== "") {
-    const nameError = validateDisplayName(displayName)
-    if (nameError) return NextResponse.json({ errors: [nameError] }, { status: 400 })
-    const { error: nameUpdateError } = await supabase
-      .from("users")
-      .update({ display_name: displayName })
-      .eq("id", body.userId)
-    if (nameUpdateError) {
-      return NextResponse.json(
-        { error: `Couldn't update the name: ${nameUpdateError.message}` },
-        { status: 500 }
-      )
-    }
-  }
+  const nameFailure = await writeDisplayName(supabase, body.userId, body.displayName)
+  if (nameFailure) return nameFailure
 
   // Upsert, not insert: re-approving someone who was revoked has to reuse
   // their row (UNIQUE (user_id, tournament_id)) and clear revoked_at.
@@ -111,7 +134,15 @@ export async function POST(request: Request) {
   return NextResponse.json({ participant: data }, { status: 201 })
 }
 
-// Edit an existing participant's entry fee / player flag.
+// Edit an existing participant's entry fee / player flag, and/or correct their
+// display name (Sprint 23 / #99).
+//
+// The name is written INDEPENDENTLY of the participant row, and either half may
+// be absent: display_name lives on `users`, so a name-only edit must not fall
+// into the "Nothing to update." branch below, and a fee-only edit must not
+// touch the name. #99 is a rules fix, not a cosmetic one — lib/import.ts links
+// picks to people by matching display_name, so a wrong name silently disables
+// that person's self-bet cap, self-pick flag and opponent block.
 export async function PATCH(request: Request) {
   const gate = await requireAdmin()
   if (gate.error) return gate.error
@@ -136,8 +167,19 @@ export async function PATCH(request: Request) {
     update.entry_fee = entryFee
   }
   if (typeof body.isPlayer === "boolean") update.is_player = body.isPlayer
-  if (Object.keys(update).length === 0) {
+
+  const nameGiven = normalizeDisplayName(body.displayName) !== ""
+  if (!nameGiven && Object.keys(update).length === 0) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 })
+  }
+
+  const nameFailure = await writeDisplayName(supabase, body.userId, body.displayName)
+  if (nameFailure) return nameFailure
+
+  // Name-only edit: there's no participant row change to make, and there may
+  // not even be a participant row (a stalled member can have a typo'd name too).
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ participant: null })
   }
 
   const { data, error } = await supabase
