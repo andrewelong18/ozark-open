@@ -4,7 +4,7 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { stakeEntryError } from "@/lib/placements"
 import { cn } from "@/lib/utils"
-import { PlayerNameLink } from "@/components/player/player-name-link"
+import { PickLabel } from "./pick-label"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { OddsChip } from "./odds-chip"
@@ -299,30 +299,21 @@ export function BetPlacementCard({
                     )}
                   </button>
                 )}
-                {pick.player_user_id ? (
-                  // A named golfer: the label links to their profile. Selection
-                  // (pick-one bets) stays on the radio to its left; the tap-to-
-                  // select label is traded for the profile link per the brief.
-                  <PlayerNameLink
-                    userId={pick.player_user_id}
-                    label={pick.label}
-                    avatarUrl={pick.player_avatar_url}
-                    className="min-w-0"
-                    nameClassName="text-base leading-snug font-medium text-text-strong"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => select(pick)}
-                    className={cn(
-                      "min-w-0 text-left text-base leading-snug font-medium text-pretty text-text-strong",
-                      !allowsMultiplePicks && "cursor-pointer"
-                    )}
-                    tabIndex={allowsMultiplePicks ? -1 : undefined}
-                  >
-                    {pick.label}
-                  </button>
-                )}
+                {/* A named golfer's name links to their profile; selection
+                    (pick-one bets) stays on the radio to its left. An unnamed
+                    pick ("Field", "Yes") keeps the tap-to-select label. The
+                    stroke handicap is a badge beside the name either way, and
+                    never inside the link (#102). */}
+                <PickLabel
+                  label={pick.label}
+                  playerUserId={pick.player_user_id}
+                  playerAvatarUrl={pick.player_avatar_url}
+                  className="min-w-0"
+                  nameClassName="text-base leading-snug font-medium text-text-strong"
+                  onNameClick={
+                    pick.player_user_id ? undefined : () => select(pick)
+                  }
+                />
               </div>
               <div className={cn(!allowsMultiplePicks && "pl-[30px]")}>
                 <OddsChip

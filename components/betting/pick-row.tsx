@@ -1,12 +1,14 @@
 import { cn } from "@/lib/utils"
-import { PlayerNameLink } from "@/components/player/player-name-link"
+import { PickLabel } from "./pick-label"
 import { OddsChip } from "./odds-chip"
 import { OutcomeBadge, type Outcome } from "./outcome-badge"
 
 export type PickResult = "pending" | Outcome
 
 export type PickRowProps = {
-  /** The sheet's pick label, incl. stroke notation: "Steve Jones (-5)", "Field". */
+  /** The sheet's pick label, incl. stroke notation: "Steve Jones (-5)",
+   * "Field". Split for display by PickLabel — the handicap renders as a badge
+   * beside the name (#102), never inside the profile link. */
   label: string
   americanOdds: number
   /** Sheet-supplied display strings — rendered verbatim, never recomputed. */
@@ -43,19 +45,14 @@ export function PickRow({
         className
       )}
     >
-      {playerUserId ? (
-        <PlayerNameLink
-          userId={playerUserId}
-          label={label}
-          avatarUrl={playerAvatarUrl}
-          className="flex-1"
-          nameClassName="text-base leading-snug font-medium text-text-strong"
-        />
-      ) : (
-        <span className="min-w-0 flex-1 text-base leading-snug font-medium text-pretty text-text-strong">
-          {label}
-        </span>
-      )}
+      <PickLabel
+        label={label}
+        playerUserId={playerUserId}
+        playerAvatarUrl={playerAvatarUrl}
+        className="flex-1"
+        nameClassName="text-base leading-snug font-medium text-text-strong"
+      />
+
       <span className="flex shrink-0 items-center gap-2.5">
         {result !== "pending" && <OutcomeBadge outcome={result} size="sm" />}
         <OddsChip

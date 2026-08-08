@@ -8,6 +8,8 @@
 
 import ExcelJS from "exceljs"
 
+import { stripStrokeSuffix } from "./pick-label.ts"
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -545,13 +547,10 @@ export type OddsChange = {
   to: { americanOdds: number; fractionalOdds: string }
 }
 
-/**
- * Strip the stroke notation off a pick label: "Steve Jones (-5)" → "Steve
- * Jones", "Mike Yenzer (E)" → "Mike Yenzer" (ADR 0001 §11).
- */
-export function stripStrokeSuffix(label: string): string {
-  return label.replace(/\s*\((?:E|[+-]?\d+)\)\s*$/i, "").trim()
-}
+// The stroke strip lives in lib/pick-label.ts so the menu's display split and
+// this module's name matching can never drift apart (#102). Re-exported
+// because callers have imported it from here since Sprint 12.
+export { stripStrokeSuffix }
 
 /** numeric columns come back from PostgREST as number or string; display
  *  strings are compared verbatim, numbers numerically. */

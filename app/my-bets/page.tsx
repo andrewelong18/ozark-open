@@ -11,6 +11,7 @@ import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
 import { RulesCard } from "@/components/modules/rules-card"
 import { ComplianceBanner } from "@/components/modules/compliance-banner"
 import { OutcomeBadge } from "@/components/betting/outcome-badge"
+import { PickLabel } from "@/components/betting/pick-label"
 import {
   buildComplianceSummary,
   buildRulesModel,
@@ -201,9 +202,13 @@ export default async function MyBetsPage() {
                     className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 first:border-t-0"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="text-[15px] leading-snug font-semibold text-text-strong">
-                        {entry.pick_label}
-                      </div>
+                      {/* Same name + stroke-badge treatment as the menu
+                          (#102). No profile link here — this page is your own
+                          slate, not a directory of other people. */}
+                      <PickLabel
+                        label={entry.pick_label}
+                        nameClassName="text-[15px] leading-snug font-semibold text-text-strong"
+                      />
                       <div className="mt-0.5 text-xs text-text-muted">
                         {ROUND_LABEL[entry.round] ?? entry.round} ·{" "}
                         {entry.bet_title}
