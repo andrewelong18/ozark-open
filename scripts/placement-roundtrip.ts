@@ -278,6 +278,100 @@ function main() {
     ) === "2"
   )
 
+  // --- Admin-placed wagers (Sprint 23 / #101, ADR 0001 §13) -----------------
+  // The member policies above are untouched; these are a separate admin-scoped
+  // pair. What only a real Postgres can prove is that the attribution is
+  // enforced by the DATABASE — an admin cannot write a row claiming somebody
+  // else entered it — and that an admin gate is permission to act FOR someone,
+  // not permission to bet on a bet that isn't open.
+  console.log("Placing on a member's behalf (RLS enforced):")
+
+  const bobRow = (fields: string) =>
+    runSql(
+      `SELECT ${fields} FROM public.bet_placements
+       WHERE user_id = '${BOB}' AND pick_id = '${openPick2}'`
+    )
+
+  asUser(
+    BOB,
+    `INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement)
+     VALUES ('${BOB}', '${openPick2}', 7, 150)`
+  )
+  check(
+    "a member's own wager leaves placed_by_user_id NULL (self-placed)",
+    bobRow("(placed_by_user_id IS NULL)::text") === "true"
+  )
+  runSql(`DELETE FROM public.bet_placements WHERE user_id = '${BOB}'`)
+
+  check(
+    "a non-admin still cannot place for someone else, even naming themselves",
+    asUserExpectFail(
+      ALICE,
+      `INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement, placed_by_user_id)
+       VALUES ('${BOB}', '${openPick2}', 7, 150, '${ALICE}')`
+    )
+  )
+  check(
+    "an admin cannot forge who entered the wager",
+    asUserExpectFail(
+      ADMIN,
+      `INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement, placed_by_user_id)
+       VALUES ('${BOB}', '${openPick2}', 7, 150, '${BOB}')`
+    )
+  )
+  check(
+    "an admin who omits the attribution is refused too",
+    asUserExpectFail(
+      ADMIN,
+      `INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement)
+       VALUES ('${BOB}', '${openPick2}', 7, 150)`
+    )
+  )
+  check(
+    "an admin gate is not permission to bet on a bet that isn't open",
+    asUserExpectFail(
+      ADMIN,
+      `INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement, placed_by_user_id)
+       VALUES ('${BOB}', '${closedPick}', 7, 150, '${ADMIN}')`
+    )
+  )
+
+  asUser(
+    ADMIN,
+    `INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement, placed_by_user_id)
+     VALUES ('${BOB}', '${openPick2}', 7, 150, '${ADMIN}')`
+  )
+  check(
+    "an admin can place for a member, and the row records both identities",
+    bobRow(`amount || '/' || (placed_by_user_id = '${ADMIN}')::text`) === "7/true"
+  )
+
+  asUser(
+    ADMIN,
+    `UPDATE public.bet_placements SET amount = 9, placed_by_user_id = '${ADMIN}'
+     WHERE user_id = '${BOB}' AND pick_id = '${openPick2}'`
+  )
+  check("an admin can correct a wager they entered", bobRow("amount") === "9")
+
+  asUser(
+    ADMIN,
+    `UPDATE public.bet_placements SET deleted_at = now(), placed_by_user_id = '${ADMIN}'
+     WHERE user_id = '${BOB}' AND pick_id = '${openPick2}'`
+  )
+  check(
+    "an admin can remove a wager they entered (soft delete)",
+    bobRow("(deleted_at IS NOT NULL)::text") === "true"
+  )
+
+  check(
+    "the bettor still owns the row — it counts as Bob's, not the admin's",
+    runSql(
+      `SELECT count(*) FROM public.bet_placements
+       WHERE user_id = '${BOB}' AND placed_by_user_id = '${ADMIN}'`
+    ) === "1"
+  )
+  runSql(`DELETE FROM public.bet_placements WHERE user_id = '${BOB}'`)
+
   // --- Soft revoke (Sprint 21 / #91) ----------------------------------------
   // Revoke is now an UPDATE of tournament_participants, not a DELETE, so the
   // "Admins can write participants" policy has to allow the stamp — and
