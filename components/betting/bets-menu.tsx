@@ -17,6 +17,7 @@ import {
   toResult,
   type PickPlacements,
 } from "@/lib/closed-bets"
+import type { OnBehalfOf } from "@/lib/placements"
 import {
   ALL_FACET,
   availableCategories,
@@ -301,8 +302,11 @@ export type BetsMenuProps = {
   /** Set when an admin is entering wagers for a member (Sprint 23 / #101) —
    * passed straight down to the placement cards, which swap endpoints. Every
    * other prop already describes the MEMBER in that mode: the page loads their
-   * placements and their locked odds, not the admin's. */
-  onBehalfOf?: { userId: string; name: string } | null
+   * placements and their locked odds, not the admin's.
+   *
+   * Optional here (a plain member's menu has no on-behalf mode) but REQUIRED
+   * on BetPlacementCard, so the hand-off below can't be dropped silently. */
+  onBehalfOf?: OnBehalfOf
 }
 
 export function BetsMenu({

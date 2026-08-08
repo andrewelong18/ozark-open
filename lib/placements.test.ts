@@ -12,6 +12,7 @@ import {
   parseAdminPlacementBody,
   parseDeleteBody,
   parsePlacementBody,
+  placementTarget,
   planWrite,
   stakeEntryError,
   toTournamentRules,
@@ -657,4 +658,34 @@ test("stakeEntryError says exactly what the server would say", () => {
   for (const raw of ["0", "-5", "2.50"]) {
     assert.equal(stakeEntryError(raw), validateAmount(Number(raw)))
   }
+})
+
+// ---------------------------------------------------------------------------
+// placementTarget — the on-behalf endpoint swap (Sprint 24, trap 2)
+// ---------------------------------------------------------------------------
+
+test("a member's own wager posts to the member route with no bettor field", () => {
+  const target = placementTarget(null)
+  assert.equal(target.endpoint, "/api/placements")
+  assert.deepEqual(target.bettorField, {})
+})
+
+test("an on-behalf wager posts to the admin route and names the MEMBER", () => {
+  const target = placementTarget({ userId: "member-1", name: "Jake Kohne" })
+  assert.equal(target.endpoint, "/api/admin/placements")
+  assert.deepEqual(target.bettorField, { userId: "member-1" })
+})
+
+test("the two targets never collide — a dropped flag changes the endpoint", () => {
+  // THE FAILURE THIS GUARDS. If the onBehalfOf prop is dropped anywhere on the
+  // way page → BetsMenu → BetPlacementCard, the card falls back to the member
+  // route and the admin's wager for someone else is recorded against the
+  // ADMIN: a valid, correctly-validated wager on the wrong person's slate.
+  // The endpoints must stay distinguishable so that fallback is never silent.
+  const own = placementTarget(null)
+  const behalf = placementTarget({ userId: "member-1", name: "Jake Kohne" })
+  assert.notEqual(own.endpoint, behalf.endpoint)
+  // And the member route must carry no identity at all — it reads the session,
+  // so a stray userId in the body must not be able to redirect the write.
+  assert.deepEqual(Object.keys(own.bettorField), [])
 })

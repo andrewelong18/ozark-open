@@ -373,3 +373,43 @@ export function planWrite(
     fields,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Client write target (Sprint 24) — which endpoint a placement card posts to
+// ---------------------------------------------------------------------------
+
+/** The member an admin is entering wagers for, or null when the viewer is
+ * betting for themselves (Sprint 23 / #101). */
+export type OnBehalfOf = { userId: string; name: string } | null
+
+/** Where a placement card writes, and what identity it names in the body. */
+export type PlacementTarget = {
+  endpoint: string
+  /** Spread into the request body: the bettor's id in on-behalf mode, nothing
+   * at all otherwise (the member route reads identity from the session). */
+  bettorField: { userId: string } | Record<string, never>
+}
+
+/**
+ * Resolve the write target for a placement card.
+ *
+ * WHY THIS IS A FUNCTION AND NOT TWO TERNARIES IN THE COMPONENT. The
+ * on-behalf flag is threaded page → BetsMenu → BetPlacementCard. If a refactor
+ * of the menu drops it, an admin placing a wager FOR A MEMBER silently posts
+ * to /api/placements as THEMSELVES — a valid wager, correctly validated,
+ * recorded against the wrong person. Nothing about that looks like a bug from
+ * either end. Pulling the decision into a pure function makes it testable;
+ * the prop being REQUIRED on BetPlacementCard makes dropping it a type error.
+ *
+ * The on-behalf route is a separate URL rather than a flag on the member route
+ * so the admin gate stays structural: /api/placements can never be talked into
+ * writing for someone else, whatever body it is handed.
+ */
+export function placementTarget(onBehalfOf: OnBehalfOf): PlacementTarget {
+  return onBehalfOf
+    ? {
+        endpoint: "/api/admin/placements",
+        bettorField: { userId: onBehalfOf.userId },
+      }
+    : { endpoint: "/api/placements", bettorField: {} }
+}
