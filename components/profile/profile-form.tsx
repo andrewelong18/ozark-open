@@ -4,6 +4,7 @@ import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/client"
+import { uploadAvatar } from "@/lib/avatar"
 import { Avatar } from "@/components/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -62,18 +63,14 @@ export function ProfileForm({
     setSaved(false)
 
     try {
-      // Upload the file straight to Storage under our own folder first; the
-      // bucket's RLS enforces the <uid>/ prefix.
+      // Upload straight to Storage under our own folder; the bucket's RLS
+      // enforces the <uid>/ prefix. uploadAvatar awaits session hydration
+      // first — without that the request races the browser client's cookie
+      // read, goes out anonymously, and fails as an RLS violation (#90).
       if (file) {
-        const supabase = createClient()
-        const { error: uploadError } = await supabase.storage
-          .from("avatars")
-          .upload(`${userId}/avatar`, file, {
-            upsert: true,
-            contentType: file.type,
-          })
+        const uploadError = await uploadAvatar(createClient(), userId, file)
         if (uploadError) {
-          setErrors([`Uploading your photo failed: ${uploadError.message}`])
+          setErrors([uploadError])
           return
         }
       }
