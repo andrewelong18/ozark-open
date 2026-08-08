@@ -25,5 +25,9 @@
 -- min_picks_per_tournament (SET min_picks_per_tournament = min_picks_per_phase),
 -- so the number this column held survives under the new name.
 
+-- NOT YET APPLIED TO PRODUCTION. The Sprint 24 session had the go-ahead but no
+-- SUPABASE_ACCESS_TOKEN, so the MCP returned Unauthorized; tracked as #130,
+-- which carries the pre-flight checks and the verification queries.
+
 ALTER TABLE public.tournaments
   DROP COLUMN IF EXISTS min_picks_per_phase;
