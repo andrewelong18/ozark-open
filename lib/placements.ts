@@ -45,6 +45,40 @@ export function parsePlacementBody(body: unknown): ParsedBody {
   return { ok: true, pick_id, amount }
 }
 
+export type ParsedAdminBody =
+  | { ok: true; user_id: string; pick_id: string; amount: number }
+  | { ok: false; error: string }
+
+/**
+ * Parse an on-behalf placement body (Sprint 23 / #101): the member's `userId`
+ * on top of the usual `{ pick_id, amount }`. Separate from parsePlacementBody
+ * on purpose — the bettor's identity is a REQUIRED field of the admin request
+ * and an omitted one must be a 400, never a silent fall-back to the acting
+ * admin, which is exactly how you write a valid wager for the wrong person.
+ */
+export function parseAdminPlacementBody(body: unknown): ParsedAdminBody {
+  const base = parsePlacementBody(body)
+  if (!base.ok) return base
+  const { userId } = body as Record<string, unknown>
+  if (typeof userId !== "string" || userId.trim() === "")
+    return { ok: false, error: "userId is required — who is this wager for?" }
+  return { ok: true, user_id: userId, pick_id: base.pick_id, amount: base.amount }
+}
+
+export type ParsedAdminDeleteBody =
+  | { ok: true; user_id: string; pick_id: string }
+  | { ok: false; error: string }
+
+/** The same, for the on-behalf removal. */
+export function parseAdminDeleteBody(body: unknown): ParsedAdminDeleteBody {
+  const base = parseDeleteBody(body)
+  if (!base.ok) return base
+  const { userId } = body as Record<string, unknown>
+  if (typeof userId !== "string" || userId.trim() === "")
+    return { ok: false, error: "userId is required — whose wager is this?" }
+  return { ok: true, user_id: userId, pick_id: base.pick_id }
+}
+
 /**
  * The stake box's own check, for what the user typed rather than a number
  * (Sprint 21 / #92). The card used to bail out of `$0` with a bare `return`:
@@ -296,6 +330,13 @@ export type WriteFields = {
   requires_admin_review: boolean
   /** Always null on write: a fresh place is live, a revive clears the flag. */
   deleted_at: null
+  /**
+   * Who typed this in (Sprint 23 / #101, ADR 0001 §13). NULL = the bettor
+   * placed it themselves — the bettor is always `user_id`, never this. Written
+   * on EVERY write, including edits and the soft delete, so the column answers
+   * "who last touched this row" rather than only "who created it".
+   */
+  placed_by_user_id: string | null
 }
 
 export type WritePlan =
@@ -313,13 +354,17 @@ export function planWrite(
   existingRow: OwnPlacementRow | null,
   amount: number,
   currentAmericanOdds: number,
-  requiresAdminReview: boolean
+  requiresAdminReview: boolean,
+  /** The acting admin when this is an on-behalf write; null (the default) when
+   * the bettor is writing their own row. */
+  placedByUserId: string | null = null
 ): WritePlan {
   const fields: WriteFields = {
     amount,
     odds_at_placement: currentAmericanOdds,
     requires_admin_review: requiresAdminReview,
     deleted_at: null,
+    placed_by_user_id: placedByUserId,
   }
   if (!existingRow) return { kind: "insert", fields }
   return {
