@@ -2,11 +2,13 @@ import { NextResponse } from "next/server"
 import { requireAdminRoute } from "@/lib/admin-gate"
 import {
   buildImportPlan,
+  clockStaleOpenWarnings,
   parseSheet,
   validateSheet,
   type ExistingBet,
   type ExistingPick,
 } from "@/lib/import"
+import { toPhaseClock, TOURNAMENT_CLOCK_COLUMNS } from "@/lib/placements"
 
 // Spreadsheet ingestion endpoint (ADR 0001 §7). Writes run under the admin's
 // own session — the Sprint 1 RLS policies ("Admins can write bets/bet_picks")
@@ -69,7 +71,9 @@ export async function POST(request: Request) {
 
   const { data: tournamentData } = await supabase
     .from("tournaments")
-    .select("id")
+    // The clock columns ride along so the stale-open warning can compare the
+    // sheet against the phase deadlines, not just against itself (#122).
+    .select(`id, ${TOURNAMENT_CLOCK_COLUMNS}`)
     .in("status", ["upcoming", "active"])
     .order("year", { ascending: false })
     .limit(1)
@@ -230,6 +234,14 @@ export async function POST(request: Request) {
     // Sheet-level warnings from the contract pass (stale-open bets, #97) —
     // non-blocking by design, reported the same way as the odds change below.
     ...validation.warnings,
+    // The same concern, checked against the phase clock rather than against
+    // the sheet's own shape (#122) — catches a whole phase left open after
+    // its deadline, which reads as self-consistent to the contract pass.
+    ...clockStaleOpenWarnings(
+      rows,
+      toPhaseClock(tournamentData as unknown as Record<string, unknown>),
+      new Date()
+    ),
     ...plan.oddsChanges
       .filter((change) => pickIdsWithPlacements.has(change.sheetPickId))
       .map(

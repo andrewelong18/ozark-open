@@ -9,6 +9,12 @@
 import ExcelJS from "exceljs"
 
 import { stripStrokeSuffix } from "./pick-label.ts"
+import {
+  deadlineFor,
+  formatDeadline,
+  phaseClosedByClock,
+  type PhaseClock,
+} from "./phases.ts"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -456,6 +462,54 @@ export function validateSheet(
 
   if (errors.length > 0) return { ok: false, errors }
   return { ok: true, rows, warnings }
+}
+
+/**
+ * The clock-informed half of the stale-open warning (#122, ADR 0001 §5a).
+ *
+ * validateSheet() above can only reason from the sheet, because it is a pure
+ * contract pass with no database access. That covers the common shape — one
+ * straggler left open while its siblings closed. It cannot see the shape where
+ * an ENTIRE phase is marked open after its deadline has passed, because such a
+ * sheet is perfectly self-consistent. That is exactly what re-uploading last
+ * week's file looks like.
+ *
+ * Sprint 25 added the missing fact (`tournaments.phase1/2_closes_at`), so the
+ * caller can now supply it. Kept out of validateSheet rather than threading a
+ * clock through the contract pass: the contract is about the file, this is
+ * about the file disagreeing with the world.
+ *
+ * A WARNING, never a block, matching #97's severity split. Reopening a phase
+ * is a legitimate admin act (clear the deadline on /admin/close, re-upload),
+ * and the upload cannot reopen wagering on its own anyway — wageringOpen()
+ * consults the clock, so the clock still wins whatever the sheet says. The
+ * warning's job is to tell the admin the two disagree, so they can decide
+ * which one is wrong.
+ */
+export function clockStaleOpenWarnings(
+  rows: SheetRow[],
+  clock: PhaseClock,
+  now: Date
+): string[] {
+  // One warning per BET, not per pick — rows arrive per pick.
+  const openBets = new Map<number, { phase: 1 | 2; title: string }>()
+  for (const row of rows) {
+    if (row.status !== "open") continue
+    if (!openBets.has(row.sheetBetId))
+      openBets.set(row.sheetBetId, { phase: row.phase, title: row.betTitle })
+  }
+
+  const warnings: string[] = []
+  for (const [betId, { phase, title }] of openBets) {
+    if (!phaseClosedByClock(phase, clock, now)) continue
+    const at = deadlineFor(phase, clock)!
+    warnings.push(
+      `bet_id ${betId} ("${title}") is marked open, but Phase ${phase}'s deadline ` +
+        `passed at ${formatDeadline(at)}. Wagering stays closed until the deadline ` +
+        `is cleared or moved on /admin/close.`
+    )
+  }
+  return warnings
 }
 
 // ---------------------------------------------------------------------------
