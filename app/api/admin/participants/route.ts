@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireAdminRoute as requireAdmin } from "@/lib/admin-gate"
 import { createClient } from "@/lib/supabase/server"
 import { TOURNAMENT_RULE_COLUMNS, toTournamentRules } from "@/lib/placements"
 import { validateEntryFee } from "@/lib/validation"
@@ -21,23 +22,6 @@ import { normalizeDisplayName, validateDisplayName } from "@/lib/profile"
 // Writes to tournament_participants are already admin-only at the DB (RLS);
 // the users.display_name write bypasses the self-update guard because it runs
 // under an admin session. We still gate is_admin here for clean 403s.
-
-async function requireAdmin() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { error: NextResponse.json({ error: "Not signed in." }, { status: 401 }) }
-  const { data: profile } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .maybeSingle()
-  if (!(profile as { is_admin: boolean } | null)?.is_admin) {
-    return { error: NextResponse.json({ error: "Admins only." }, { status: 403 }) }
-  }
-  return { supabase }
-}
 
 /** The single active tournament (latest by year) + its entry-fee rule bounds. */
 async function activeTournament(supabase: Awaited<ReturnType<typeof createClient>>) {

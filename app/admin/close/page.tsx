@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { requireAdminPage } from "@/lib/admin-gate"
 import { CloseConsole } from "@/components/admin/close-console"
 import { buildChaseList, closingPhase, type ChaseParticipant } from "@/lib/chase"
 import {
@@ -24,18 +24,7 @@ import type { ExistingPlacement } from "@/lib/validation"
 // the page exists.
 
 export default async function AdminClosePage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) notFound()
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .maybeSingle()
-  if (!(profile as { is_admin: boolean } | null)?.is_admin) notFound()
+  const { supabase } = await requireAdminPage()
 
   const { data: tournamentData } = await supabase
     .from("tournaments")

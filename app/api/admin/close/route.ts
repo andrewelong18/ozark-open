@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireAdminRoute as requireAdmin } from "@/lib/admin-gate"
 import { createClient } from "@/lib/supabase/server"
 import { finalizeReadiness } from "@/lib/payouts"
 
@@ -18,26 +19,6 @@ import { finalizeReadiness } from "@/lib/payouts"
 //
 // Writes are admin-only at the DB too ("Admins can write tournaments", RLS);
 // the gate here is for clean 401/403s rather than security.
-
-// The fourth copy of this block — see #81, which asks for a shared
-// requireAdmin() helper. Left in place rather than extracted mid-sprint.
-async function requireAdmin() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user)
-    return { error: NextResponse.json({ error: "Not signed in." }, { status: 401 }) }
-  const { data: profile } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .maybeSingle()
-  if (!(profile as { is_admin: boolean } | null)?.is_admin) {
-    return { error: NextResponse.json({ error: "Admins only." }, { status: 403 }) }
-  }
-  return { supabase }
-}
 
 async function readJson(request: Request): Promise<unknown> {
   try {
