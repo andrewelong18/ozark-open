@@ -17,6 +17,17 @@ import {
   toResult,
   type PickPlacements,
 } from "@/lib/closed-bets"
+import {
+  ALL_FACET,
+  availableCategories,
+  availableRounds,
+  defaultStatusView,
+  filterPhases,
+  reconcileFacet,
+  showStatusToggle,
+  type Facet,
+  type StatusView,
+} from "@/lib/bet-filters"
 import { cn } from "@/lib/utils"
 
 export type BetCategory = {
@@ -80,27 +91,10 @@ const ROUND_TAB_LABEL: Record<string, string> = {
   round_2: "R2",
   round_3: "R3",
 }
-const CATEGORY_ORDER = [
-  "Top Finisher",
-  "Top X Finisher",
-  "Match",
-  "Group Match",
-  "Prop Bet",
-]
-
-type StatusFilter = "all" | "open" | "closed"
-const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
+const STATUS_OPTIONS: { value: StatusView; label: string }[] = [
   { value: "open", label: "Open" },
   { value: "closed", label: "Closed" },
 ]
-
-// Open/closed is the bettor-facing split; "closed" folds in settled bets
-// (status is never "resolved" — that's derived per pick at render).
-function matchesStatus(status: StatusFilter, betStatus: string) {
-  if (status === "all") return true
-  return status === "open" ? betStatus === "open" : betStatus !== "open"
-}
 
 // Everyone's wagers on one closed pick, biggest stake first (PRD §12
 // Q11/Q12 — amounts and identities go public the moment the bet closes).
@@ -319,113 +313,98 @@ export function BetsMenu({
   placementsByPick,
   onBehalfOf = null,
 }: BetsMenuProps) {
-  const [status, setStatus] = useState<StatusFilter>("all")
-  const [round, setRound] = useState<string>("all")
-  const [categories, setCategories] = useState<string[]>([])
+  // The view the menu opens on, computed from the bets actually on the page:
+  // open if anything is open, else closed. Mid-tournament Phase 1 is closed
+  // while Phase 2 is open, so this can't key off the phase (#104).
+  const [status, setStatus] = useState<StatusView>(() =>
+    defaultStatusView(phases)
+  )
+  // Exactly ONE secondary filter at a time — a round, or a category, or
+  // neither. Never both; that's what "one filter at a time" buys, and it's
+  // why no selection can empty the page.
+  const [facet, setFacet] = useState<Facet>(ALL_FACET)
   // Rule-violation messages surface as one floating toast (see BetErrorToast)
   // instead of inline, so the stake input never reflows.
   const [toastError, setToastError] = useState<string | null>(null)
   const dismissToast = useCallback(() => setToastError(null), [])
 
-  // Every bet on the page, flattened — used to decide which controls are
-  // even worth showing (a lone round or an all-open menu needs no filter).
-  const allBets = useMemo(
-    () =>
-      phases.flatMap((p) =>
-        p.rounds.flatMap((r) => r.categories.flatMap((c) => c.bets))
-      ),
-    [phases]
+  const showStatus = useMemo(() => showStatusToggle(phases), [phases])
+
+  // Rounds and categories present IN THE CURRENT VIEW, so every option
+  // offered is guaranteed to match at least one bet.
+  const roundTabs = useMemo(
+    () => availableRounds(phases, status),
+    [phases, status]
   )
-  const showStatus =
-    allBets.some((b) => b.status === "open") &&
-    allBets.some((b) => b.status !== "open")
-
-  // Round tabs in menu order (phases are already sorted round-first upstream).
-  const roundTabs = useMemo(() => {
-    const seen = new Set<string>()
-    const list: string[] = []
-    for (const p of phases)
-      for (const r of p.rounds)
-        if (!seen.has(r.round)) {
-          seen.add(r.round)
-          list.push(r.round)
-        }
-    return list
-  }, [phases])
+  const categoryChips = useMemo(
+    () => availableCategories(phases, status),
+    [phases, status]
+  )
   const showRoundTabs = roundTabs.length > 1
-  const activeRound = roundTabs.includes(round) ? round : "all"
+  const showCategoryChips = categoryChips.length > 1
 
-  // Categories present under the current status + round view — the chip row
-  // stays contextual so it never offers a filter that would empty the page.
-  const availableCategories = useMemo(() => {
-    const seen = new Set<string>()
-    for (const p of phases)
-      for (const r of p.rounds) {
-        if (activeRound !== "all" && r.round !== activeRound) continue
-        for (const c of r.categories)
-          if (c.bets.some((b) => matchesStatus(status, b.status)))
-            seen.add(c.name)
-      }
-    return CATEGORY_ORDER.filter((c) => seen.has(c)).concat(
-      [...seen].filter((c) => !CATEGORY_ORDER.includes(c))
-    )
-  }, [phases, activeRound, status])
-  const showCategoryChips = availableCategories.length > 1
+  // A selection made in one view may not exist in the other (filter to Round
+  // 3, flip to Closed). Reconcile rather than render an empty page.
+  const activeFacet = useMemo(
+    () => reconcileFacet(phases, status, facet),
+    [phases, status, facet]
+  )
 
   const filteredPhases = useMemo(
-    () =>
-      phases
-        .map((p) => ({
-          phase: p.phase,
-          rounds: p.rounds
-            .filter((r) => activeRound === "all" || r.round === activeRound)
-            .map((r) => ({
-              round: r.round,
-              categories: r.categories
-                .map((c) => ({
-                  name: c.name,
-                  bets: c.bets.filter((b) => matchesStatus(status, b.status)),
-                }))
-                .filter((c) => c.bets.length > 0)
-                .filter(
-                  (c) => categories.length === 0 || categories.includes(c.name)
-                ),
-            }))
-            .filter((r) => r.categories.length > 0),
-        }))
-        .filter((p) => p.rounds.length > 0),
-    [phases, activeRound, status, categories]
+    () => filterPhases(phases, status, activeFacet),
+    [phases, status, activeFacet]
   )
 
   const hasFilters = showStatus || showRoundTabs || showCategoryChips
-  const isFiltered =
-    status !== "all" || activeRound !== "all" || categories.length > 0
 
-  function selectRound(next: string) {
-    setRound(next)
-    // A fresh tab is a fresh context — drop category picks so you never land
-    // on an empty page with no chip left to undo it.
-    setCategories([])
-  }
-  function toggleCategory(name: string) {
-    setCategories((prev) =>
-      prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name]
-    )
-  }
-  function resetFilters() {
-    setStatus("all")
-    setRound("all")
-    setCategories([])
-  }
+  // Selecting either dimension clears the other — they never combine.
+  const selectRound = (round: string) =>
+    setFacet(round === "all" ? ALL_FACET : { kind: "round", value: round })
+  const selectCategory = (name: string | null) =>
+    setFacet(name === null ? ALL_FACET : { kind: "category", value: name })
 
   return (
     <>
       {hasFilters && (
         <div className="mb-6 flex flex-col gap-3">
+          {/* The open/closed VIEW sits on top, alone on its row, because it
+              partitions the menu rather than narrowing it — and because
+              during the tournament it's the control people reach for most. */}
+          {showStatus && (
+            <div className="inline-flex w-fit items-center gap-0.5 rounded-full border border-border bg-surface-sunken p-0.5">
+              {STATUS_OPTIONS.map((opt) => {
+                const active = status === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setStatus(opt.value)}
+                    aria-pressed={active}
+                    className={cn(
+                      "min-h-9 cursor-pointer rounded-full px-4 py-1.5 text-sm font-semibold transition-colors",
+                      active
+                        ? "bg-surface-card text-text-strong shadow-xs"
+                        : "text-text-muted hover:text-text-strong"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Then ONE secondary dimension. Rounds win the tab strip when there
+              are several to choose between; otherwise categories get it. Both
+              are single-select and mutually exclusive, so there is never a
+              combination to reason about. */}
           {showRoundTabs && (
             <div className="flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {["all", ...roundTabs].map((r) => {
-                const active = activeRound === r
+                const active =
+                  r === "all"
+                    ? activeFacet.kind !== "round"
+                    : activeFacet.kind === "round" && activeFacet.value === r
                 return (
                   <button
                     key={r}
@@ -433,7 +412,7 @@ export function BetsMenu({
                     onClick={() => selectRound(r)}
                     aria-current={active ? "true" : undefined}
                     className={cn(
-                      "relative shrink-0 px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors",
+                      "relative min-h-11 shrink-0 cursor-pointer px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors",
                       "after:absolute after:inset-x-3 after:-bottom-px after:h-0.5 after:rounded-full after:transition-colors",
                       active
                         ? "text-indigo-700 after:bg-indigo-700"
@@ -447,69 +426,40 @@ export function BetsMenu({
             </div>
           )}
 
-          {(showStatus || showCategoryChips) && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              {showCategoryChips && (
-                <div className="flex flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  <FilterChip
-                    label="All Categories"
-                    active={categories.length === 0}
-                    onClick={() => setCategories([])}
-                  />
-                  {availableCategories.map((name) => (
-                    <FilterChip
-                      key={name}
-                      label={name}
-                      active={categories.includes(name)}
-                      onClick={() => toggleCategory(name)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {showStatus && (
-                <div className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-full border border-border bg-surface-sunken p-0.5">
-                  {STATUS_OPTIONS.map((opt) => {
-                    const active = status === opt.value
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setStatus(opt.value)}
-                        aria-pressed={active}
-                        className={cn(
-                          "rounded-full px-2.5 py-1 text-xs font-semibold transition-colors",
-                          active
-                            ? "bg-surface-card text-text-strong shadow-xs"
-                            : "text-text-muted hover:text-text-strong"
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
+          {showCategoryChips && (
+            <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <FilterChip
+                label="All Categories"
+                active={activeFacet.kind !== "category"}
+                onClick={() => selectCategory(null)}
+              />
+              {categoryChips.map((name) => (
+                <FilterChip
+                  key={name}
+                  label={name}
+                  active={
+                    activeFacet.kind === "category" && activeFacet.value === name
+                  }
+                  onClick={() => selectCategory(name)}
+                />
+              ))}
             </div>
           )}
         </div>
       )}
 
+      {/* Unreachable by construction — one facet at a time, every option
+          derived from the current view (see lib/bet-filters.ts). Kept as a
+          floor rather than a message about filters, because the only way to
+          land here now is a menu with nothing in the chosen view at all. */}
       {filteredPhases.length === 0 ? (
         <div className="py-6">
           <EmptyState
-            title="No bets match these filters"
-            message="Try a different round, category, or status."
-            action={
-              isFiltered ? (
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  className="text-sm font-semibold text-indigo-700 hover:underline"
-                >
-                  Clear filters
-                </button>
-              ) : undefined
+            title={status === "open" ? "No open bets" : "No closed bets yet"}
+            message={
+              status === "open"
+                ? "Nothing is taking wagers right now. Check the closed bets for how everyone did."
+                : "Nothing has closed yet. Every bet on the menu is still taking wagers."
             }
           />
         </div>
