@@ -10,7 +10,12 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import { parseSheet, validateSheet } from "./import.ts"
+import {
+  clockStaleOpenWarnings,
+  parseSheet,
+  validateSheet,
+} from "./import.ts"
+import type { PhaseClock } from "./phases.ts"
 
 const CATEGORIES = ["Top Finisher", "Match", "Prop Bet"]
 
@@ -197,4 +202,109 @@ test("a results-on-open error lands alongside the duplicate-pick_id error", asyn
   if (result.ok) return
   assert.ok(result.errors.some((e) => /Duplicate pick_id 1/.test(e)))
   assert.ok(result.errors.some((e) => /results may only be published on a closed bet/.test(e)))
+})
+
+// ---------------------------------------------------------------------------
+// Clock-informed stale-open warning (#122)
+// ---------------------------------------------------------------------------
+
+/** A phase clock with the given deadlines; null = never closes. */
+function clock(p1: string | null, p2: string | null = null): PhaseClock {
+  return {
+    phase1_closes_at: p1,
+    phase2_closes_at: p2,
+    show_countdown: true,
+  }
+}
+
+const DEADLINE = "2026-09-24T16:00:00Z" // 11:00 AM CDT
+const BEFORE = new Date("2026-09-24T15:59:59Z")
+const AFTER = new Date("2026-09-24T16:00:01Z")
+
+async function rowsFor(specs: RowSpec[]) {
+  const result = await validate(specs)
+  assert.equal(result.ok, true)
+  if (!result.ok) throw new Error("fixture did not validate")
+  return result.rows
+}
+
+test("clock warning: an open bet past its phase deadline is flagged", async () => {
+  const rows = await rowsFor([{ pickId: 1 }, { pickId: 2 }])
+  const warnings = clockStaleOpenWarnings(rows, clock(DEADLINE), AFTER)
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0], /bet_id 1 \("Bet 1"\) is marked open/)
+  assert.match(warnings[0], /Phase 1's deadline passed at/)
+  assert.match(warnings[0], /\/admin\/close/)
+})
+
+test("clock warning: nothing before the deadline", async () => {
+  const rows = await rowsFor([{ pickId: 1 }])
+  assert.deepEqual(clockStaleOpenWarnings(rows, clock(DEADLINE), BEFORE), [])
+})
+
+test("clock warning: no deadline set means never — the pre-Sprint-25 behaviour", async () => {
+  const rows = await rowsFor([{ pickId: 1 }])
+  assert.deepEqual(clockStaleOpenWarnings(rows, clock(null), AFTER), [])
+})
+
+test("clock warning: a closed bet is not flagged, whatever the clock says", async () => {
+  // The sheet and the clock agree — closed is closed.
+  const rows = await rowsFor([{ pickId: 1, status: "closed" }])
+  assert.deepEqual(clockStaleOpenWarnings(rows, clock(DEADLINE), AFTER), [])
+})
+
+test("clock warning: ONE warning per bet, not one per pick", async () => {
+  // Rows arrive per pick; a five-pick bet must not shout five times.
+  const rows = await rowsFor([
+    { pickId: 1 },
+    { pickId: 2 },
+    { pickId: 3 },
+    { pickId: 4 },
+    { pickId: 5 },
+  ])
+  assert.equal(clockStaleOpenWarnings(rows, clock(DEADLINE), AFTER).length, 1)
+})
+
+test("clock warning: each phase is judged against its own deadline", async () => {
+  // THE CASE THE SHEET-ONLY CHECK CANNOT SEE (#122). Phase 1 is past its
+  // deadline while Phase 2 is still ahead of its own. A sheet that marks both
+  // open is perfectly self-consistent, so validateSheet() has nothing to go on.
+  const rows = await rowsFor([
+    { pickId: 1, betId: 1, phase: 1 },
+    { pickId: 2, betId: 2, phase: 2 },
+  ])
+  const warnings = clockStaleOpenWarnings(
+    rows,
+    clock(DEADLINE, "2026-09-26T16:00:00Z"),
+    AFTER
+  )
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0], /bet_id 1/)
+  assert.match(warnings[0], /Phase 1/)
+})
+
+test("clock warning: a whole phase left open is flagged bet by bet", async () => {
+  // Re-uploading last week's file: every Phase 1 bet still says open.
+  const rows = await rowsFor([
+    { pickId: 1, betId: 1 },
+    { pickId: 2, betId: 2 },
+    { pickId: 3, betId: 3 },
+  ])
+  const warnings = clockStaleOpenWarnings(rows, clock(DEADLINE), AFTER)
+  assert.equal(warnings.length, 3)
+  // And the sheet-only check stays silent on this shape — which is the whole
+  // reason this function exists.
+  const sheetOnly = await validate([
+    { pickId: 1, betId: 1 },
+    { pickId: 2, betId: 2 },
+    { pickId: 3, betId: 3 },
+  ])
+  assert.equal(sheetOnly.ok, true)
+  if (sheetOnly.ok) assert.deepEqual(sheetOnly.warnings, [])
+})
+
+test("clock warning: the deadline boundary is inclusive, like the rest of the clock", async () => {
+  const rows = await rowsFor([{ pickId: 1 }])
+  const exactly = new Date(DEADLINE)
+  assert.equal(clockStaleOpenWarnings(rows, clock(DEADLINE), exactly).length, 1)
 })

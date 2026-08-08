@@ -9,6 +9,7 @@ import {
   groupPlacementsByPick,
   isBetSettled,
   normalizeClosedPlacements,
+  summarizeBetReveal,
   toResult,
   type ClosedPlacementQueryRow,
 } from "./closed-bets.ts"
@@ -172,4 +173,65 @@ test("picks nobody bet on are simply absent from the grouping", () => {
   )
   assert.equal(byPick["p-1"], undefined)
   assert.equal(byPick["p-9"].total, 10)
+})
+
+// ---------------------------------------------------------------------------
+// summarizeBetReveal (#103) — the collapsed accordion's one-liner
+// ---------------------------------------------------------------------------
+
+test("reveal summary counts bettors and totals the money", () => {
+  const byPick = groupPlacementsByPick(
+    normalizeClosedPlacements([
+      row({ pick_id: "p-1", user_id: "u-1", amount: 5 }),
+      row({ pick_id: "p-1", user_id: "u-2", amount: 12 }),
+      row({ pick_id: "p-2", user_id: "u-3", amount: 8 }),
+    ])
+  )
+  assert.deepEqual(summarizeBetReveal(["p-1", "p-2"], byPick), {
+    bettorCount: 3,
+    total: 25,
+  })
+})
+
+test("reveal summary counts a person once across a multi-pick bet", () => {
+  // THE BUG THIS PINS. Top Finisher lets one person back several picks.
+  // Summing the per-pick lists would report 4 bettors for two people.
+  const byPick = groupPlacementsByPick(
+    normalizeClosedPlacements([
+      row({ pick_id: "p-1", user_id: "u-1", amount: 5 }),
+      row({ pick_id: "p-2", user_id: "u-1", amount: 5 }),
+      row({ pick_id: "p-3", user_id: "u-1", amount: 5 }),
+      row({ pick_id: "p-1", user_id: "u-2", amount: 10 }),
+    ])
+  )
+  const summary = summarizeBetReveal(["p-1", "p-2", "p-3"], byPick)
+  assert.equal(summary.bettorCount, 2)
+  // The money still sums — every stake is its own money.
+  assert.equal(summary.total, 25)
+})
+
+test("reveal summary reads zero for a bet nobody wagered on", () => {
+  // A closed bet with no takers still renders; the collapsed row has to say
+  // something sensible rather than "0 bettors · $0" by accident of arithmetic.
+  assert.deepEqual(summarizeBetReveal(["p-1", "p-2"], {}), {
+    bettorCount: 0,
+    total: 0,
+  })
+})
+
+test("reveal summary ignores picks outside the bet", () => {
+  const byPick = groupPlacementsByPick(
+    normalizeClosedPlacements([
+      row({ pick_id: "p-1", user_id: "u-1", amount: 5 }),
+      row({ pick_id: "other", user_id: "u-9", amount: 99 }),
+    ])
+  )
+  assert.deepEqual(summarizeBetReveal(["p-1"], byPick), {
+    bettorCount: 1,
+    total: 5,
+  })
+})
+
+test("reveal summary handles a bet with no picks at all", () => {
+  assert.deepEqual(summarizeBetReveal([], {}), { bettorCount: 0, total: 0 })
 })

@@ -2,9 +2,13 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { stakeEntryError } from "@/lib/placements"
+import {
+  placementTarget,
+  stakeEntryError,
+  type OnBehalfOf,
+} from "@/lib/placements"
 import { cn } from "@/lib/utils"
-import { PlayerNameLink } from "@/components/player/player-name-link"
+import { PickLabel } from "./pick-label"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { OddsChip } from "./odds-chip"
@@ -42,11 +46,18 @@ export type BetPlacementCardProps = {
    * inline, so the stake input never reflows. The row still flags its own
    * `error` state to turn the input border red. */
   onError?: (message: string) => void
-  /** Set when an admin is entering wagers for a member (Sprint 23 / #101).
-   * Switches the writes to the on-behalf endpoint and names the bettor in the
-   * body; absent = the viewer is betting for themselves. The §7 rules are
-   * evaluated against the member either way — the server owns that, not this. */
-  onBehalfOf?: { userId: string; name: string } | null
+  /**
+   * The member an admin is entering wagers for (Sprint 23 / #101), or null
+   * when the viewer is betting for themselves. Switches the writes to the
+   * on-behalf endpoint and names the bettor in the body. The §7 rules are
+   * evaluated against the member either way — the server owns that, not this.
+   *
+   * REQUIRED, with no default, on purpose. A refactor that drops the prop on
+   * the way through BetsMenu would make an admin's wager for a member post as
+   * THEMSELVES — valid, validated, recorded against the wrong person, and
+   * invisible from both ends. Required means that refactor fails to compile.
+   */
+  onBehalfOf: OnBehalfOf
 }
 
 /** The confirmed placement behind a row's receipt — the locked odds and stake
@@ -79,16 +90,13 @@ export function BetPlacementCard({
   placements,
   lockedOdds = {},
   onError,
-  onBehalfOf = null,
+  onBehalfOf,
 }: BetPlacementCardProps) {
   const router = useRouter()
 
-  // One endpoint swap covers place, edit and remove. The on-behalf route is a
-  // different URL rather than a flag on the member route so the admin gate is
-  // structural — /api/placements can never be talked into writing for someone
-  // else, whatever body it's handed.
-  const endpoint = onBehalfOf ? "/api/admin/placements" : "/api/placements"
-  const bettorField = onBehalfOf ? { userId: onBehalfOf.userId } : {}
+  // One target covers place, edit and remove. Resolved in lib/placements.ts so
+  // the swap is unit-tested rather than trusted to two ternaries.
+  const { endpoint, bettorField } = placementTarget(onBehalfOf)
 
   const [rows, setRows] = React.useState<Record<string, RowState>>(() =>
     Object.fromEntries(
@@ -299,30 +307,21 @@ export function BetPlacementCard({
                     )}
                   </button>
                 )}
-                {pick.player_user_id ? (
-                  // A named golfer: the label links to their profile. Selection
-                  // (pick-one bets) stays on the radio to its left; the tap-to-
-                  // select label is traded for the profile link per the brief.
-                  <PlayerNameLink
-                    userId={pick.player_user_id}
-                    label={pick.label}
-                    avatarUrl={pick.player_avatar_url}
-                    className="min-w-0"
-                    nameClassName="text-base leading-snug font-medium text-text-strong"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => select(pick)}
-                    className={cn(
-                      "min-w-0 text-left text-base leading-snug font-medium text-pretty text-text-strong",
-                      !allowsMultiplePicks && "cursor-pointer"
-                    )}
-                    tabIndex={allowsMultiplePicks ? -1 : undefined}
-                  >
-                    {pick.label}
-                  </button>
-                )}
+                {/* A named golfer's name links to their profile; selection
+                    (pick-one bets) stays on the radio to its left. An unnamed
+                    pick ("Field", "Yes") keeps the tap-to-select label. The
+                    stroke handicap is a badge beside the name either way, and
+                    never inside the link (#102). */}
+                <PickLabel
+                  label={pick.label}
+                  playerUserId={pick.player_user_id}
+                  playerAvatarUrl={pick.player_avatar_url}
+                  className="min-w-0"
+                  nameClassName="text-base leading-snug font-medium text-text-strong"
+                  onNameClick={
+                    pick.player_user_id ? undefined : () => select(pick)
+                  }
+                />
               </div>
               <div className={cn(!allowsMultiplePicks && "pl-[30px]")}>
                 <OddsChip

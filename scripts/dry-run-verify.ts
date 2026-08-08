@@ -29,6 +29,7 @@ import fs from "node:fs"
 import path from "node:path"
 import {
   buildImportPlan,
+  clockStaleOpenWarnings,
   parseSheet,
   validateSheet,
   type CategoryRow,
@@ -37,6 +38,7 @@ import {
   type ImportPlan,
   type UserRow,
 } from "../lib/import.ts"
+import type { PhaseClock } from "../lib/phases.ts"
 import {
   validatePlacement,
   checkPickMinimum,
@@ -147,6 +149,17 @@ function applyPlan(plan: ImportPlan, tid: string) {
   runSql(s.join("\n"))
 }
 
+/** The tournament's phase deadlines, for the clock-informed import warning. */
+function fetchPhaseClock(tid: string): PhaseClock {
+  const [row] = queryJson<
+    { phase1_closes_at: string | null; phase2_closes_at: string | null; show_countdown: boolean }[]
+  >(
+    `SELECT phase1_closes_at, phase2_closes_at, show_countdown
+       FROM public.tournaments WHERE id = ${lit(tid)}`
+  )
+  return row ?? { phase1_closes_at: null, phase2_closes_at: null, show_countdown: false }
+}
+
 /** Upload one sheet the way /admin/import does, and assert re-upload is a no-op. */
 async function upload(file: string, tid: string, opts: { expectIdempotent?: boolean } = {}) {
   const parsed = await parseSheet(fs.readFileSync(path.join(SHEETS, file)), file)
@@ -174,6 +187,9 @@ async function upload(file: string, tid: string, opts: { expectIdempotent?: bool
   const warnings = [
     // Sheet-level warnings (stale-open bets, #97), same as the route reports.
     ...validation.warnings,
+    // And the clock-informed half (#122), also as the route reports it — the
+    // harness reads the live clock off the tournaments row the same way.
+    ...clockStaleOpenWarnings(validation.rows, fetchPhaseClock(tid), new Date()),
     ...plan.oddsChanges
       .filter((c) => withPlacements.has(c.sheetPickId))
       .map(

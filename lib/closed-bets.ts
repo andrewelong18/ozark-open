@@ -118,3 +118,43 @@ export function groupPlacementsByPick(
   }
   return byPick
 }
+
+// ---------------------------------------------------------------------------
+// Bet-level reveal summary (Sprint 24 / #103) — what the collapsed accordion
+// shows before anyone taps it.
+// ---------------------------------------------------------------------------
+
+/** The one-line summary above a closed bet's collapsed reveal. */
+export type BetReveal = {
+  /** DISTINCT people who wagered anywhere on this bet. */
+  bettorCount: number
+  /** Every dollar staked on the bet, across all its picks. */
+  total: number
+}
+
+/**
+ * Summarize a closed bet's wagers for the collapsed reveal.
+ *
+ * Bettors are counted DISTINCT across the whole bet, not summed per pick: a
+ * multi-pick category (Top Finisher) lets one person back several picks, and
+ * summing the per-pick lists would report "7 bettors" for four people. The
+ * dollar total does sum — every stake is its own money.
+ *
+ * Picks nobody backed are simply absent from `byPick`; a bet nobody touched at
+ * all returns { bettorCount: 0, total: 0 }, which is a real state — a closed
+ * bet still renders whether or not anyone wagered on it.
+ */
+export function summarizeBetReveal(
+  pickIds: string[],
+  byPick: Record<string, PickPlacements>
+): BetReveal {
+  const bettors = new Set<string>()
+  let total = 0
+  for (const pickId of pickIds) {
+    const group = byPick[pickId]
+    if (!group) continue
+    for (const placement of group.placements) bettors.add(placement.user_id)
+    total += group.total
+  }
+  return { bettorCount: bettors.size, total }
+}
