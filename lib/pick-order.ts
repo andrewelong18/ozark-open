@@ -17,6 +17,22 @@
 // THE ORDER. Favourites first, so a bet reads best-to-worst however the
 // spreadsheet was typed, with sheet_pick_id breaking ties — which is what
 // makes it deterministic across re-uploads.
+//
+// WHERE IT APPLIES — /bets ONLY. #105 left this open; Sprint 24 settled it.
+// /my-bets and /admin/view keep sheet_pick_id, for reasons specific to each:
+//
+//   - /admin/view is a replica of the admin's View sheet. Its whole job is to
+//     show what the spreadsheet shows, so re-ordering it would defeat the page.
+//   - /my-bets lists only the picks you actually wagered on — a partial set.
+//     Favourites-first over a partial set sorts an arbitrary subset and reads
+//     as noise; sheet order at least stays stable between visits.
+//
+// The menu is the one surface where you scan a bet's FULL slate to choose,
+// which is the only place best-to-worst earns its keep.
+//
+// This ordering is applied once, server-side, in app/bets/page.tsx (groupBets).
+// components/betting/bets-menu.tsx must NOT re-sort — it did until Sprint 24,
+// by sheet_pick_id, which silently overrode every bit of this.
 
 /**
  * Implied probability from the American price.

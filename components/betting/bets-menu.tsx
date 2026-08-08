@@ -378,8 +378,9 @@ export function BetsMenu({
                               bet.bet_categories?.allows_multiple_picks ?? true
                             }
                             picks={bet.bet_picks
-                              .slice()
-                              .sort((a, b) => a.sheet_pick_id - b.sheet_pick_id)
+                              // Already favourites-first from the page
+                              // (sortPicks — #105). Re-sorting here is what
+                              // silently overrode it until Sprint 24.
                               .map((pick) => ({
                                 id: pick.id,
                                 label: pick.label,
@@ -425,8 +426,7 @@ export function BetsMenu({
                               )}
                             </div>
                             {bet.bet_picks
-                              .slice()
-                              .sort((a, b) => a.sheet_pick_id - b.sheet_pick_id)
+                              // Favourites-first from the page — see above.
                               .map((pick) => {
                                 const group =
                                   bet.status === "closed"
