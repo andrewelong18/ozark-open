@@ -312,13 +312,17 @@ export async function removePlacement(
   }
 
   // The actor is stamped on removal too — a soft delete is an UPDATE, and the
-  // admin UPDATE policy requires placed_by_user_id = auth.uid(). It also keeps
-  // the column honest about who last touched the row.
+  // admin UPDATE policy requires placed_by_user_id = auth.uid().
+  //
+  // Stamped UNCONDITIONALLY, including back to null on the member path: the
+  // column means "who last wrote this row", and a member removing a wager an
+  // admin entered for them did touch it last. Leaving the old value would make
+  // the row claim an admin performed a removal they had nothing to do with.
   const { error } = await supabase
     .from("bet_placements")
     .update({
       deleted_at: new Date().toISOString(),
-      ...(onBehalf(identity) ? { placed_by_user_id: identity.actor_id } : {}),
+      placed_by_user_id: onBehalf(identity) ? identity.actor_id : null,
     })
     .eq("id", row.id)
   if (error) {

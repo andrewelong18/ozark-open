@@ -57,7 +57,7 @@ The wager half does not depend on it: it works for any approved member, which is
 | What | Where |
 |---|---|
 | Display-name edit (#99) | `components/admin/people-console.tsx` EditPanel + `app/api/admin/participants/route.ts` PATCH |
-| Rule validation + derived limits (#100) | `lib/rules.ts` + `lib/rules.test.ts` (23 tests) |
+| Rule validation + derived limits (#100) | `lib/rules.ts` + `lib/rules.test.ts` (26 tests) |
 | House-rules editor (#100) | `app/admin/rules/page.tsx` + `components/admin/rules-form.tsx` → `app/api/admin/rules/route.ts` |
 | The spec (#101) | ADR 0001 §13, written before the code |
 | Audit column + admin RLS (#101) | `supabase/migrations/20260811000000_admin_placed_wagers.sql`, proven by 9 new checks in `scripts/placement-roundtrip.ts` |
@@ -70,7 +70,7 @@ Notes for whoever reads this next:
 
 - **The prod migration is applied and verified** (Aug 8, 2026) — column nullable, both new policies present, member policies unchanged. It's additive, so merge order isn't load-bearing.
 - **No backfill on `placed_by_user_id`.** NULL means the bettor placed it themselves, which is already true of every row written before this sprint. There is no retroactive claim being made about history.
-- Verified locally: `npm test` **295 pass** (from 265), `npx tsc --noEmit` clean, `npm run build`, `local-db-verify.sh`, and `dry-run-verify.sh` end to end with the pool unchanged at $425 − $32 = **$393**, 0 pending.
+- Verified locally: `npm test` **298 pass** (from 265), `npx tsc --noEmit` clean, `npm run build`, `local-db-verify.sh`, and `dry-run-verify.sh` end to end with the pool unchanged at $425 − $32 = **$393**, 0 pending.
 - Browser walkthrough is filed as [#125](https://github.com/andrewelong18/ozark-open/issues/125) — this container has no Supabase env vars, so no dev server.
 
 ### Out of scope (don't build)

@@ -202,6 +202,47 @@ test("the self-bet column tracks its own percentage and cap", () => {
   assert.equal(at(50)?.max_self_bet, 10) // capped
 })
 
+// Regression: ruleLimitsPreview runs on every keystroke in the rules form,
+// against half-typed values. A fat-fingered max entry used to pass validation
+// (raise the caps to match and every check clears) and then build a
+// ~200,000-row table with a per-dollar loop behind it, hanging the tab.
+test("a mistyped entry fee can't build an enormous preview table", () => {
+  const huge = withRules({
+    entry_fee_max: 1_000_000,
+    max_single_bet_cap: 1_000_000,
+  })
+  const started = Date.now()
+  const { rows } = ruleLimitsPreview(huge)
+  assert.ok(rows.length <= 12, `got ${rows.length} rows`)
+  assert.ok(Date.now() - started < 100, "preview must not walk every dollar")
+  // The bounds are still both present — the step widens, the table doesn't
+  // lose its ends.
+  assert.equal(rows[0].entry_fee, 20)
+  assert.equal(rows.at(-1)?.entry_fee, 1_000_000)
+})
+
+test("validation refuses the stray zero before it ever reaches the row", () => {
+  assert.match(
+    validateTournamentRules(
+      withRules({ entry_fee_max: 1_000_000, max_single_bet_cap: 1_000_000 })
+    )[0],
+    /looks like a typo/
+  )
+  assert.match(
+    validateTournamentRules(withRules({ max_picks_per_phase: 1000 }))[0],
+    /looks like a typo/
+  )
+})
+
+test("the generous ceiling doesn't reject a plausible house rule", () => {
+  assert.deepEqual(
+    validateTournamentRules(
+      withRules({ entry_fee_max: 500, max_single_bet_cap: 250, max_self_bet_cap: 125 })
+    ),
+    []
+  )
+})
+
 test("a single fixed entry fee previews one row", () => {
   const { rows } = ruleLimitsPreview(
     withRules({ entry_fee_min: 40, entry_fee_max: 40 })

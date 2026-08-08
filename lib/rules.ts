@@ -87,8 +87,17 @@ export function parseRulesBody(body: unknown): ParsedRules {
 /** Percentages are stored as numeric(3,2), so more than two decimals silently
  * rounds in the database — refuse it here instead. */
 function hasAtMostTwoDecimals(n: number): boolean {
-  return Number.isInteger(Math.round(n * 100)) && Math.abs(n * 100 - Math.round(n * 100)) < 1e-9
+  return Math.abs(n * 100 - Math.round(n * 100)) < 1e-9
 }
+
+/**
+ * Fat-finger ceilings. These are NOT house rules — they're a guard against a
+ * stray zero, which is why they're an order of magnitude past anything this
+ * pool would ever use. Without them a mistyped entry fee is saved happily and
+ * then governs real placements.
+ */
+const SANE_MAX_DOLLARS = 10_000
+const SANE_MAX_PICKS = 100
 
 /**
  * Every reason these values can't be saved, as human-readable strings. Empty
@@ -99,9 +108,16 @@ export function validateTournamentRules(rules: TournamentRules): string[] {
 
   for (const field of RULE_INT_FIELDS) {
     const value = rules[field]
+    const isPickCount =
+      field === "min_picks_per_tournament" || field === "max_picks_per_phase"
+    const ceiling = isPickCount ? SANE_MAX_PICKS : SANE_MAX_DOLLARS
     if (!Number.isInteger(value))
       errors.push(`${RULE_LABELS[field]} must be a whole number.`)
     else if (value < 1) errors.push(`${RULE_LABELS[field]} must be at least 1.`)
+    else if (value > ceiling)
+      errors.push(
+        `${RULE_LABELS[field]} is ${value} — that looks like a typo. The most this accepts is ${ceiling}.`
+      )
   }
 
   for (const field of RULE_PCT_FIELDS) {
@@ -170,14 +186,50 @@ export type RuleLimitsPreview = {
   self_cap_binds_at: number | null
 }
 
-/** Sample entry fees: the two bounds plus the round $5 steps between them, so
- * the table stays glanceable over a $20–$50 range instead of listing 31 rows. */
+/** A table longer than this stops being glanceable and starts being a wall. */
+const MAX_PREVIEW_ROWS = 12
+
+/**
+ * Sample entry fees: the two bounds plus the round $5 steps between them, so
+ * the table reads at a glance over a $20–$50 range instead of listing 31 rows.
+ *
+ * The step widens rather than the row count growing. This function runs on
+ * every keystroke in the rules form, against values the admin is still
+ * half-way through typing — a fixed $5 step means a mistyped "$1000000" max
+ * builds a 200,000-row table and hangs the tab.
+ */
 function sampleEntryFees(min: number, max: number): number[] {
-  const fees = new Set<number>([min, max])
-  for (let fee = Math.ceil(min / 5) * 5; fee < max; fee += 5) {
+  if (min >= max) return [min]
+  // Divide by the INTERIOR row budget: min and max are always added on top of
+  // whatever the loop produces, so they each need a slot reserved.
+  const step = Math.max(5, Math.ceil((max - min) / (MAX_PREVIEW_ROWS - 2)))
+  const fees = new Set<number>([min])
+  for (let fee = Math.ceil(min / step) * step; fee < max; fee += step) {
     if (fee > min) fees.add(fee)
   }
+  fees.add(max)
   return [...fees].sort((a, b) => a - b)
+}
+
+/**
+ * Smallest entry fee at which the hard cap binds instead of the percentage —
+ * i.e. the smallest f where floor(pct × f) >= cap. Since cap is an integer
+ * that reduces to f >= cap / pct, so it's one division rather than a walk over
+ * every dollar in the range (same reason as above: this runs while typing).
+ * Null when the cap never binds inside [min, max].
+ */
+function capBindsAt(
+  pct: number,
+  cap: number,
+  min: number,
+  max: number
+): number | null {
+  if (!(pct > 0)) return null
+  // Nudge before ceil so an exact quotient (20 / 0.5 = 40) isn't pushed to 41
+  // by floating-point drift.
+  const threshold = Math.ceil(cap / pct - 1e-9)
+  if (threshold > max) return null
+  return Math.max(threshold, min)
 }
 
 /**
@@ -194,14 +246,19 @@ export function ruleLimitsPreview(rules: TournamentRules): RuleLimitsPreview {
     max_self_bet: maxSelfBet(entry_fee, rules),
   }))
 
-  let singleCap: number | null = null
-  let selfCap: number | null = null
-  for (let fee = min; fee <= max; fee++) {
-    if (singleCap === null && Math.floor(rules.max_single_bet_pct * fee) >= rules.max_single_bet_cap)
-      singleCap = fee
-    if (selfCap === null && Math.floor(rules.max_self_bet_pct * fee) >= rules.max_self_bet_cap)
-      selfCap = fee
+  return {
+    rows,
+    single_cap_binds_at: capBindsAt(
+      rules.max_single_bet_pct,
+      rules.max_single_bet_cap,
+      min,
+      max
+    ),
+    self_cap_binds_at: capBindsAt(
+      rules.max_self_bet_pct,
+      rules.max_self_bet_cap,
+      min,
+      max
+    ),
   }
-
-  return { rows, single_cap_binds_at: singleCap, self_cap_binds_at: selfCap }
 }
