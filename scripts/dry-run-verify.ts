@@ -39,7 +39,7 @@ import {
 } from "../lib/import.ts"
 import {
   validatePlacement,
-  checkPhaseMinimums,
+  checkPickMinimum,
   checkTournamentTotal,
   maxSingleBet,
   maxSelfBet,
@@ -48,6 +48,7 @@ import {
 } from "../lib/validation.ts"
 import {
   buildResultsTable,
+  finalizeReadiness,
   normalizePayoutRows,
   roundCents,
   type PayoutViewQueryRow,
@@ -170,13 +171,17 @@ async function upload(file: string, tid: string, opts: { expectIdempotent?: bool
             WHERE p.deleted_at IS NULL AND p.pick_id IN (${changedUuids.map(lit).join(", ")})`
         ).map((r) => r.sheet_pick_id)
   )
-  const warnings = plan.oddsChanges
-    .filter((c) => withPlacements.has(c.sheetPickId))
-    .map(
-      (c) =>
-        `Odds changed on "${c.pickLabel}" (${c.betTitle}) while it has live placements: ` +
-        `${c.from.fractionalOdds} → ${c.to.fractionalOdds}.`
-    )
+  const warnings = [
+    // Sheet-level warnings (stale-open bets, #97), same as the route reports.
+    ...validation.warnings,
+    ...plan.oddsChanges
+      .filter((c) => withPlacements.has(c.sheetPickId))
+      .map(
+        (c) =>
+          `Odds changed on "${c.pickLabel}" (${c.betTitle}) while it has live placements: ` +
+          `${c.from.fractionalOdds} → ${c.to.fractionalOdds}.`
+      ),
+  ]
 
   applyPlan(plan, tid)
   console.log(
@@ -269,9 +274,11 @@ function auditPlacements(rules: TournamentRules, label: string) {
           bet: {
             id: row.bet_id,
             // The seed writes directly, so judge it against the state the bet
-            // was in when a human would have placed: open.
+            // was in when a human would have placed: open, and inside its
+            // phase's window (the deadline is what Act 6 walks through).
             status: "open",
             phase: row.phase,
+            phase_closed: false,
             allows_multiple_picks: row.allows_multiple_picks,
             pick_player_user_ids: playersByBet.get(row.bet_id) ?? [],
           },
@@ -303,7 +310,7 @@ async function main() {
   const tid = runSql("SELECT id FROM public.tournaments WHERE year = 2026")
   if (!tid) throw new Error("No 2026 tournament — apply the migrations first.")
   const rules = queryJson<TournamentRules[]>(
-    `SELECT entry_fee_min, entry_fee_max, min_picks_per_phase, max_picks_per_phase,
+    `SELECT entry_fee_min, entry_fee_max, min_picks_per_tournament, max_picks_per_phase,
             max_single_bet_pct::float8 AS max_single_bet_pct, max_single_bet_cap,
             max_self_bet_pct::float8 AS max_self_bet_pct, max_self_bet_cap
        FROM public.tournaments WHERE year = 2026`
@@ -453,8 +460,27 @@ async function main() {
 
   // ── Act 6 · close Phase 1, Round 1 results ──────────────────────────────
   section("Act 6–7 · Phase 1 closes, Round 1 results land")
+  // #98: this used to flag 13 of 14 people on off_exact_total at Phase 1
+  // close, burying the one real straggler. The bar is no longer "Devin is in
+  // there somewhere" — it is that the phone line names him AND NOBODY ELSE.
   const compliance = runSqlFile(path.join(ROOT, "docs/admin/phase-compliance.sql"))
-  check("the chase list flags Devin Arand's 3 picks", /Devin Arand/.test(compliance), "phase-compliance.sql")
+  const chaseLine = compliance
+    .split("\n")
+    .find((l) => l.includes("TEXT THESE PEOPLE"))
+    ?.trim() ?? ""
+  console.log(`      ${chaseLine}`)
+  check("the chase list is scoped to the Phase 1 close", /Closing Phase 1/.test(chaseLine), chaseLine)
+  check("it names Devin Arand's 3 picks", /Devin Arand \(3 of 5 picks\)/.test(chaseLine), chaseLine)
+  check(
+    "and nobody else — one name on the line",
+    chaseLine.split(" — TEXT THESE PEOPLE: ")[1]?.split("), ").length === 1,
+    chaseLine
+  )
+  check(
+    "off-exact-total alone doesn't chase anyone at Phase 1 close (#98)",
+    !/of \$/.test(chaseLine),
+    chaseLine
+  )
 
   await upload("2-phase1-closed-r1-results.xlsx", tid)
   check("13 Phase 1 bets closed", runSql("SELECT count(*) FROM public.bets WHERE phase = 1 AND status = 'closed'") === "13")
@@ -512,10 +538,19 @@ async function main() {
       pick_player_user_id: r.pick_player_user_id,
     }))
     if (!checkTournamentTotal(existing, slate[0].entry_fee).exact) offExact++
-    if (checkPhaseMinimums(existing, rules).some((p) => !p.meets_minimum)) underMin++
+    if (!checkPickMinimum(existing, rules).meets_minimum) underMin++
   }
   check("exactly one bettor is off the exact total (Devin)", offExact === 1, `${offExact} off`)
-  check("exactly one bettor is under a phase minimum (Devin)", underMin === 1, `${underMin} under`)
+  // Deliberately changed by #96, not relaxed. Devin's 3 Phase 1 + 5 Phase 2 = 8
+  // picks used to flag on the per-phase minimum; against a tournament-wide
+  // minimum of 5 his split is legal, which is the whole point of the rule
+  // change. He is STILL the one bettor who needs a text — on the exact total,
+  // asserted above. If this ever reads 1 again, a per-phase minimum is back.
+  check(
+    "no bettor is under the tournament-wide minimum — Devin's 3+5 split is legal now (#96)",
+    underMin === 0,
+    `${underMin} under`
+  )
 
   await upload("4-phase2-closed-final.xlsx", tid)
   check("every bet is closed", runSql("SELECT count(*) FROM public.bets WHERE status <> 'closed'") === "0")
@@ -570,6 +605,47 @@ async function main() {
     `Σ actual = ${roundCents(table.rows.reduce((s, r) => s + r.actual, 0))}`
   )
   check("no placement is left pending", table.pending === 0)
+
+  // Sprint 25 / #108: the guard on the Saturday-night unlock. Everything is
+  // settled at this point, so it must say yes — and it must say no the moment
+  // a single verdict is missing. The second half is the one that matters: the
+  // failure it prevents is silent, because aggregatePayouts SKIPS a pending
+  // placement instead of scoring it zero, so the pool divides across only the
+  // settled wagers and every number still reconciles.
+  const settled = finalizeReadiness({
+    pendingPicks: Number(runSql("SELECT count(*) FROM public.bet_picks WHERE result = 'pending'")),
+    unclosedBets: Number(runSql("SELECT count(*) FROM public.bets WHERE status <> 'closed'")),
+  })
+  check("the tournament is safe to finalize", settled.ok, settled.blockers.join(" "))
+
+  const oneUnresolved = finalizeReadiness({ pendingPicks: 1, unclosedBets: 0 })
+  check(
+    "one unresolved pick is enough to refuse the unlock",
+    !oneUnresolved.ok && /split the whole pool/.test(oneUnresolved.blockers[0] ?? "")
+  )
+
+  // And prove the hazard is real rather than theoretical, on this very
+  // dataset: drop one pick back to pending and the same table pays out more
+  // than the pool actually holds.
+  const oneBack = runSql(
+    "SELECT sheet_pick_id FROM public.bet_picks WHERE result = 'hit' ORDER BY sheet_pick_id LIMIT 1"
+  )
+  runSql(`UPDATE public.bet_picks SET result = 'pending' WHERE sheet_pick_id = ${oneBack}`)
+  const skewed = buildResultsTable(
+    participants,
+    normalizePayoutRows(
+      queryJson<PayoutViewQueryRow[]>(
+        `SELECT placement_id, user_id, amount, result, theoretical_payout, refunded_stake
+           FROM public.placement_payouts_view WHERE tournament_id = ${lit(tid)}`
+      )
+    )
+  )
+  check(
+    "with one pick unresolved the shares inflate — the exact silent failure (#108)",
+    skewed.pending > 0 && skewed.sum_theoretical < table.sum_theoretical,
+    `${skewed.pending} pending, Σ theo ${roundCents(skewed.sum_theoretical)} vs ${roundCents(table.sum_theoretical)}`
+  )
+  runSql(`UPDATE public.bet_picks SET result = 'hit' WHERE sheet_pick_id = ${oneBack}`)
   const steve = table.rows.find((r) => r.display_name === "Steve Esswein")
   check(
     "the paid-but-never-wagered control gets $0 and loses his entry",
@@ -591,6 +667,35 @@ async function main() {
     check("the bad status is caught", brokenValidation.errors.some((e) => /status/i.test(e)))
     check("the zero odds are caught", brokenValidation.errors.some((e) => /odds/i.test(e)))
     check("the duplicate pick_id is caught", brokenValidation.errors.some((e) => /pick_id/i.test(e)))
+  }
+  check("not one row reached the database", runSql("SELECT count(*) || '/' || (SELECT count(*) FROM public.bet_picks) FROM public.bets") === before, before)
+
+  // ── Results on a live book (#97) ────────────────────────────────────────
+  // The Jul 31 mistake, rehearsed. Every row here is contract-valid on its
+  // own; only the status/result pairing is wrong. Before Sprint 22 this file
+  // imported cleanly and published Round 1 verdicts onto bets that were still
+  // taking stakes.
+  section("Act 3b · results on an open book must be refused")
+  const parsedLive = await parseSheet(
+    fs.readFileSync(path.join(SHEETS, "X-results-on-open.xlsx")),
+    "X-results-on-open.xlsx"
+  )
+  const liveState = fetchState(tid)
+  const liveValidation = validateSheet(parsedLive, liveState.categories.map((c) => c.name))
+  check("the file is rejected outright", !liveValidation.ok)
+  if (!liveValidation.ok) {
+    for (const e of liveValidation.errors.slice(0, 3)) console.log(`      ${e}`)
+    check(
+      "every error names its row and says why",
+      liveValidation.errors.every((e) =>
+        /^Row \d+: result ".+" on bet_id \d+, which is still open — results may only be published on a closed bet\./.test(e)
+      )
+    )
+    check(
+      "one error per verdict-bearing row (57 Phase 1 picks)",
+      liveValidation.errors.length === 57,
+      `${liveValidation.errors.length} errors`
+    )
   }
   check("not one row reached the database", runSql("SELECT count(*) || '/' || (SELECT count(*) FROM public.bet_picks) FROM public.bets") === before, before)
 

@@ -6,7 +6,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import {
-  checkPhaseMinimums,
+  checkPickMinimum,
   checkTournamentTotal,
   isSelfPick,
   maxSelfBet,
@@ -30,7 +30,7 @@ import {
 const rules: TournamentRules = {
   entry_fee_min: 20,
   entry_fee_max: 50,
-  min_picks_per_phase: 5,
+  min_picks_per_tournament: 5,
   max_picks_per_phase: 10,
   max_single_bet_pct: 0.5,
   max_single_bet_cap: 20,
@@ -59,6 +59,10 @@ function ctx(overrides: {
       id: "bet-target",
       status: "open",
       phase: 1,
+      // The clock is stamped by buildPlacementContext in the real path; here
+      // the default is "deadline not reached" so every other rule is tested
+      // against a live phase (Sprint 25 / #106).
+      phase_closed: false,
       allows_multiple_picks: true,
       pick_player_user_ids: [null],
       ...overrides.bet,
@@ -335,9 +339,21 @@ test("opponent block: doesn't apply in multi-pick categories", () => {
 // ---------------------------------------------------------------------------
 
 test("bet status: hidden and closed bets reject wagers", () => {
-  assert.equal(validateBetOpen("open"), null)
-  assert.match(validateBetOpen("closed")!, /not open/)
-  assert.match(validateBetOpen("hidden")!, /not open/)
+  const live = { phase: 1, phase_closed: false } as const
+  assert.equal(validateBetOpen({ status: "open", ...live }), null)
+  assert.match(validateBetOpen({ status: "closed", ...live })!, /not open/)
+  assert.match(validateBetOpen({ status: "hidden", ...live })!, /not open/)
+
+  // The deadline closes wagering even on a bet the sheet still calls open —
+  // the two gates are independent, and the message says which one bit.
+  assert.match(
+    validateBetOpen({ status: "open", phase: 1, phase_closed: true })!,
+    /^Phase 1 is closed — the deadline has passed\.$/
+  )
+  assert.match(
+    validateBetOpen({ status: "open", phase: 2, phase_closed: true })!,
+    /^Phase 2 is closed/
+  )
 })
 
 test("validatePlacement: a legal wager passes with no review flag", () => {
@@ -372,36 +388,68 @@ test("validatePlacement: collects every violated rule", () => {
 })
 
 // ---------------------------------------------------------------------------
-// Phase-completeness (§8.1 second group — never blocking)
+// Completeness (§8.1 second group — never blocking)
+//
+// Rule 2's lower bound spans BOTH phases as of #96 (Pat, Jul 31). These
+// assertions previously encoded the per-phase minimum; they are rewritten
+// around the tournament-wide one, and the first test below is the case the
+// old rule got wrong.
 // ---------------------------------------------------------------------------
 
-test("phase minimums: under 5 picks in a phase you bet in is reported", () => {
-  const existing = [
-    ...Array.from({ length: 3 }, (_, i) => placement({ pick_id: `p1-${i}`, phase: 1 })),
-    ...Array.from({ length: 5 }, (_, i) =>
-      placement({ pick_id: `p2-${i}`, phase: 2 as const })
-    ),
-  ]
-  const report = checkPhaseMinimums(existing, rules)
-  assert.equal(report.length, 2)
-  assert.deepEqual(report[0], {
-    phase: 1,
-    pick_count: 3,
-    meets_minimum: false,
-    message: "Only 3 of the 5 minimum picks in Phase 1.",
+function picks(count: number, phase: 1 | 2): ExistingPlacement[] {
+  return Array.from({ length: count }, (_, i) =>
+    placement({ pick_id: `p${phase}-${i}`, phase })
+  )
+}
+
+test("pick minimum: 3 in Phase 1 + 5 in Phase 2 meets it (#96 — the old rule flagged this)", () => {
+  const existing = [...picks(3, 1), ...picks(5, 2)]
+  assert.deepEqual(checkPickMinimum(existing, rules), {
+    pick_count: 8,
+    meets_minimum: true,
+    message: null,
   })
-  assert.equal(report[1].meets_minimum, true)
-  assert.equal(report[1].message, null)
 })
 
-test("phase minimums: a phase with zero placements is fine (Q2)", () => {
-  const existing = Array.from({ length: 5 }, (_, i) =>
-    placement({ pick_id: `p-${i}`, phase: 1 })
+test("pick minimum: 3 in Phase 1 + 2 in Phase 2 meets it — 5 total is the bar, not 5 per phase", () => {
+  const existing = [...picks(3, 1), ...picks(2, 2)]
+  assert.equal(checkPickMinimum(existing, rules).pick_count, 5)
+  assert.equal(checkPickMinimum(existing, rules).meets_minimum, true)
+})
+
+test("pick minimum: everything in one phase is still legal (Q2)", () => {
+  assert.equal(checkPickMinimum(picks(5, 1), rules).meets_minimum, true)
+  assert.equal(checkPickMinimum(picks(5, 2), rules).meets_minimum, true)
+})
+
+test("pick minimum: 3 picks across the whole tournament is under, with the §8.1 banner text", () => {
+  const existing = [...picks(2, 1), ...picks(1, 2)]
+  assert.deepEqual(checkPickMinimum(existing, rules), {
+    pick_count: 3,
+    meets_minimum: false,
+    message:
+      "Only 3 of the 5 minimum picks across both phases — you have until Phase 2 closes.",
+  })
+})
+
+test("pick minimum: no placements at all never flags (Q2 — the total check catches them)", () => {
+  assert.deepEqual(checkPickMinimum([], rules), {
+    pick_count: 0,
+    meets_minimum: true,
+    message: null,
+  })
+})
+
+test("pick minimum: the MAXIMUM is untouched — still 10 per phase, hard-blocked", () => {
+  // 10 in Phase 1 blocks an 11th there, but says nothing about Phase 2.
+  const existing = picks(10, 1)
+  assert.equal(
+    validatePhasePickCount(ctx({ existing, bet: { phase: 1 } }), rules),
+    "Phase 1 is full — 10 picks max."
   )
-  const report = checkPhaseMinimums(existing, rules)
-  assert.equal(report.length, 1)
-  assert.equal(report[0].phase, 1)
-  assert.equal(report[0].meets_minimum, true)
+  assert.equal(validatePhasePickCount(ctx({ existing, bet: { phase: 2 } }), rules), null)
+  // ...and 10+10 across both phases is compliant on the minimum.
+  assert.equal(checkPickMinimum([...existing, ...picks(10, 2)], rules).meets_minimum, true)
 })
 
 test("tournament total: $23 of $40 is incomplete with the §8.1 banner text", () => {

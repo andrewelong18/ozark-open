@@ -245,7 +245,7 @@ service-role key and **sends no email at all**.
 - [ ] The four lifecycle spreadsheets are on the desktop, in order. **Pat's own workbook if he
       brought it**, otherwise the fallbacks in `docs/dry-run/sheets/`:
       `1-phase1-open` · `1b-phase1-repriced` · `2-phase1-closed-r1-results` ·
-      `3-phase2-open` · `4-phase2-closed-final` · `X-broken`
+      `3-phase2-open` · `4-phase2-closed-final` · `X-broken` · `X-results-on-open`
 - [ ] `docs/dry-run/ISSUE_LOG.md` open in a second window
 - [ ] The Supabase SQL editor open in a tab
 - [ ] `docs/admin/phase-compliance.sql` pasted into a scratch SQL tab, ready to run
@@ -456,6 +456,17 @@ uploads are true no-ops.
 **Log it as P0 if even one row from that file landed.** "A typo can't half-apply your menu" is
 the guarantee the whole spreadsheet workflow rests on.
 
+### 3.4b Results on a live book — the July mistake · P0
+This is the file shape that actually got through on Jul 31: Round 1 verdicts pasted in while the
+Phase 1 bets still read `open`. The app took it silently and published hit/miss onto bets that
+were still showing stake inputs. Sprint 22 (#97) made it a hard block.
+- [ ] Upload `X-results-on-open.xlsx`
+- [ ] Expect a **rejection with one error per verdict-bearing row**, roughly:
+      - `Row 2: result "hit" on bet_id 1, which is still open — results may only be published
+        on a closed bet. Close the bet in the sheet, or set the result back to Pending.`
+- [ ] Reload `/bets` → **the menu is completely unchanged**, no results showing anywhere
+- [ ] **Ask Pat:** is the message enough to tell him what to fix in his workbook?
+
 ### 3.5 Load the bulk wagers · P0
 *(Navigator, in SQL — 30 seconds)*
 - [ ] Run `supabase/dry-run/20-phase1-placements.sql`
@@ -477,8 +488,9 @@ from the API route. The browser's checks are convenience only. Two groups matter
   minimum · at most the max single bet · at most 10 picks in a phase · self-bet total across
   the whole tournament within cap · running total never over the entry fee · one pick per
   Match/Group Match · never on your opponent.
-- **Checked only at phase close, never blocking** — at least 5 picks in any phase you bet in ·
-  total exactly equal to the entry fee. You're *supposed* to be incomplete while betting is open.
+- **Checked only at Phase 2 close, never blocking** — at least 5 picks **across both phases
+  combined** · total exactly equal to the entry fee. You're *supposed* to be incomplete while
+  betting is open, and a 3-and-2 split across the phases is complete.
 
 Work in the **Dan Mercer** window unless a step says otherwise. Expected error text is quoted
 exactly — a different wording isn't necessarily a bug, but note it if it's confusing.
@@ -614,12 +626,12 @@ leftover budgets match what Act 8 expects — the exact picks don't matter, the 
 - [ ] Pat places his own slate in his own window, including at least one wager on himself
 - [ ] Each window's bet-slip bar reads the right remaining budget
 
-### 4.17 The 5–10 span — *the open decision* · P0
-- [ ] **Ask Pat now.** Today the code enforces **5–10 picks per phase**. In July Pat said the
-      5–10 count should span the **whole tournament** — "all of them in one round, none in the
-      other" being fine. These are different rules and the docs still disagree.
-- [ ] **Write the answer down.** If it's "per tournament", that's a code change plus a
-      tournament-row change, and it needs to happen well before Sept 10.
+### 4.17 The 5–10 span — *answered Jul 31, 2026* · reference only
+Pat's ruling, now shipped (Sprint 22 / #96, PRD §12 A14): **the minimum of 5 spans the whole
+tournament** and is only evaluated before Phase 2 closes; **the maximum of 10 stays per phase.**
+"All of them in one round, none in the other" is legal, and so is a 3-and-2 split.
+- [ ] Sanity-check it on screen: a bettor with 3 Phase 1 picks shows "3 of 5 … you have until
+      Phase 2 closes", not a Phase 1 failure, and the phase header reads "3 of 10 picks".
 
 ### 4.18 Optional shortcut
 If Act 4 has eaten its time box, run `supabase/dry-run/25-phase1-handdriven-fallback.sql` to
@@ -678,14 +690,19 @@ finished betting, chase them, and then close. Closing is irreversible in practic
 everyone's wagers to everyone.
 
 ### 6.1 The chase list · P0
-- [ ] Navigator runs `docs/admin/phase-compliance.sql` in the SQL editor
-- [ ] **Devin Arand** must appear flagged: 3 Phase 1 picks against a 5 minimum, $8 of $20
-- [ ] Anyone else under-minimum or off-total shows too
+- [ ] Navigator runs `docs/admin/phase-compliance.sql` in the SQL editor (paste the whole file)
+- [ ] The last line reads **`Closing Phase 1 — TEXT THESE PEOPLE: Devin Arand (3 of 5 picks)`**
+      — one name, and it is his
+- [ ] **Nobody else appears**, even though 13 of 14 people are short of their entry fee. That is
+      the #98 fix: before Phase 2 opens, being off your exact total is normal, not a reason for
+      a text. The table above the line still shows every number.
 - [ ] **Pat reads the output.** Can he tell who to text without help? If not, that's a finding —
       this query is his only chase tool.
 
-> Zero placements in a phase never flags. Putting everything in Phase 1 and nothing in Phase 2
-> is explicitly allowed (Q2), so "no wagers this phase" isn't non-compliance.
+> Zero placements never flags on the minimum. Putting everything in one phase is explicitly
+> allowed (Q2), so "no wagers this phase" isn't non-compliance — and the minimum is a
+> tournament-wide count anyway (#96), so Devin's 3 picks are a heads-up here, not yet a breach.
+> He is only formally short if he stops; his Phase 2 slate takes him to 8.
 
 ### 6.2 Chase one straggler live · P1
 - [ ] Leave Devin non-compliant on purpose — Q3 says whatever stands, stands, and Act 9 needs him
@@ -885,8 +902,9 @@ phone, on cellular:
 Do this while Pat is still in the room. These are the questions that have been blocking work.
 
 ### 12.1 The open decisions · P0
-- [ ] **The 5–10 span** — per phase (what the code does) or per tournament (what Pat said)?
-- [ ] **The non-player cap** — what number, if any?
+- [x] ~~**The 5–10 span**~~ — answered Jul 31: minimum 5 per tournament, maximum 10 per phase
+      (shipped, Sprint 22 / #96)
+- [x] ~~**The non-player cap**~~ — answered Jul 31: no stricter limit (PRD §12 A15)
 - [ ] **Entry collection** — is "$20 from the deposit, the rest by Venmo" firm?
 - [ ] **Tournament dates** — Sept 24–26 confirmed? (An earlier draft said 24–27.)
 - [ ] **"Non-Goals — see word doc"** — what did that refer to? The referenced document has no
@@ -979,8 +997,8 @@ Three properties must hold no matter whose numbers you use:
 All in `supabase/dry-run/`.
 
 **Spreadsheets, in order:** `1-phase1-open` → `1b-phase1-repriced` →
-`2-phase1-closed-r1-results` → `3-phase2-open` → `4-phase2-closed-final`, plus `X-broken` for
-Act 3.4. All in `docs/dry-run/sheets/`.
+`2-phase1-closed-r1-results` → `3-phase2-open` → `4-phase2-closed-final`, plus `X-broken` and
+`X-results-on-open` for Act 3.4. All in `docs/dry-run/sheets/`.
 
 ## Appendix C — Where each rule is written down
 

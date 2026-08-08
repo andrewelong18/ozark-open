@@ -17,7 +17,7 @@ import {
   type MyBetsQueryRow,
 } from "./my-bets.ts"
 import {
-  checkPhaseMinimums,
+  checkPickMinimum,
   checkTournamentTotal,
   type TournamentRules,
 } from "./validation.ts"
@@ -199,7 +199,7 @@ test("groupByPhase orders entries round → sheet_bet_id → sheet_pick_id", () 
 const RULES: TournamentRules = {
   entry_fee_min: 20,
   entry_fee_max: 50,
-  min_picks_per_phase: 5,
+  min_picks_per_tournament: 5,
   max_picks_per_phase: 10,
   max_single_bet_pct: 0.5,
   max_single_bet_cap: 20,
@@ -216,10 +216,10 @@ test("MyBetEntry rows satisfy the phase-close checks structurally", () => {
     T
   )
   const rules = RULES
-  const phases = checkPhaseMinimums(entries, rules)
+  const picks = checkPickMinimum(entries, rules)
   assert.deepEqual(
-    phases.map((p) => [p.phase, p.pick_count, p.meets_minimum]),
-    [[1, 2, false]]
+    [picks.pick_count, picks.meets_minimum],
+    [2, false]
   )
   const total = checkTournamentTotal(entries, 40)
   assert.equal(total.total, 23)
@@ -248,7 +248,7 @@ test("buildRulesModel derives caps via the validation helpers (floored)", () => 
     entry_fee: 25,
     max_single_bet: 12,
     max_self_bet: 6,
-    min_picks_per_phase: 5,
+    min_picks_per_tournament: 5,
     max_picks_per_phase: 10,
   })
 })
@@ -292,17 +292,32 @@ test("compliance: no placements means no banners (the empty state talks)", () =>
   assert.deepEqual(buildComplianceSummary([], 40, RULES), [])
 })
 
-test("compliance: under-minimum phase warns with validation's message verbatim", () => {
+test("compliance: under the tournament-wide minimum warns with validation's message verbatim", () => {
   const existing = [placement(1, 20, 1), placement(1, 20, 2)]
   const items = buildComplianceSummary(existing, 40, RULES)
   assert.deepEqual(
     items.map((i) => [i.tone, i.title]),
-    [["warning", "Phase 1 incomplete"]]
+    [["warning", "Not enough picks yet"]]
   )
-  assert.equal(items[0].message, "Only 2 of the 5 minimum picks in Phase 1.")
+  assert.equal(
+    items[0].message,
+    "Only 2 of the 5 minimum picks across both phases — you have until Phase 2 closes."
+  )
 })
 
-test("compliance: off-exact total warns; phases without placements are fine (Q2)", () => {
+test("compliance: a 3+2 split across phases is complete — no banner (#96)", () => {
+  const existing = [
+    placement(1, 10, 1), placement(1, 10, 2), placement(1, 10, 3),
+    placement(2, 5, 1), placement(2, 5, 2),
+  ]
+  const items = buildComplianceSummary(existing, 40, RULES)
+  assert.deepEqual(
+    items.map((i) => [i.tone, i.title]),
+    [["success", "You're balanced"]]
+  )
+})
+
+test("compliance: off-exact total warns; a one-phase slate is fine (Q2)", () => {
   const existing = [1, 2, 3, 4, 5].map((n) => placement(1, 4, n))
   const items = buildComplianceSummary(existing, 40, RULES)
   assert.deepEqual(
@@ -320,7 +335,7 @@ test("compliance: both shortfalls stack as separate warnings", () => {
   const items = buildComplianceSummary(existing, 40, RULES)
   assert.deepEqual(
     items.map((i) => i.title),
-    ["Phase 1 incomplete", "Phase 2 incomplete", "Not balanced yet"]
+    ["Not enough picks yet", "Not balanced yet"]
   )
 })
 

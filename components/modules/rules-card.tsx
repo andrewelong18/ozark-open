@@ -7,7 +7,9 @@ export type RulesCardProps = {
   /** null hides the row — non-playing bettors are exempt from the self-bet
    * cap (PRD §12 Q14). */
   maxSelf?: number | null
+  /** Fewest picks across BOTH phases combined (#96). */
   minBets?: number
+  /** Most picks in any one phase. */
   maxBets?: number
   className?: string
 }
@@ -41,7 +43,10 @@ export function RulesCard({
           },
         ]
       : []),
-    { label: "Picks per phase", node: `${minBets}–${maxBets}` },
+    // The minimum spans the tournament, the maximum is per phase (#96) — two
+    // rows, because one "5–10" row is exactly the conflation that misled.
+    { label: "Picks, both phases", node: `${minBets} min` },
+    { label: "Picks per phase", node: `${maxBets} max` },
     {
       label: "Total must equal",
       node: <MoneyDisplay value={entryFee} size="sm" weight="semibold" />,

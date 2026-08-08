@@ -1,5 +1,4 @@
-import { notFound } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { requireAdminPage } from "@/lib/admin-gate"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { StatCard } from "@/components/modules/stat-card"
@@ -42,20 +41,7 @@ type ParticipantRow = {
 }
 
 export default async function AdminViewPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) notFound()
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .maybeSingle()
-
-  if (!(profile as { is_admin: boolean } | null)?.is_admin) notFound()
+  const { supabase } = await requireAdminPage()
 
   // Latest tournament regardless of status — this page serves the whole
   // lifecycle, from chasing stragglers to reading final numbers.

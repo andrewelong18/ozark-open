@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { requireAdminRoute as requireAdmin } from "@/lib/admin-gate"
 import { parseInviteList } from "@/lib/invites"
 import { normalizeEmail } from "@/lib/roster"
 
@@ -20,25 +20,6 @@ import { normalizeEmail } from "@/lib/roster"
 
 /** Whole-paste guard — this is a roster of ~32 people, not an import format. */
 const MAX_LINES = 500
-
-async function requireAdmin() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    return { error: NextResponse.json({ error: "Not signed in." }, { status: 401 }) }
-  }
-  const { data: profile } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .maybeSingle()
-  if (!(profile as { is_admin: boolean } | null)?.is_admin) {
-    return { error: NextResponse.json({ error: "Admins only." }, { status: 403 }) }
-  }
-  return { supabase }
-}
 
 export async function POST(request: Request) {
   const gate = await requireAdmin()

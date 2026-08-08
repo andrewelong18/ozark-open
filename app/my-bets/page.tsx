@@ -180,8 +180,9 @@ export default async function MyBetsPage() {
                 Phase {group.phase}
               </h2>
               <span className="tabular text-xs text-text-muted">
-                {group.pick_count} of {rules.min_picks_per_phase}–
-                {rules.max_picks_per_phase} picks ·{" "}
+                {/* Per-phase header shows the per-phase limit only — the
+                    minimum spans both phases and lives on the banner (#96). */}
+                {group.pick_count} of {rules.max_picks_per_phase} picks ·{" "}
                 <MoneyDisplay
                   value={group.subtotal}
                   size="xs"
@@ -261,7 +262,7 @@ export default async function MyBetsPage() {
         entryFee={myRules.entry_fee}
         maxSingle={myRules.max_single_bet}
         maxSelf={myRules.max_self_bet}
-        minBets={myRules.min_picks_per_phase}
+        minBets={myRules.min_picks_per_tournament}
         maxBets={myRules.max_picks_per_phase}
       />
       </div>

@@ -62,13 +62,12 @@ bad signal. We'll walk every page on your actual phone at the end. Bring a charg
 Five things have been sitting open, most of them yours to call. We'll hit each one at the moment
 the test walks into it, so you'll have just seen the thing you're deciding about:
 
-- **The 5–10 bet count.** Back in July you said it should span the whole tournament — all of
-  them in one round and none in the other being fine. The app currently enforces 5–10 *per
-  phase*. Those are different rules and I built the wrong one, or the notes are wrong. Which is
-  it?
-- **A stricter cap for non-playing bettors.** You asked for one and we never landed on a number.
-  Right now there's no stricter limit at all — a non-player gets exactly the same maximums as
-  anyone else.
+- ~~**The 5–10 bet count.**~~ **Answered Jul 31:** the minimum of 5 spans the whole tournament
+  (all of them in one round and none in the other is fine); the maximum of 10 stays per phase.
+  Built and shipped Aug 8 — the app enforced 5–10 per phase until then, which quietly demanded
+  ten picks of anyone who used both phases.
+- ~~**A stricter cap for non-playing bettors.**~~ **Answered Jul 31:** no stricter limit. A
+  non-player gets exactly the same maximums as anyone else.
 - **Entry collection.** Is "$20 out of the deposit, the rest by Venmo" firm?
 - **Dates.** Sept 24–26 — an earlier note said 24–27. Which is right?
 - **The leaderboard.** You mentioned dropping it. If that's still where you're at, I can cut the

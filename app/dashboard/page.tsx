@@ -10,12 +10,15 @@ import { HowItWorksLauncher } from "@/components/onboarding/how-it-works-launche
 import { Countdown } from "@/components/countdown"
 import Link from "next/link"
 import {
-  checkPhaseMinimums,
+  checkPickMinimum,
   checkTournamentTotal,
 } from "@/lib/validation"
+import { bettingBadge, formatDeadline, nextDeadline } from "@/lib/phases"
 import {
   normalizeExistingPlacements,
+  toPhaseClock,
   toTournamentRules,
+  TOURNAMENT_CLOCK_COLUMNS,
   TOURNAMENT_RULE_COLUMNS,
   type PlacementQueryRow,
 } from "@/lib/placements"
@@ -47,7 +50,7 @@ export default async function DashboardPage() {
 
   const { data: tournamentData } = await supabase
     .from("tournaments")
-    .select(`id, name, year, status, ${TOURNAMENT_RULE_COLUMNS}`)
+    .select(`id, name, year, status, ${TOURNAMENT_RULE_COLUMNS}, ${TOURNAMENT_CLOCK_COLUMNS}`)
     .in("status", ["upcoming", "active"])
     .order("year", { ascending: false })
     .limit(1)
@@ -115,11 +118,27 @@ export default async function DashboardPage() {
     Number(participant?.entry_fee ?? 0)
   )
   const balanced =
-    totals.exact &&
-    checkPhaseMinimums(existing, rules).every((p) => p.meets_minimum)
+    totals.exact && checkPickMinimum(existing, rules).meets_minimum
   const betCount = existing.length
 
-  const statusOpen = tournament.status === "active"
+  // #107: this used to read tournaments.status, which has never gated betting
+  // (gameplan landmine #2) — so it showed a green "Betting Open" over an empty
+  // menu. It now derives from the same phase state /bets renders: the bets
+  // themselves say what's published, the clock says whether you can still bet.
+  const clock = toPhaseClock(
+    tournamentData as unknown as Record<string, unknown>
+  )
+  const now = new Date()
+  const { data: phaseBetsData } = await supabase
+    .from("bets")
+    .select("phase, status")
+    .eq("tournament_id", tournament.id)
+  const badge = bettingBadge(
+    clock,
+    (phaseBetsData ?? []) as { phase: number; status: string }[],
+    now
+  )
+  const upcoming = clock.show_countdown ? nextDeadline(clock, now) : null
   const myRules = participant ? buildRulesModel(participant, rules) : null
 
   return (
@@ -135,8 +154,8 @@ export default async function DashboardPage() {
             {playerCount === 1 ? "player" : "players"} registered
           </p>
         </div>
-        <Badge variant={statusOpen ? "green" : "neutral"} uppercase>
-          {statusOpen ? "Betting Open" : "Upcoming"}
+        <Badge variant={badge.open ? "green" : "neutral"} uppercase>
+          {badge.label}
         </Badge>
       </div>
 
@@ -195,7 +214,7 @@ export default async function DashboardPage() {
             entryFee={myRules.entry_fee}
             maxSingle={myRules.max_single_bet}
             maxSelf={myRules.max_self_bet}
-            minBets={myRules.min_picks_per_phase}
+            minBets={myRules.min_picks_per_tournament}
             maxBets={myRules.max_picks_per_phase}
           />
         </>
@@ -209,7 +228,7 @@ export default async function DashboardPage() {
 
       <div className="flex justify-center">
         <HowItWorksLauncher
-          minPicks={rules.min_picks_per_phase}
+          minPicks={rules.min_picks_per_tournament}
           maxPicks={rules.max_picks_per_phase}
         />
       </div>
@@ -220,19 +239,38 @@ export default async function DashboardPage() {
       <aside className="lg:col-span-1">
         <section className="flex h-full flex-col gap-3">
           <h2 className="font-heading text-lg text-text-strong">Activity</h2>
-          {/* Countdown to the opening ceremony: 8:00 PM Central (CDT, UTC−5) on
-              Sep 24, 2026. */}
-          <Card>
-            <CardContent className="flex flex-col gap-3">
-              <div>
-                <div className="font-heading text-lg text-text-strong">
-                  Opening ceremony
+          {/* The next betting deadline when there is one and admins have the
+              countdown switched on (#106); otherwise the opening ceremony, as
+              before. Same low-key component either way — the brand rule is no
+              countdown-timer anxiety, and that holds even now that the thing
+              it counts to is a deadline. */}
+          {upcoming ? (
+            <Card>
+              <CardContent className="flex flex-col gap-3">
+                <div>
+                  <div className="font-heading text-lg text-text-strong">
+                    Phase {upcoming.phase} betting closes
+                  </div>
+                  <p className="text-sm text-text-muted">
+                    {formatDeadline(upcoming.at)}
+                  </p>
                 </div>
-                <p className="text-sm text-text-muted">Sep 24, 2026 · 8:00 PM CT</p>
-              </div>
-              <Countdown target={new Date("2026-09-24T20:00:00-05:00")} />
-            </CardContent>
-          </Card>
+                <Countdown target={upcoming.at} />
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col gap-3">
+                <div>
+                  <div className="font-heading text-lg text-text-strong">
+                    Opening ceremony
+                  </div>
+                  <p className="text-sm text-text-muted">Sep 24, 2026 · 8:00 PM CT</p>
+                </div>
+                <Countdown target={new Date("2026-09-24T20:00:00-05:00")} />
+              </CardContent>
+            </Card>
+          )}
           <EmptyState
             glyph="📣"
             title="No activity yet"

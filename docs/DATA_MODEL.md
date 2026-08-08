@@ -43,7 +43,7 @@ erDiagram
         text status
         int entry_fee_min
         int entry_fee_max
-        int min_picks_per_phase
+        int min_picks_per_tournament
         int max_picks_per_phase
         timestamptz created_at
     }
@@ -155,8 +155,9 @@ One row per Ozark Open year. Holds the rule parameters that govern that year's p
 | `status` | `text` NOT NULL CHECK IN (`'upcoming'`, `'active'`, `'completed'`) | Controls visibility |
 | `entry_fee_min` | `int` NOT NULL DEFAULT 20 | Lower bound on entry |
 | `entry_fee_max` | `int` NOT NULL DEFAULT 50 | Upper bound on entry |
-| `min_picks_per_phase` | `int` NOT NULL DEFAULT 5 | Renamed from `min_bets_per_round` (ADR 0001 §10) |
-| `max_picks_per_phase` | `int` NOT NULL DEFAULT 10 | Renamed from `max_bets_per_round` |
+| `min_picks_per_tournament` | `int` NOT NULL DEFAULT 5 | Fewest wagered picks **across both phases combined**, due by Phase 2 close (PRD §12 A14, Sprint 22 / #96) |
+| `max_picks_per_phase` | `int` NOT NULL DEFAULT 10 | Most wagered picks **in any one phase**. Renamed from `max_bets_per_round` (ADR 0001 §10) |
+| `min_picks_per_phase` | `int` NOT NULL DEFAULT 5 | **Deprecated (Sprint 22).** Superseded by `min_picks_per_tournament`; kept only so the pre-Sprint-22 deploy kept reading a live column through the migration window. Read by nothing — drop it. |
 | `max_single_bet_pct` | `numeric(3,2)` NOT NULL DEFAULT 0.50 | Half of entry, by default |
 | `max_single_bet_cap` | `int` NOT NULL DEFAULT 20 | Hard cap regardless of entry size |
 | `max_self_bet_pct` | `numeric(3,2)` NOT NULL DEFAULT 0.25 | Quarter of entry |

@@ -133,6 +133,7 @@ Everything an admin does during tournament week runs on **two tracks** (full rat
 | 1 | The bets spreadsheet → **`/admin/import`** | The entire menu: bets, picks, odds, probabilities, **statuses** (`hidden`/`open`/`closed`), **results** (`hit`/`miss`/`push`/`void`) |
 | 1b | **`/admin/people`** | The whole access funnel in one page: who's invited but absent, signed in but stalled, awaiting approval, approved — plus approving bettors (verify display name, set entry fee + player flag, create/edit/revoke their pool entry — revoke is soft, so the entry fee and their wagers leave the pool together and both return on re-approval) and pasting in the invite list (Sprint 20, merging Sprints 10 + 16) |
 | 2 | **Supabase Studio** (Table Editor) | Remaining fixes: promoting admins, one-off data fixes, pick→player links |
+| 3 | **`/admin/close`** | The clock and the money: chase list, closing a phase, publishing final results |
 
 Three rules make the whole thing safe:
 
@@ -149,14 +150,19 @@ No deployments, no code, no Git — the app re-renders on the next page load.
 3. Read the **import report**:
    - **Created / updated / unchanged counts** for bets and picks. Sanity-check them against what you meant to change — a routine status flip should show updates roughly equal to the phase's row count and create nothing.
    - **Unmatched pick names** — pick labels that matched no `users.display_name` (expected for "Field"/"Yes"/"No" and players who haven't logged in yet). These picks carry no player link until you set one in Studio (Track 2); the importer never overwrites a link that was hand-set there.
-   - **Warnings** — flagged when odds changed on a pick that already has live placements. Harmless for payouts (existing placements keep their snapshotted odds; only future placements get the new price), but you should know you did it.
+   - **Warnings** — flagged when odds changed on a pick that already has live placements (harmless for payouts, since existing placements keep their snapshotted odds and only future placements get the new price), and when a bet is still `open` although its phase looks closed. Warnings never block the upload; they're there so you can confirm you meant it.
+   - **Rejections you'll see** — a `result` other than `Pending` on a bet whose `status` isn't `closed` is refused outright, per row. Results belong on a closed book: publishing them while stake inputs are still showing is the one mistake the sheet can make that bettors see immediately. Close the bet in the sheet, or set the result back to `Pending`.
 
 ### Recipe: close a phase (Thursday morning / Saturday morning)
 
-1. **First**, run [`docs/admin/phase-compliance.sql`](docs/admin/phase-compliance.sql) in the Supabase SQL editor. It lists every participant's per-phase pick counts and wagered total, flagging who's under the phase minimum or off their exact entry-fee total (the same rules the app's compliance banners show). Chase the flagged stragglers. After the close, whatever stands, stands.
-2. In the sheet, flip the phase's rows from `open` to `closed` in the `status` column.
-3. Re-upload.
-4. **What the app now shows:** stake inputs are gone from those bets, and **everyone's placements go public** — each pick lists every bettor's name and amount, with a per-pick total. (While a bet is open, nobody sees anyone else's wagers; the close is the reveal.)
+1. **First**, open **`/admin/close`**. It shows the chase list with a one-line "text these people" answer at the top, ready to copy into the group chat. It knows which close it is: before **Phase 1** it chases only people under the pick minimum, because nobody can have hit their exact entry-fee total yet; before **Phase 2** it chases on the minimum *or* the exact total, the last moment either can be fixed. The pick minimum is 5 **across both phases combined** (the 10-pick maximum is the per-phase one). Chase whoever it names. After the close, whatever stands, stands.
+
+   *(The same query lives in [`docs/admin/phase-compliance.sql`](docs/admin/phase-compliance.sql) for the Supabase SQL editor — the fallback for when the app itself is the thing that's broken.)*
+
+2. **Close the phase** on the same page. Each phase has a deadline (2026: Thu Sept 24 and Sat Sept 26, 11:00 CT); "Close now" sets it to this moment, and editing the time moves it. Closing stops new wagers **immediately** — but it does not close the bets or reveal anyone's picks. That still happens on upload, below. Clearing a deadline reopens the phase.
+3. In the sheet, flip the phase's rows from `open` to `closed` in the `status` column.
+4. Re-upload.
+5. **What the app now shows:** stake inputs were already gone at the deadline; now **everyone's placements go public** — each pick lists every bettor's name and amount, with a per-pick total. (While a bet is open, nobody sees anyone else's wagers; the close is the reveal.)
 
 ### Recipe: enter results (Thursday night / Saturday night)
 
@@ -169,16 +175,22 @@ No deployments, no code, no Git — the app re-renders on the next page load.
 1. Flip the Phase 2 rows from `hidden` to `open` — updating their odds in the same pass is fine and expected.
 2. Re-upload. Hidden bets were never visible to participants; they appear for the first time now.
 
+### Recipe: publish the final results (Saturday night)
+
+1. Upload the final sheet with every bet `closed` and every pick carrying a verdict.
+2. On **`/admin/close`**, press **Publish final results**. That's the flip that reveals `/results` to everyone.
+3. **It will refuse if anything is unresolved, and that refusal is the point.** The payout rollup *skips* a pending placement rather than scoring it zero, so publishing early divides the whole pool across only the settled wagers: every payout comes out too high, every number looks plausible, and the totals still reconcile against the pool. There is nothing on the page that would look wrong. Finish the uploads, then publish.
+
 ### The tournament itinerary
 
 | When | Upload |
 |---|---|
 | Before the tournament | Phase 1 rows `open`, Phase 2 rows `hidden` |
-| Thursday morning | Close Phase 1 (compliance check → flip `status` → re-upload) |
+| Thursday morning | Close Phase 1 on `/admin/close` (chase → close) → flip `status` in the sheet → re-upload |
 | Thursday night | Round 1 / tournament-so-far results in `result` → re-upload |
 | Friday night | Phase 2 rows `hidden` → `open`, updated odds → re-upload |
-| Saturday morning | Close Phase 2 |
-| Saturday night | Final results → re-upload. Payouts are now final. |
+| Saturday morning | Close Phase 2 on `/admin/close` |
+| Saturday night | Final results → re-upload → **Publish final results** on `/admin/close` |
 
 ### Track 2 — Supabase Studio
 

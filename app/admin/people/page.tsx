@@ -1,5 +1,4 @@
-import { notFound } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { requireAdminPage } from "@/lib/admin-gate"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { EmptyState } from "@/components/modules/empty-state"
@@ -55,18 +54,7 @@ function ChaseBlock({
 }
 
 export default async function AdminPeoplePage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) notFound()
-
-  const { data: me } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .maybeSingle()
-  if (!(me as { is_admin: boolean } | null)?.is_admin) notFound()
+  const { supabase } = await requireAdminPage()
 
   // The fee bounds come off the tournaments row — the approve/edit forms never
   // hardcode a dollar figure (and the API re-validates against the same row).

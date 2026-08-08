@@ -17,6 +17,16 @@ import {
   type PlacementQueryRow,
 } from "./placements.ts"
 import { validateAmount, validatePlacement } from "./validation.ts"
+import type { PhaseClock } from "./phases.ts"
+
+// No deadline set = the pre-Sprint-25 behaviour: the phase never closes on the
+// clock, so these fixtures exercise the §7 rules rather than the deadline.
+const OPEN_CLOCK: PhaseClock = {
+  phase1_closes_at: null,
+  phase2_closes_at: null,
+  show_countdown: true,
+}
+const NOW = new Date("2026-09-24T12:00:00Z")
 
 // ---------------------------------------------------------------------------
 // Body parsing
@@ -68,7 +78,7 @@ test("toTournamentRules coerces string numerics", () => {
   const rules = toTournamentRules({
     entry_fee_min: 20,
     entry_fee_max: 50,
-    min_picks_per_phase: 5,
+    min_picks_per_tournament: 5,
     max_picks_per_phase: 10,
     max_single_bet_pct: "0.50",
     max_single_bet_cap: 20,
@@ -211,7 +221,7 @@ test("normalizeExistingPlacements coerces string amounts", () => {
 const seedRules = {
   entry_fee_min: 20,
   entry_fee_max: 50,
-  min_picks_per_phase: 5,
+  min_picks_per_tournament: 5,
   max_picks_per_phase: 10,
   max_single_bet_pct: 0.5,
   max_single_bet_cap: 20,
@@ -233,7 +243,9 @@ test("assembled context flows through validatePlacement (legal placement)", () =
   const ctx = buildPlacementContext(
     { user_id: "user-me", entry_fee: 40, is_player: true },
     target,
-    []
+    [],
+    OPEN_CLOCK,
+    NOW
   )
   const verdict = validatePlacement(ctx, 10, seedRules)
   assert.deepEqual(verdict, { ok: true, requires_admin_review: false })
@@ -249,7 +261,9 @@ test("assembled context surfaces §7 violations verbatim", () => {
   const ctx = buildPlacementContext(
     { user_id: "user-me", entry_fee: 40, is_player: true },
     target,
-    []
+    [],
+    OPEN_CLOCK,
+    NOW
   )
   const verdict = validatePlacement(ctx, 25, seedRules)
   assert.equal(verdict.ok, false)
@@ -399,7 +413,7 @@ test("every §7 violation surfaces its validation message verbatim", () => {
   for (const c of cases) {
     const target = normalizeTargetPick(c.pick)
     assert.ok(target, c.name)
-    const ctx = buildPlacementContext(me, target!, c.existing)
+    const ctx = buildPlacementContext(me, target!, c.existing, OPEN_CLOCK, NOW)
     const verdict = validatePlacement(ctx, c.amount, seedRules)
     assert.equal(verdict.ok, false, c.name)
     if (!verdict.ok) assert.ok(verdict.errors.includes(c.expected), `${c.name}: got ${JSON.stringify(verdict.errors)}`)
@@ -426,7 +440,9 @@ test("a self-pick within the cap validates ok with requires_admin_review", () =>
   const ctx = buildPlacementContext(
     { user_id: "user-me", entry_fee: 40, is_player: true },
     target,
-    []
+    [],
+    OPEN_CLOCK,
+    NOW
   )
   const verdict = validatePlacement(ctx, 10, seedRules) // maxSelfBet($40) = $10
   assert.deepEqual(verdict, { ok: true, requires_admin_review: true })
@@ -458,7 +474,9 @@ test("unlinked picks (Field / Yes / No) are never flagged for review", () => {
   const ctx = buildPlacementContext(
     { user_id: "user-me", entry_fee: 40, is_player: true },
     target,
-    []
+    [],
+    OPEN_CLOCK,
+    NOW
   )
   const verdict = validatePlacement(ctx, 10, seedRules)
   assert.deepEqual(verdict, { ok: true, requires_admin_review: false })
@@ -489,7 +507,9 @@ test("recompute on edit: flag follows the pick's CURRENT player link", () => {
         amount: 10,
         pick_player_user_id: "user-other",
       },
-    ]
+    ],
+    OPEN_CLOCK,
+    NOW
   )
   const verdict = validatePlacement(ctx, 12, seedRules)
   assert.deepEqual(verdict, { ok: true, requires_admin_review: false })

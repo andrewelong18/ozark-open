@@ -76,7 +76,7 @@ export default async function ProfilePage() {
             participant,
             readyToBet,
           }}
-          minPicks={rules?.min_picks_per_phase ?? 1}
+          minPicks={rules?.min_picks_per_tournament ?? 1}
           maxPicks={rules?.max_picks_per_phase ?? 1}
         />
       </div>

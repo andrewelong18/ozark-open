@@ -1,25 +1,11 @@
-import { notFound } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { requireAdminPage } from "@/lib/admin-gate"
 import { ImportForm } from "@/components/admin/import-form"
 
 // The one custom admin page in v1 (ADR 0001 §7): publish and update the bet
 // menu by uploading the admin's spreadsheet. Non-admins get a 404 — the page
 // shouldn't exist for them.
 export default async function AdminImportPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) notFound()
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .maybeSingle()
-
-  if (!(profile as { is_admin: boolean } | null)?.is_admin) notFound()
+  const { supabase } = await requireAdminPage()
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">

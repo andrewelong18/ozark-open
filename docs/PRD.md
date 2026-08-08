@@ -52,7 +52,7 @@ A tournament player (or eligible non-playing entrant). Typical age 22–45, comf
 
 - Log in fast, ideally on a phone, ideally without remembering a password.
 - See what bets are open and what the odds are on each pick.
-- Place 5–10 pick wagers per phase, see them confirmed, and edit them up until the phase closes.
+- Place at least 5 pick wagers across the two phases (at most 10 in either one), see them confirmed, and edit them up until the phase closes.
 - See, after results are uploaded, which of their picks hit/missed/pushed/voided.
 - See their running theoretical payout and (after the tournament) their final share of the pool.
 
@@ -129,7 +129,9 @@ Match and Group Match picks may carry stroke adjustments in the pick label itsel
 These rules come from the original Sportsbook memo, restated in phase/pick terms per ADR 0001 §10 ("betting round" → **phase**; every wagered pick counts individually). Enforced at submission time:
 
 1. **Per-tournament entry fee:** between $20 and $50, in whole dollars. Set when the participant joins the tournament.
-2. **Picks per phase:** minimum 5, maximum 10 pick-placements, in any phase the participant bets in. **Each wagered pick counts individually** — $3 on three "Win Tournament" picks is 3 toward the count. If someone is still under the minimum when the phase closes, admins chase them first (as Pat does today by text); if they stay short, their placed bets simply stand as-is — no voiding, no penalty. *(Resolved: Q3.)*
+2. **Pick counts — minimum 5 across the tournament, maximum 10 per phase.** The two bounds have deliberately different spans *(resolved: Pat, Jul 31, 2026 — the dry run's Act 4.17)*. The **minimum of 5 pick-placements is counted across both phases combined**, and is only evaluated before Phase 2 closes: 3 in Phase 1 and 2 in Phase 2 is compliant, and so is all 5 in one phase with none in the other (Q2). The **maximum of 10 is per phase**, hard-blocked at submission. **Each wagered pick counts individually** — $3 on three "Win Tournament" picks is 3 toward the count. If someone is still under the minimum when Phase 2 closes, admins chase them first (as Pat does today by text); if they stay short, their placed bets simply stand as-is — no voiding, no penalty. *(Resolved: Q3.)*
+
+   *Until Aug 2026 the minimum was enforced per phase, which silently demanded ≥10 picks of anyone who bet in both — never what "5–10 picks" meant, and in conflict with Q2.*
 3. **Bet amounts:** whole dollars only, $1 minimum.
 4. **Maximum single bet:** half the participant's entry fee, capped at $20 — applies to every individual pick placement, in either phase. (Example: $40 entry → max $20 single bet. $20 entry → max $10 single bet.) *(Resolved: Q4.)*
 5. **Maximum total bet on yourself:** one quarter of the participant's entry fee, capped at $10 — totaled **across the whole tournament**, both phases combined. *(Resolved: Q4.)*
@@ -161,15 +163,15 @@ hidden → open → closed
 
 **There is no stored "resolved" status.** Resolution lives per **pick** in its `result` column (`pending` / `hit` / `miss` / `push` / `void`), which arrives via the post-round upload. The UI derives a "resolved" presentation: a pick's result is displayed **only when it is not `pending`** — so nothing shows until the round has been completed and its results uploaded. Storing a resolved flag alongside per-pick results would force every upload to keep two representations in sync; deriving it removes that fat-finger class (which is also why the old `resolved ⇔ outcome` CHECK constraint is gone — there is nothing left to desynchronize).
 
-**Phases are the betting windows.** There is no scheduled cutoff — admins flip statuses in the sheet and re-upload:
+**Phases are the betting windows.** Each phase carries a **deadline on the `tournaments` row** (`phase1_closes_at` / `phase2_closes_at`), and wagering needs both the bet to be `open` *and* its phase's deadline not to have passed. The deadline is admin-editable, closing early is setting it to now, and reopening is pushing it back out — no bet row is touched either way, which is what makes it reversible (ADR 0001 §5a). Admins still flip statuses in the sheet and re-upload to publish the menu; a sheet marked `open` after the deadline does not reopen betting.
 
 | When | What |
 |---|---|
 | Prior to tournament | Phase 1 bets open (Round 1 + Tournament) |
-| Thursday morning | Phase 1 closes at Round 1 tee-off |
+| Thursday morning | Phase 1 closes at Round 1 tee-off — **Thu Sept 24, 2026, 11:00 CT** by default |
 | Thursday night | Round 1 results uploaded → theoretical payouts + actual-as-it-stands computable |
 | Friday night | Phase 2 bets open (Round 3 + updated Tournament odds) |
-| Saturday morning | Phase 2 closes at Round 3 tee-off |
+| Saturday morning | Phase 2 closes at Round 3 tee-off — **Sat Sept 26, 2026, 11:00 CT** by default |
 | Saturday night | Round 3 results uploaded → all payout calculations final |
 
 ### 8.1 Enforcement Timing
@@ -181,20 +183,22 @@ Not all of the §7 rules can be checked at the same moment. They split into two 
 - Bet status must be `open`.
 - Amount is a whole dollar, $1 minimum (rule 3).
 - Amount ≤ max single bet (rule 4).
-- Pick-placement count for the phase ≤ 10 (rule 2 upper bound).
+- Pick-placement count for the phase ≤ 10 (rule 2 upper bound — the *maximum* is per phase).
 - Running self-bet total across both phases ≤ self-bet cap (rule 5).
 - Running wager total **across both phases** ≤ entry fee (rule 6 upper bound — a participant can never *over*-commit).
 - Only one pick per Match / Group Match bet (rule 7).
 - Not a pick on your opponent in a Match / Group Match you play in (rule 8).
 
-**Phase-completeness rules — can only be evaluated at phase close**, because a participant is legitimately incomplete while still placing bets:
+**Completeness rules — can only be evaluated at phase close**, because a participant is legitimately incomplete while still placing bets:
 
-- At least 5 pick-placements in any phase the participant bets in (rule 2 lower bound).
-- Total wagered across both phases equals exactly the entry fee — final check at Phase 2 close (rule 6).
+- At least 5 pick-placements **across both phases combined**, evaluated **only before Phase 2 closes** (rule 2 lower bound). Checking it at Phase 1 close would flag everyone who intends to finish in Phase 2, which is exactly what the admin chase list used to do.
+- Total wagered across both phases equals exactly the entry fee — final check at Phase 2 close (rule 6). Likewise meaningless before Phase 2 opens: nobody can be at their exact total yet.
 
-**Intended UX for the completeness rules:** while a phase is `open`, the app shows the participant a running total, remaining tournament budget, and a prominent "incomplete" warning (e.g., "You've wagered $23 of $40 — Phase 2 must bring you to exactly $40"). The app never silently fixes anything. Admins get a view of non-compliant participants before closing each phase so they can chase stragglers, exactly as Pat does today by text.
+**Intended UX for the completeness rules:** while a phase is `open`, the app shows the participant a running total, remaining tournament budget, and a prominent "incomplete" warning (e.g., "You've wagered $23 of $40 — Phase 2 must bring you to exactly $40"). The app never silently fixes anything. Admins get a view of non-compliant participants before closing each phase so they can chase stragglers, exactly as Pat does today by text — and that view (`docs/admin/phase-compliance.sql`) is phase-aware for the reason above: before a Phase 1 close it chases on the pick minimum only, and ends with a one-line list of who to text.
 
 **Consequence of closing with a non-compliant participant** *(resolved: Q3)*: their placed bets stand as-is. No voiding, no auto-adjustment — the chase-then-accept approach mirrors how the pool already works.
+
+**Finalizing the tournament is guarded** *(Sprint 25 / #108)*. Flipping `tournaments.status` to `completed` is what reveals `/results`, and it must not happen while any pick is still `pending` or any bet is unclosed. The reason is arithmetic, not tidiness: the payout rollup **skips** a pending placement rather than scoring it zero, so finalizing early divides the whole pool across only the settled wagers. Every share comes out too high, every number looks plausible, and the totals still reconcile against the pool — there is nothing on screen that looks wrong. `finalizeReadiness()` (`lib/payouts.ts`) is the check; until it passes, `/results` presents the table as provisional and withholds the winner spotlight.
 
 ### 8.2 Spreadsheet Ingestion (the publishing pipeline)
 
@@ -272,7 +276,7 @@ Sprint-by-sprint dates live in `ROADMAP.md`.
 
 ## 12. Stakeholder Decision Log
 
-Three layers, newest governs: Jake's July 9 answers → Pat's July 11 PRD review → **the July 15 architecture rev (this section's A-block + ADR 0001), which is the current source of truth.** Pat's July 11 review anticipated much of the architecture rev (his §6.1 taxonomy proposal became the five categories; his void ruling is A7). The handful of his revisions the July 15 rev did *not* carry (per-tournament 5–10 span, leaderboard drop, user-set display names, betting_enabled/non-player max) are queued for confirmation in `OUTSTANDING_DECISIONS.md`, not silently adopted or discarded.
+Three layers, newest governs: Jake's July 9 answers → Pat's July 11 PRD review → **the July 15 architecture rev (this section's A-block + ADR 0001), which is the current source of truth.** Pat's July 11 review anticipated much of the architecture rev (his §6.1 taxonomy proposal became the five categories; his void ruling is A7). The handful of his revisions the July 15 rev did *not* carry (per-tournament 5–10 span, leaderboard drop, user-set display names, betting_enabled/non-player max) were queued for confirmation in `OUTSTANDING_DECISIONS.md` rather than silently adopted or discarded; the Jul 31 dry run closed all but the leaderboard (A12–A15).
 
 ### Betting architecture rev (July 15, 2026 — ADR 0001)
 
@@ -287,12 +291,14 @@ Pat & Jake's new architecture memo, plus implementation decisions confirmed by A
 | A5 | **Publishing pipeline = spreadsheet upload** to `/admin/import` (the one custom admin page); upsert keyed on the sheet's `bet_id`/`pick_id`; import report; unsorted rows tolerated. Studio remains the CMS for everything else. |
 | A6 | **The sheet is authoritative for odds display values** — `fractional_odds`, `probability`, `total_probability` ingested and shown verbatim; `american_odds` drives payout math only. |
 | A7 | **Void = stake refunded and removed from the pool** (excluded from theoretical totals; pool = entry fees − voided stakes). Push unchanged (stake returned inside the math). Supersedes the void half of Q6. |
-| A8 | **§7 money rules carry over** renamed to phases, counted **per wagered pick** (3 picks on one bet = 3 toward the 5–10 count). |
+| A8 | **§7 money rules carry over** renamed to phases, counted **per wagered pick** (3 picks on one bet = 3 toward the count). **Amended by A14:** the 5-pick minimum spans the tournament; only the 10-pick maximum is per phase. |
 | A9 | **Match/Group Match:** one pick per participant; betting on your opponent **hard-blocked**; self-picks allowed but flagged — in every category. |
 | A10 | **Pick→player mapping by display-name matching at import** (stroke suffixes stripped); unmatched picks reported for admin follow-up. Replaces `bet_subjects`. |
 | A11 | **Self-serve identity is a cosmetic nickname, not an editable `display_name`** (Andrew, Jul 19, 2026 — Sprint 15). Members set their own `nickname` + `avatar_url` on `/profile`; `display_name` stays admin-set (Q13) because import name-matching (A10) depends on it. Resolves the `OUTSTANDING_DECISIONS.md` §1 display-name item without touching the matching field. **Refined by A12.** |
 | A12 | **Members set their own `display_name` once, at required onboarding; the admin verifies it at approval** (Andrew, Jul 20, 2026 — Sprint 16). Reopens A11's "admin-set only" in a controlled way: the DB guard permits the self-set only while `onboarded_at IS NULL`, then pins `display_name` again (admin-owned for import matching, A10). A member can view the menu on registration but can only **place bets after an admin approves them** on `/admin/participants` — and that approval, which also confirms/corrects the name, is what **creates the `tournament_participants` row** (eligibility stays "row exists," A11's model; no `betting_enabled` column — the `OUTSTANDING_DECISIONS.md` §1 toggle is superseded). **Refined by A13.** |
 | A13 | **Revoking betting access is a soft revoke; eligibility is "a live participant row"** (Andrew, Aug 7, 2026 — Sprint 21, from the Jul 31 dry run's Act 2.5). A11/A12's gate was bare row-existence, and revoke was implemented as a hard `DELETE` — which also deleted the `entry_fee`, a **pool input** (§5). Placements are soft-deleted and survive a revoke, so a revoked bettor kept wagers in the pool after their fee stopped funding it: `poolTotal()` shrank and everyone else's share moved, with nothing on screen looking wrong. Revoke now stamps `revoked_at` and keeps the row, so the gate reads **row exists AND `revoked_at IS NULL`**. A revoked bettor leaves both sides of the arithmetic together — their fee stops funding the pool and their placements stop counting toward the payout denominator — and because nothing is deleted, re-approval restores the member, the fee and the wagers exactly. No `betting_enabled` column; A12's "approval creates the row" is unchanged, it now also un-revokes one. |
+| A14 | **The pick minimum spans the tournament; the maximum stays per phase** (Pat, Jul 31, 2026 — the dry run's Act 4.17; Sprint 22). A8 restated the §7 counts "per phase" for both bounds, so a bettor who used both phases owed 5 picks in each — ≥10 in total — while Q2 promised the split was theirs to choose. Those two cannot both be true. The minimum of 5 is now counted across both phases combined and evaluated **only before Phase 2 closes**; the maximum of 10 remains per phase and is still hard-blocked at submission. Carried on the `tournaments` row as `min_picks_per_tournament`. Q7 is unaffected — a void that drops someone below the minimum still triggers no adjustment. |
+| A15 | **Non-playing bettors get the same min and max rules as players** (Pat, Jul 31, 2026 — the dry run's Act 4.8). Closes his Jul 11 ask for "a stricter betting max limit" on non-players, which never carried a number. Walked through with the $50 non-player in the simulated pool: non-players already share the entry-fee bounds, max single bet and pick counts, and the one rule they are exempt from — the self-bet cap (Q14) — is inapplicable rather than lenient, because no pick in the menu bears a non-player's name. No code change: the `is_player` branch in `validateSelfBetTotal` is a correct no-op. |
 
 ### Original fifteen questions (Jake, July 9, 2026)
 
@@ -301,7 +307,7 @@ All fifteen questions from Draft v2 were answered by Jake on July 9, 2026 (Q1/Q2
 | # | Decision |
 |---|---|
 | Q1 | **Entry fee funds both phases combined** — "$40 across the board." A $40 entry buys $40 of total wagering, not $40 per phase. |
-| Q2 | Split between phases is the **participant's choice**; wagering $0 in Phase 2 is allowed (each phase they bet in needs ≥5 picks); exact total must be reached by Phase 2 close. |
+| Q2 | Split between phases is the **participant's choice**; wagering $0 in Phase 2 is allowed; exact total must be reached by Phase 2 close. ~~Each phase they bet in needs ≥5 picks.~~ **Corrected Jul 31, 2026 (A14):** the 5-pick minimum spans both phases combined — the per-phase reading contradicted this row's own premise, since it made a free split cost you a doubled minimum. |
 | Q3 | Under-minimum or off-total at close: **admins chase first; whatever stands, stands.** No voiding, no auto-adjustment. |
 | Q4 | Max single bet: **per placement**, either phase. Self-bet cap: **per tournament** (both phases combined). |
 | Q5 | App **displays cents**; payment rounding is the payer's business. |
@@ -313,7 +319,7 @@ All fifteen questions from Draft v2 were answered by Jake on July 9, 2026 (Q1/Q2
 | Q11 | Aggregate money per bet is **hidden while the bet is open**; visible after close. |
 | Q12 | After close, **everyone's individual amounts are visible** — not just who bet on what. |
 | Q13 | Display names are **admin-set in Studio** for v1 — they feed the importer's name-matching (ADR 0001 §11), so they stay admin-controlled. **Refined by A11, then A12** (member sets it once at onboarding; admin verifies at approval and owns it thereafter). |
-| Q14 | **Non-playing bettors are supported** (exempt from the self-bet rule); expect 0–2. |
+| Q14 | **Non-playing bettors are supported** (exempt from the self-bet rule); expect 0–2. **Confirmed Jul 31, 2026 (A15):** no stricter cap — they get the same min and max rules as players. |
 | Q15 | Leaderboard mirrors **one Google Sheets tab, "Sportsbook Leaderboard," updated after each day.** ~~Original columns: player, thru, score, position.~~ **Revised (Pat, Jul 21):** the tab Pat built has eight columns — Position, Player, Round 1 Points, Round 2 Points, Total Points, Starting Strokes, Round 3 Score, Final Score. The last three are to-par values displayed with the sheet's `+0;-0;"E"` number format (positive `+N`, negative `-N`, zero `E`, blank when not yet scored). The app reads the tab read-only and renders it verbatim — it never computes standings. |
 
 ### Defaults already taken (not blocking — speak up only to change)

@@ -39,7 +39,7 @@ export function howItWorksCards(
     {
       icon: Layers,
       title: "Betting comes in phases",
-      body: `The menu opens in phases across the weekend. In each phase you place ${minPicks}–${maxPicks} picks — spread your entry across the bets you like.`,
+      body: `The menu opens in phases across the weekend. Place at least ${minPicks} picks across the two phases combined — up to ${maxPicks} in any one phase — and spread your entry across the bets you like.`,
       photo: "/onboarding/jake-step-2.png",
     },
     {

@@ -13,7 +13,7 @@ The original PRD modeled each bet as a single row with one set of American odds 
 
 The spreadsheet is the admin's native tool — odds, probabilities, and results are all computed there (helper columns adjudicate outcomes). The app's job shifts from *adjudicating bets* to *collecting wagers and faithfully displaying what the spreadsheet says*.
 
-This memo is the design meeting that Pat's July 11 PRD review called for: his proposed category/subcategory/`group_id` taxonomy (old PRD §6.1, "Spike A") evolved into the structure below, and his void ruling is confirmed in §9. Pat's July 11 revisions that this rev did **not** carry forward (5–10 count span, leaderboard drop, user-set display names, `betting_enabled`) are queued in `OUTSTANDING_DECISIONS.md` #1 for explicit confirm-or-supersede.
+This memo is the design meeting that Pat's July 11 PRD review called for: his proposed category/subcategory/`group_id` taxonomy (old PRD §6.1, "Spike A") evolved into the structure below, and his void ruling is confirmed in §9. Pat's July 11 revisions that this rev did **not** carry forward (5–10 count span, leaderboard drop, user-set display names, `betting_enabled`) were queued in `OUTSTANDING_DECISIONS.md` #1 for explicit confirm-or-supersede; all but the leaderboard have since been resolved — see §10 below and PRD §12 A12–A15.
 
 This ADR memorializes the resulting structure and the implementation decisions Andrew confirmed on July 15, 2026. It supersedes parts of PRD §6/§8 (Draft v3) and entries in the §12 decision log (noted below).
 
@@ -85,6 +85,26 @@ This replaces the old "betting Round 1 / Round 2" concept and supersedes decisio
 
 There is **no stored `resolved` status**. Resolution lives per-pick in `result`; the UI derives a "resolved" presentation (bet closed + results non-pending). Storing it separately would force every upload to keep two representations in sync — the same fat-finger class the old `(status = 'resolved') = (outcome IS NOT NULL)` CHECK existed to prevent.
 
+#### 5a. The phase clock — amended Aug 2026 (Sprint 25 / [#106](https://github.com/andrewelong18/ozark-open/issues/106))
+
+This rev made the spreadsheet upload the **only** writer of `bets.status`, deliberately. The Jul 31 dry run found the cost: the tournament's clock lives outside the app, so Phase 1 closes when Pat is at a tee box with his phone, by hand. Sprint 25 adds scheduled and manual closes — which would be a second and third writer to one field, and that is the part worth getting right.
+
+**The scheduler does not write `bets.status`. Nothing but the upload ever does.** Instead, the `tournaments` row carries a deadline per phase, and wagering is gated on both:
+
+```
+wagering allowed on a bet  ⇔  bet.status = 'open'  AND  its phase's deadline hasn't passed
+```
+
+Three consequences, which are the three questions this amendment exists to answer:
+
+- **A sheet that says `open` after the deadline does not reopen betting.** The upload still only ever *opens* a bet; the clock only ever *closes* a phase. They cannot contradict each other because they aren't the same field — closed wins, and the admin's upload is not silently reverted either. The importer's stale-open warning (Sprint 22 / [#97](https://github.com/andrewelong18/ozark-open/issues/97)) already flags that sheet shape from the sheet's own evidence; it gains the clock-informed case alongside it.
+- **The blast radius is one row, not thirteen.** A phase-level timestamp gives the countdown and the dashboard indicator something real to read, instead of both re-deriving "is betting open" from every bet row and disagreeing with each other — which is exactly the [#107](https://github.com/andrewelong18/ozark-open/issues/107) bug.
+- **A close is reversible, because it is a timestamp and not a mutation.** Push the deadline out or clear it and the phase reopens; no bet row was touched, so nothing has to be reconstructed. Closing early is the same operation with the deadline set to now.
+
+There is **no scheduler process, no cron, no job runner**. A phase "closes itself" because every read compares `now()` to a stored timestamp — the feature is two timestamps and a flag on `tournaments`, and adding machinery to it would be the mistake.
+
+`tournaments.status` remains what it always was: a lifecycle flag that lights the dashboard badge and unlocks `/results`. It has never gated betting and still doesn't (gameplan landmine #2). Flipping it to `completed` is now guarded — see PRD §8.1.
+
 ### 6. Result display gating
 
 A pick's result is displayed **only when it is not `pending`**. Pending results are hidden — this satisfies the memo's "the app should not display the result if the round in question has not been completed and inputted," because non-pending results only ever arrive via the post-round upload.
@@ -108,7 +128,7 @@ This is the **single exception** to the "Supabase Studio is the CMS, no custom a
 
 The PRD §7 rules survive with "betting round" → "phase":
 
-- Min 5 / max 10 **pick-placements per phase** — each pick wagered on counts individually ($3 on three "Win Tournament" picks = 3 bets toward the count).
+- ~~Min 5 / max 10 **pick-placements per phase**~~ — **amended Jul 31, 2026 (PRD §12 A14, Sprint 22):** the two bounds have different spans. **Minimum 5 across both phases combined**, evaluated only before Phase 2 closes; **maximum 10 per phase**, hard-blocked at submission. Reading both as per-phase made a bettor who used both phases owe ≥10 picks, contradicting Q2's promise that the split is theirs. Either way each pick wagered on counts individually ($3 on three "Win Tournament" picks = 3 bets toward the count).
 - Entry fee funds **both phases combined**; exact total due by Phase 2 close.
 - Single-bet cap applies **per pick placement**; self-bet cap totals across the tournament. (Both unchanged.)
 
