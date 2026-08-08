@@ -68,6 +68,7 @@ The wager half does not depend on it: it works for any approved member, which is
 
 Notes for whoever reads this next:
 
+- **Admin edit and remove are in scope** (confirmed Aug 8, 2026). "Place wagers on their behalf" covers the whole lifecycle, not just the first write: editing is the same handler, and removal is the only way to undo a wager entered for the wrong member. Both are soft — `DELETE /api/admin/placements` stamps `deleted_at` like every other removal, so the row keeps its history.
 - **The prod migration is applied and verified** (Aug 8, 2026) — column nullable, both new policies present, member policies unchanged. It's additive, so merge order isn't load-bearing.
 - **No backfill on `placed_by_user_id`.** NULL means the bettor placed it themselves, which is already true of every row written before this sprint. There is no retroactive claim being made about history.
 - Verified locally: `npm test` **298 pass** (from 265), `npx tsc --noEmit` clean, `npm run build`, `local-db-verify.sh`, and `dry-run-verify.sh` end to end with the pool unchanged at $425 − $32 = **$393**, 0 pending.
