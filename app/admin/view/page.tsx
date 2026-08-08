@@ -74,7 +74,7 @@ export default async function AdminViewPage() {
       supabase
         .from("bet_placements")
         .select(
-          "id, user_id, pick_id, amount, odds_at_placement, requires_admin_review, users ( display_name, nickname, avatar_url ), bet_picks ( label, sheet_pick_id, result, bets ( title, phase, round, status, sheet_bet_id, tournament_id ) )"
+          "id, user_id, pick_id, amount, odds_at_placement, requires_admin_review, placed_by_user_id, users ( display_name, nickname, avatar_url ), bet_picks ( label, sheet_pick_id, result, bets ( title, phase, round, status, sheet_bet_id, tournament_id ) )"
         )
         .is("deleted_at", null),
     ])
@@ -96,6 +96,29 @@ export default async function AdminViewPage() {
     t.id
   )
   const view = buildAdminView(participants, rows)
+
+  // Who entered each wager (Sprint 23 / #101). Resolved with a second small
+  // query rather than a second embed of `users`: PostgREST needs the FK
+  // constraint name to disambiguate two joins to the same table, and coupling
+  // this page to a generated constraint name isn't worth saving a round trip
+  // over ~32 people. Empty in the normal case, where nobody bet on anyone's
+  // behalf.
+  const placerIds = [
+    ...new Set(rows.map((r) => r.placed_by_user_id).filter((id): id is string => id !== null)),
+  ]
+  let placerNames: Record<string, string> = {}
+  if (placerIds.length > 0) {
+    const { data: placerData } = await supabase
+      .from("users")
+      .select("id, display_name")
+      .in("id", placerIds)
+    placerNames = Object.fromEntries(
+      ((placerData ?? []) as { id: string; display_name: string }[]).map((u) => [
+        u.id,
+        u.display_name,
+      ])
+    )
+  }
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
@@ -210,6 +233,14 @@ export default async function AdminViewPage() {
                         </span>
                         {entry.requires_admin_review && (
                           <Badge variant="amber">Self-pick</Badge>
+                        )}
+                        {/* Not decoration: every row here is money, and a
+                            September dispute has to be reconstructable. */}
+                        {entry.placed_by_user_id && (
+                          <Badge variant="indigo">
+                            Entered by{" "}
+                            {placerNames[entry.placed_by_user_id] ?? "an admin"}
+                          </Badge>
                         )}
                         {entry.bet_status === "open" && (
                           <StatusBadge status="open" />

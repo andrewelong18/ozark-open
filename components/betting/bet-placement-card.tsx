@@ -42,6 +42,11 @@ export type BetPlacementCardProps = {
    * inline, so the stake input never reflows. The row still flags its own
    * `error` state to turn the input border red. */
   onError?: (message: string) => void
+  /** Set when an admin is entering wagers for a member (Sprint 23 / #101).
+   * Switches the writes to the on-behalf endpoint and names the bettor in the
+   * body; absent = the viewer is betting for themselves. The §7 rules are
+   * evaluated against the member either way — the server owns that, not this. */
+  onBehalfOf?: { userId: string; name: string } | null
 }
 
 /** The confirmed placement behind a row's receipt — the locked odds and stake
@@ -74,8 +79,16 @@ export function BetPlacementCard({
   placements,
   lockedOdds = {},
   onError,
+  onBehalfOf = null,
 }: BetPlacementCardProps) {
   const router = useRouter()
+
+  // One endpoint swap covers place, edit and remove. The on-behalf route is a
+  // different URL rather than a flag on the member route so the admin gate is
+  // structural — /api/placements can never be talked into writing for someone
+  // else, whatever body it's handed.
+  const endpoint = onBehalfOf ? "/api/admin/placements" : "/api/placements"
+  const bettorField = onBehalfOf ? { userId: onBehalfOf.userId } : {}
 
   const [rows, setRows] = React.useState<Record<string, RowState>>(() =>
     Object.fromEntries(
@@ -129,10 +142,10 @@ export function BetPlacementCard({
     setBusy(pick.id)
     patchRow(pick.id, { error: null, confirming: null })
     try {
-      const res = await fetch("/api/placements", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pick_id: pick.id, amount }),
+        body: JSON.stringify({ ...bettorField, pick_id: pick.id, amount }),
       })
       const data = (await res.json().catch(() => null)) as {
         errors?: string[]
@@ -181,10 +194,10 @@ export function BetPlacementCard({
     setBusy(pick.id)
     patchRow(pick.id, { error: null, confirming: null })
     try {
-      const res = await fetch("/api/placements", {
+      const res = await fetch(endpoint, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pick_id: pick.id }),
+        body: JSON.stringify({ ...bettorField, pick_id: pick.id }),
       })
       const data = (await res.json().catch(() => null)) as {
         errors?: string[]

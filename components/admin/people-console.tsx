@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 import { Avatar } from "@/components/avatar"
@@ -317,12 +318,22 @@ function EditPanel({
         entryFeeMax={entryFeeMax}
       />
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={save} disabled={busy || !dirty}>
           Save
         </Button>
         <Button size="sm" variant="ghost" onClick={onClose} disabled={busy}>
           Close
+        </Button>
+        {/* The on-behalf menu (#101) — for the members who never get through
+            the magic-link flow. It's the real bet menu with their budget and
+            their limits, not a stripped-down form. */}
+        <Button
+          size="sm"
+          variant="secondary"
+          render={<Link href={`/bets?for=${person.user_id}`} />}
+        >
+          Place bets for them
         </Button>
       </div>
 

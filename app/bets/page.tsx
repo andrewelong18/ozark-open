@@ -1,4 +1,7 @@
+import Link from "next/link"
+import { notFound } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { requireAdminPage } from "@/lib/admin-gate"
 import { createClient } from "@/lib/supabase/server"
 import { StatusBadge, type BetStatus } from "@/components/betting/status-badge"
 import { BetSlipSummary } from "@/components/betting/bet-slip-summary"
@@ -99,8 +102,43 @@ function menuStatus(bets: Bet[]): BetStatus {
   return bets.some((b) => b.status === "open") ? "open" : "closed"
 }
 
-export default async function BetsPage() {
+/**
+ * `/bets?for=<userId>` — an admin entering wagers for a member (Sprint 23 /
+ * #101). Resolve the member, or return null when there's no `for` at all.
+ *
+ * requireAdminPage() rather than a soft check: a non-admin who guesses the URL
+ * gets a 404, not a silent render of their OWN menu, which would look like it
+ * worked and would be the most misleading possible outcome.
+ */
+async function resolveOnBehalf(
+  forParam: string | undefined
+): Promise<{ userId: string; name: string } | null> {
+  if (!forParam) return null
+  const { supabase } = await requireAdminPage()
+  const { data } = await supabase
+    .from("users")
+    .select("id, display_name")
+    .eq("id", forParam)
+    .maybeSingle()
+  const member = data as { id: string; display_name: string } | null
+  if (!member) notFound()
+  return { userId: member.id, name: member.display_name }
+}
+
+export default async function BetsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ for?: string }>
+}) {
   const supabase = await createClient()
+  const onBehalfOf = await resolveOnBehalf((await searchParams).for)
+  // Every wagering read below is about the BETTOR. In on-behalf mode that's
+  // the member, so the budget, the locked odds and the bet slip all describe
+  // them — the admin sees the menu as they would see it.
+  const {
+    data: { user: viewer },
+  } = await supabase.auth.getUser()
+  const bettorId = onBehalfOf?.userId ?? viewer?.id ?? null
 
   const { data: tournament } = await supabase
     .from("tournaments")
@@ -137,10 +175,7 @@ export default async function BetsPage() {
   // Wagering context: only participants get the inline stake inputs, and
   // their live placements pre-fill them (amount + the locked-odds receipt).
   // Everything below is UX — the placements API re-validates every write
-  // server-side.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // server-side, against the bettor.
   let isParticipant = false
   let placements: Record<string, number> = {}
   let lockedOdds: Record<string, number> = {}
@@ -151,11 +186,11 @@ export default async function BetsPage() {
     pickCount: number
     items: ComplianceItem[]
   } | null = null
-  if (user) {
+  if (bettorId) {
     const { data: participant } = await supabase
       .from("tournament_participants")
       .select("entry_fee, is_player")
-      .eq("user_id", user.id)
+      .eq("user_id", bettorId)
       .eq("tournament_id", tournamentId)
       .is("revoked_at", null)
       .maybeSingle()
@@ -172,7 +207,7 @@ export default async function BetsPage() {
         .select(
           "pick_id, amount, odds_at_placement, bet_picks ( label, sheet_pick_id, player_user_id, result, bets ( id, title, phase, round, status, sheet_bet_id, tournament_id ) )"
         )
-        .eq("user_id", user.id)
+        .eq("user_id", bettorId)
         .is("deleted_at", null)
       const entries = normalizeMyBets(
         (placementRows ?? []) as unknown as MyBetsQueryRow[],
@@ -257,7 +292,37 @@ export default async function BetsPage() {
         <StatusBadge status={menuStatus(bets)} />
       </div>
 
-      {user && !isParticipant && (
+      {/* On-behalf mode is loud on purpose. Everything below — the budget, the
+          pre-filled stakes, the limits in the §7 messages — belongs to the
+          member, and an admin who forgets whose menu they're looking at is
+          exactly how the wrong person ends up with a wager. */}
+      {onBehalfOf && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-caution-border bg-caution-surface px-4 py-3 text-sm text-caution-strong">
+          <span className="font-semibold">
+            Placing wagers as {onBehalfOf.name}.
+          </span>
+          <span>
+            Their entry fee and their limits apply, and the wager is recorded as
+            entered by you.
+          </span>
+          <Link href="/bets" className="underline underline-offset-2">
+            Back to your own menu
+          </Link>
+        </div>
+      )}
+
+      {onBehalfOf && !isParticipant && (
+        <p className="mb-4 rounded-lg border border-loss-border bg-loss-surface px-4 py-3 text-sm text-loss-strong">
+          {onBehalfOf.name} isn&apos;t an approved bettor for this tournament,
+          so there&apos;s nothing to place. Approve them on{" "}
+          <Link href="/admin/people" className="underline underline-offset-2">
+            the people console
+          </Link>{" "}
+          first.
+        </p>
+      )}
+
+      {!onBehalfOf && viewer && !isParticipant && (
         <p className="mb-4 rounded-lg border border-border bg-surface-sunken px-4 py-3 text-sm text-text-muted">
           You&apos;re registered — an admin just needs to approve you before you
           can place bets. Browse the full menu in the meantime.
@@ -271,6 +336,7 @@ export default async function BetsPage() {
           placements={placements}
           lockedOdds={lockedOdds}
           placementsByPick={placementsByPick}
+          onBehalfOf={onBehalfOf}
         />
       </div>
       </div>
