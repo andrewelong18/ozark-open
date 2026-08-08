@@ -11,7 +11,12 @@ import { BetPlacementCard } from "@/components/betting/bet-placement-card"
 import { BetErrorToast } from "@/components/betting/bet-error-toast"
 import { EmptyState } from "@/components/modules/empty-state"
 import { formatProbability } from "@/lib/format"
-import { isBetSettled, toResult, type PickPlacements } from "@/lib/closed-bets"
+import {
+  isBetSettled,
+  summarizeBetReveal,
+  toResult,
+  type PickPlacements,
+} from "@/lib/closed-bets"
 import { cn } from "@/lib/utils"
 
 export type BetCategory = {
@@ -99,6 +104,7 @@ function matchesStatus(status: StatusFilter, betStatus: string) {
 
 // Everyone's wagers on one closed pick, biggest stake first (PRD §12
 // Q11/Q12 — amounts and identities go public the moment the bet closes).
+// The DETAIL half of the reveal: shown only once the accordion is open.
 function PickPlacementList({ group }: { group: PickPlacements }) {
   return (
     <div className="border-b border-border bg-surface-sunken px-4 py-2 last:border-b-0">
@@ -132,6 +138,163 @@ function PickPlacementList({ group }: { group: PickPlacements }) {
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * The AT-A-GLANCE half of the reveal (#103): one pick's bettor count and
+ * money, shown while the accordion is collapsed. The totals are the value you
+ * want without tapping — who backed what is the detail behind them.
+ */
+function PickPlacementTotal({ group }: { group: PickPlacements }) {
+  const n = group.placements.length
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-border bg-surface-sunken px-4 py-1.5 last:border-b-0">
+      <span className="text-[11px] font-bold tracking-wider text-text-muted uppercase">
+        {n} {n === 1 ? "bettor" : "bettors"}
+      </span>
+      <MoneyDisplay
+        value={group.total}
+        size="sm"
+        weight="bold"
+        className="text-text-muted"
+      />
+    </div>
+  )
+}
+
+/**
+ * A bet the viewer can't wager on right now: closed, or open-but-they're-not
+ * an approved bettor.
+ *
+ * For a CLOSED bet this is the weekend's social moment — every bettor's name
+ * and stake on every pick (Q11). Rendering all of that inline made a closed
+ * menu a wall of names on the page people refresh all weekend, one-handed, on
+ * a phone. So the names collapse behind an "x bettors" toggle, closed by
+ * default, while the per-pick totals stay on screen. Still a reveal, just not
+ * a wall.
+ */
+function ClosedBetCard({
+  bet,
+  placementsByPick,
+}: {
+  bet: Bet
+  placementsByPick: Record<string, PickPlacements>
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  // Only a CLOSED bet has a reveal. This card also renders OPEN bets for
+  // people who aren't approved bettors yet, and those have nothing to show —
+  // RLS wouldn't return the rows anyway.
+  const revealed = bet.status === "closed"
+  const reveal = useMemo(
+    () =>
+      revealed
+        ? summarizeBetReveal(
+            bet.bet_picks.map((p) => p.id),
+            placementsByPick
+          )
+        : null,
+    [revealed, bet.bet_picks, placementsByPick]
+  )
+  const panelId = `reveal-${bet.id}`
+
+  return (
+    <Card className="gap-0 p-0">
+      <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-base leading-snug font-semibold text-pretty text-text-strong">
+            {bet.title}
+          </div>
+          {bet.total_probability != null && (
+            <div className="tabular mt-0.5 text-[11px] text-text-muted">
+              Total probability {formatProbability(Number(bet.total_probability))}
+            </div>
+          )}
+          {/* The reveal control. A bet nobody backed still renders — it just
+              says so, in plain muted text, with nothing to tap. */}
+          {reveal &&
+            (reveal.bettorCount === 0 ? (
+              <div className="mt-1 text-[11px] text-text-muted">
+                No wagers on this bet
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                aria-expanded={expanded}
+                aria-controls={panelId}
+                className="mt-1 -ml-1 inline-flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <span>
+                  {expanded ? "Hide" : "Show"} {reveal.bettorCount}{" "}
+                  {reveal.bettorCount === 1 ? "bettor" : "bettors"}
+                </span>
+                <span className="tabular text-text-muted">
+                  · <MoneyDisplayInline value={reveal.total} />
+                </span>
+                <ChevronGlyph open={expanded} />
+              </button>
+            ))}
+        </div>
+        {bet.status !== "open" && (
+          <StatusBadge
+            status={
+              // Settled is derived at render — every pick resolved — never
+              // stored.
+              isBetSettled(bet.bet_picks) ? "resolved" : "closed"
+            }
+          />
+        )}
+      </div>
+      <div id={panelId}>
+        {bet.bet_picks
+          // Favourites-first from the page — see above.
+          .map((pick) => {
+            const group = revealed ? placementsByPick[pick.id] : undefined
+            return (
+              <Fragment key={pick.id}>
+                <PickRow
+                  label={pick.label}
+                  americanOdds={pick.american_odds}
+                  fractionalOdds={pick.fractional_odds}
+                  probability={formatProbability(Number(pick.probability))}
+                  result={toResult(pick.result)}
+                  playerUserId={pick.player_user_id}
+                  playerAvatarUrl={pick.player_avatar_url}
+                />
+                {group &&
+                  (expanded ? (
+                    <PickPlacementList group={group} />
+                  ) : (
+                    <PickPlacementTotal group={group} />
+                  ))}
+              </Fragment>
+            )
+          })}
+      </div>
+    </Card>
+  )
+}
+
+/** Money inside a line of running text — MoneyDisplay is a block treatment. */
+function MoneyDisplayInline({ value }: { value: number }) {
+  return <span className="tabular">${value}</span>
+}
+
+/** A bare chevron. The DS ships no icon set (readme §Iconography) and leans on
+ * typographic marks, so this is a rotated caret rather than a Lucide import. */
+function ChevronGlyph({ open }: { open: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "inline-block text-[9px] leading-none text-text-muted transition-transform duration-150",
+        open && "rotate-180"
+      )}
+    >
+      ▼
+    </span>
   )
 }
 
@@ -398,58 +561,11 @@ export function BetsMenu({
                             onBehalfOf={onBehalfOf}
                           />
                         ) : (
-                          <Card key={bet.id} className="gap-0 p-0">
-                            <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-                              <div className="min-w-0 flex-1">
-                                <div className="text-base leading-snug font-semibold text-pretty text-text-strong">
-                                  {bet.title}
-                                </div>
-                                {bet.total_probability != null && (
-                                  <div className="tabular mt-0.5 text-[11px] text-text-muted">
-                                    Total probability{" "}
-                                    {formatProbability(
-                                      Number(bet.total_probability)
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                              {bet.status !== "open" && (
-                                <StatusBadge
-                                  status={
-                                    // Settled is derived at render — every
-                                    // pick resolved — never stored.
-                                    isBetSettled(bet.bet_picks)
-                                      ? "resolved"
-                                      : "closed"
-                                  }
-                                />
-                              )}
-                            </div>
-                            {bet.bet_picks
-                              // Favourites-first from the page — see above.
-                              .map((pick) => {
-                                const group =
-                                  bet.status === "closed"
-                                    ? placementsByPick[pick.id]
-                                    : undefined
-                                return (
-                                  <Fragment key={pick.id}>
-                                    <PickRow
-                                      label={pick.label}
-                                      americanOdds={pick.american_odds}
-                                      fractionalOdds={pick.fractional_odds}
-                                      probability={formatProbability(
-                                        Number(pick.probability)
-                                      )}
-                                      result={toResult(pick.result)}
-                                      playerUserId={pick.player_user_id}
-                                      playerAvatarUrl={pick.player_avatar_url}
-                                    />
-                                    {group && <PickPlacementList group={group} />}
-                                  </Fragment>
-                                )
-                              })}
-                          </Card>
+                          <ClosedBetCard
+                            key={bet.id}
+                            bet={bet}
+                            placementsByPick={placementsByPick}
+                          />
                         )
                       )}
                     </div>
