@@ -41,8 +41,14 @@ billing plan.
 **What's actually at risk.** Free-tier projects pause after **1 week of inactivity**, and *a paused
 project runs no cron jobs*. Sprint 11's save states run as a `pg_cron` job (`ozark-snapshot`, every
 6 hours), so a pause stops the automatic backups **silently** — nothing on any screen looks wrong.
-Production is near-idle between now and the tournament, so this is the likely case, not the
-unlucky one. The free tier also has no automated backups at all, which is why snapshots exist.
+Production is near-idle (3 accounts, ~10 requests a week) with 46 days to go, so this is the likely
+case, not the unlucky one. The free tier also has no automated backups at all, which is why
+snapshots exist.
+
+*Verified Aug 9, 2026:* the project is `ACTIVE_HEALTHY`, `ozark-snapshot` is scheduled and `active`,
+and it last fired successfully at 18:00 UTC. Nothing has gone wrong **yet** — the job was only
+scheduled that day. The risk here is entirely ahead of us, which is the point: when it does bite,
+this is what you'll have to compare against.
 
 - [ ] **Upgrade the organization to Pro** — Supabase dashboard → Organization → Billing.
       **$25/month, charged per organization**, and it includes $10 of compute credits, which covers
