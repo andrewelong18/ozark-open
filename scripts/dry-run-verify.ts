@@ -76,10 +76,14 @@ function runSql(sql: string): string {
     encoding: "utf-8",
   }).trim()
 }
-function runSqlFile(file: string): string {
-  return execFileSync("psql", [PGURI, "-X", "-q", "-v", "ON_ERROR_STOP=1", "-f", file], {
-    encoding: "utf-8",
-  })
+function runSqlFile(file: string, setup?: string): string {
+  // `setup` runs as its own -c in the SAME psql session, before the file, so a
+  // plain SET (not SET LOCAL) is still in force inside it. Used only for the
+  // teardown's real-wager guard — see the comment at the call site.
+  const args = [PGURI, "-X", "-q", "-v", "ON_ERROR_STOP=1"]
+  if (setup) args.push("-c", setup)
+  args.push("-f", file)
+  return execFileSync("psql", args, { encoding: "utf-8" })
 }
 function queryJson<T>(selectBody: string): T {
   return JSON.parse(runSql(`SELECT COALESCE(json_agg(t), '[]') FROM (${selectBody}) t`)) as T
@@ -717,7 +721,11 @@ async function main() {
 
   // ── Teardown ────────────────────────────────────────────────────────────
   section("Part 2 · teardown")
-  runSqlFile(path.join(SQL, "90-teardown.sql"))
+  // The slates above deliberately include andrewelong18@gmail.com, so by now
+  // the table holds wagers owned by a non-sim account. That is the exact shape
+  // 90-teardown.sql now refuses to delete, because in production it means
+  // somebody's real money. Here it means the rehearsal worked, so opt in.
+  runSqlFile(path.join(SQL, "90-teardown.sql"), "SET ozark.teardown_force = 'on'")
   check("every simulated account is gone", runSql("SELECT count(*) FROM public.users WHERE email LIKE '%@dryrun.ozark.test'") === "0")
   check("every wager is gone", runSql("SELECT count(*) FROM public.bet_placements") === "0")
   check("the real accounts survived", Number(runSql("SELECT count(*) FROM public.users")) >= 1)
