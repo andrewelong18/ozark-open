@@ -31,14 +31,80 @@ Uploads never touch anybody's wagers. Only participants write those, through the
 
 ---
 
+## Late August — pay for Pro (target: Monday Aug 24)
+
+**Decided Aug 9, 2026 ([#18](https://github.com/andrewelong18/ozark-open/issues/18)):** upgrade to
+Supabase Pro for September, deliberately **late in August** so it's one billed month rather than
+two. Everything in this section is a dashboard action — there is no CLI or MCP tool that changes a
+billing plan.
+
+**What's actually at risk.** Free-tier projects pause after **1 week of inactivity**, and *a paused
+project runs no cron jobs*. Sprint 11's save states run as a `pg_cron` job (`ozark-snapshot`, every
+6 hours), so a pause stops the automatic backups **silently** — nothing on any screen looks wrong.
+Production is near-idle between now and the tournament, so this is the likely case, not the
+unlucky one. The free tier also has no automated backups at all, which is why snapshots exist.
+
+- [ ] **Upgrade the organization to Pro** — Supabase dashboard → Organization → Billing.
+      **$25/month, charged per organization**, and it includes $10 of compute credits, which covers
+      the one Micro instance this project runs. So the September bill is ~$25.
+      *Don't buy Point-in-Time Recovery.* It's a separate $100/month add-on and the daily backups
+      below are more than enough for a 32-person pool.
+
+- [ ] **Confirm the three things you're paying for**, in the dashboard:
+      1. The project is no longer flagged for pausing.
+      2. **Database → Backups** lists daily backups (7-day retention).
+      3. Logs now retain 7 days instead of 1 — which is what you'd need if a September wager is
+         disputed.
+
+- [ ] **Re-check that the snapshot job is still firing** — *scheduled* and *firing* are different
+      things, and only the second one is a backup. In the SQL editor:
+      ```sql
+      SELECT jobname, status, return_message, start_time
+        FROM cron.job_run_details d JOIN cron.job j USING (jobid)
+       ORDER BY start_time DESC LIMIT 5;
+
+      SELECT created_at, trigger FROM public.snapshots WHERE trigger = 'cron'
+       ORDER BY created_at DESC LIMIT 5;
+      ```
+      You want `succeeded` rows in the first and recent timestamps in the second. If the second is
+      empty or stale, the project was paused and the job stopped — it resumes on its own now that
+      pausing is off, but confirm it before moving on. Full context in
+      [`DATA_SAFETY.md`](DATA_SAFETY.md) §The schedule.
+
+- [ ] **Set a reminder to downgrade in early October**, once `/results` is final and you've run the
+      `after-payouts` export. One month is the decision; twelve is what happens if nobody writes it
+      down.
+
+### Between now and the upgrade — the project is still on the free tier
+
+The gap from early August to the upgrade is the exposed stretch: still free tier, still near-idle,
+so the project can pause and the automatic save states can stop.
+
+- [ ] **Sign in to the app at least once every ~5 days** until the upgrade is done, and don't
+      assume snapshots are accruing in that window — check `public.snapshots` if it matters.
+
+      **A plain uptime pinger does not work here**, and it's worth knowing why before you set one
+      up and trust it. `middleware.ts` calls `supabase.auth.getUser()`, which makes **no network
+      call at all** when the request carries no session cookie. An anonymous ping to any page can
+      therefore produce plenty of Vercel traffic and **zero** Supabase activity — you'd have a
+      green uptime dashboard and a paused database. It has to be a real signed-in page load.
+
+- [ ] **Take a manual export** if you make any significant change before the upgrade:
+      `bash scripts/db-export.sh "$SUPABASE_DB_URL" pre-pro`. Cheap insurance while the automatic
+      net is unreliable.
+
+---
+
 ## Week of (target: Monday Sept 21)
 
-- [ ] **Wake the Supabase project.** Free-tier projects sleep after inactivity, and the first
-      request after a sleep can take a minute or fail outright. Open the Supabase dashboard, confirm
-      the project is *Active*, then load the app and sign in. Do this **before** anything below —
-      every other step assumes a database that answers.
-      *(If sleeping projects are still a worry the week of, #18 is the open call on paying for Pro
-      for September.)*
+- [ ] **Wake the Supabase project.** On Pro (see Late August above) the project no longer sleeps,
+      so this should be a formality — but confirm it anyway: open the Supabase dashboard, check the
+      project is *Active*, then load the app and sign in. Do this **before** anything below — every
+      other step assumes a database that answers.
+      *(If the Pro upgrade didn't happen, this step is load-bearing rather than a formality: a
+      free-tier project sleeps after a week of inactivity and the first request after a sleep can
+      take a minute or fail outright. Wake it, and expect no automatic snapshots to have been taken
+      while it slept.)*
 
 - [ ] **Send people `https://ozark-open.com` — not a `.vercel.app` link.** Both
       `ozark-open.com` and `ozark-open-sportsbook.vercel.app` are open to the public and work
