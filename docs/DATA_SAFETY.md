@@ -13,6 +13,28 @@ So the backup is a thing a human runs, at two named moments, and Sprint 9 made i
 
 ---
 
+## Two tools, two different disasters
+
+Sprint 11 added **snapshots** on top of this. They are not a replacement — they answer a
+different question, and reaching for the wrong one wastes the minutes you don't have.
+
+| | The export (Sprint 9) | Snapshots (Sprint 11) |
+|---|---|---|
+| **Answers** | "The database is gone / corrupt / I need the permanent record." | "The last thing I did was wrong. Put it back." |
+| **Covers** | Everything: schema, all tables, the payout view, best-effort accounts. | Five money tables — `tournaments`, `tournament_participants`, `bets`, `bet_picks`, `bet_placements`. |
+| **Taken by** | A human, at two named moments. | The app: automatically before **every** import, on a schedule, and on demand from the **Snapshot now** button on `/admin/import`. |
+| **Lives** | A folder on your laptop (and wherever you copied it). | A row in the database. |
+| **Restore** | `pg_restore` into an empty schema — minutes, and a decision. | `scripts/restore-snapshot.ts <id> --yes` — seconds. |
+| **Survives** | The project being deleted. | Nothing that takes the database with it. |
+
+The short version: **snapshots are the undo button, the export is the fire escape.** Snapshots
+live in the same database they protect, so they are worthless in exactly the scenario the
+export exists for. Keep running the export.
+
+Snapshots are covered in full below, under [Rolling back a bad edit](#rolling-back-a-bad-edit).
+
+---
+
 ## The two moments
 
 | When | Label to use | Why this moment |
@@ -56,6 +78,13 @@ up pasted into issues and chat.
 | `auth-users.sql` | The accounts, best-effort (see *What this doesn't cover*). |
 | `csv/*.csv` | One file per table, plus `placement_payouts_view`. Opens in Excel. Restorable by hand. |
 | `MANIFEST.txt` | Row counts **and** the pool reconciliation. |
+
+**`snapshots.csv` is the one exception: metadata only** — `id`, `created_at`, `trigger` and
+`payload_bytes`, not the payloads themselves. Each payload is a JSON dump of every other table
+on the list, so a CSV of them would have multi-megabyte cells and no spreadsheet would open it
+— which defeats the entire reason the CSVs exist. Nothing is lost: the payloads are historical
+copies of state this export already captures in its own right, and `full.dump` carries them
+intact for the case where you actually want to roll one back.
 
 The CSVs are deliberate redundancy. A custom-format dump is only as good as the `pg_restore` that
 can read it, and this data needs to outlive any particular tool — a year from now the question
@@ -133,6 +162,96 @@ psql "$URL" -c "\copy public.users FROM 'csv/users.csv' WITH (FORMAT csv, HEADER
 
 ---
 
+## Rolling back a bad edit
+
+The likely disaster of a tournament weekend isn't the database vanishing — it's uploading last
+week's sheet, or fat-fingering one cell in Studio at 10pm. Sprint 11 exists for that, and the
+recovery is one command instead of an evening of reconstruction.
+
+### What a snapshot is
+
+A row in `public.snapshots`: a timestamp, why it was taken, and a `jsonb` payload holding every
+row of `tournaments`, `tournament_participants`, `bets`, `bet_picks` and `bet_placements` —
+**including soft-deleted wagers**, because a removed bet is part of the state being saved.
+Admin-only at the database, since a payload contains wagers on bets that are still open.
+
+They accrue three ways, and you don't have to do anything for any of them:
+
+- **Before every import.** `/admin/import` takes one before a single row moves. If the snapshot
+  fails, the import is refused rather than run without a net.
+- **On a schedule**, via Supabase pg_cron (see below).
+- **On demand** — the **Snapshot now** button on `/admin/import`. Use it before editing
+  anything by hand.
+
+### Rolling one back
+
+```bash
+# What can I go back to?
+node --experimental-strip-types scripts/restore-snapshot.ts --list
+
+# Go back to one. The id is printed by the import report and the Snapshot now button.
+node --experimental-strip-types scripts/restore-snapshot.ts <id> "$SUPABASE_DB_URL" --yes
+```
+
+**This overwrites current state.** Everything written to those five tables since the snapshot
+was taken is discarded — *including wagers people placed in the meantime*. On a Friday
+afternoon that could be real money someone typed in. The script prints how old the snapshot is
+and how many rows it's about to discard before it does anything, and it refuses to run without
+`--yes`. Read those numbers.
+
+What it does **not** touch: accounts, the invite list, avatars, or the bet categories. Rolling
+back a bad bet import never costs you the roster.
+
+### Checking it worked
+
+Same discipline as the export manifest — the restore prints one, and exits non-zero if the
+numbers disagree:
+
+```
+Row counts (restored vs the save state)
+  ✓ tournaments                  1
+  ✓ tournament_participants     14
+  ✓ bets                        19
+  ✓ bet_picks                   87
+  ✓ bet_placements              56
+
+Pool reconciliation (per tournament)
+      name       | status | entry_fees | voided_stakes | pool | pending_picks
+-----------------+--------+------------+---------------+------+---------------
+ Ozark Open 2026 | active |        425 |            32 |  393 |             0
+```
+
+If the pool isn't what you expect after a restore, the snapshot itself was taken at a moment
+you didn't mean — restore a different one; nothing is destroyed by looking.
+
+The whole round trip — snapshot, deliberately mangle a bet and a placement, restore, compare a
+checksum over all five tables — runs on every `bash scripts/local-db-verify.sh`.
+
+### The schedule
+
+Scheduled snapshots run on **Supabase pg_cron**, inside the database, so the app holds no
+service-role key and no cron secret. Enabling it is a one-time dashboard step (Database →
+Extensions → `pg_cron`), then:
+
+```sql
+SELECT cron.schedule(
+  'ozark-snapshot', '0 */6 * * *',
+  $job$ SELECT public.take_snapshot('cron', 50) $job$
+);
+```
+
+Changing the interval later is one statement, never a deploy:
+
+```sql
+SELECT cron.alter_job(<jobid>, schedule => '0 * * * *');   -- hourly, for the weekend
+```
+
+Retention is the second argument, and `SNAPSHOT_RETENTION` controls it for the app-triggered
+ones. The default of 50 is deliberately generous — a payload for a 32-person pool is a few
+hundred KB.
+
+---
+
 ## What this doesn't cover
 
 **The accounts.** Members live in `auth.users`, and `public.users.id` is a foreign key to it. The
@@ -170,7 +289,13 @@ first on `PATH`, which on most machines is the oldest one installed.
 
 **`EXPORT ABORTED: the database has tables this script doesn't back up`** — a migration added a
 table and the export would have quietly skipped it. Add it to `TABLES` in the script, parent-first,
-and re-run. This check exists so a backup can't go stale in silence.
+and re-run. This check exists so a backup can't go stale in silence. *(It fired for real when
+Sprint 11 added `snapshots`, which is exactly what it's for.)*
+
+**A restore says `RESTORE VERIFICATION FAILED`** — the transaction committed but the tables
+don't match the payload. Don't carry on as though they do. The likeliest cause is a snapshot
+written before a migration that changed one of the five tables; take a fresh export first, then
+compare `MANIFEST.txt` against the payload's counts to see which table disagrees.
 
 **`Can't reach the database`** — the connection string is wrong, or the project is paused. A free
 Supabase project sleeps after inactivity; open the dashboard, wait for it to wake, and try again.

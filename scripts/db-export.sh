@@ -20,8 +20,15 @@
 #   csv/*.csv      one file per money table, openable in Excel, restorable by
 #                  hand. Belt and braces: a custom-format dump is only as good
 #                  as the pg_restore that can read it, and this data has to
-#                  outlive any particular tool.
+#                  outlive any particular tool. (snapshots.csv is the exception:
+#                  metadata only — see csv_select below.)
 #   MANIFEST.txt   row counts AND the pool reconciliation
+#
+# This is the FLOOR, not the whole story. Sprint 11 added automatic snapshots
+# (public.snapshots + scripts/restore-snapshot.ts) for the other failure: not
+# "the building burned down" but "someone uploaded the wrong sheet four minutes
+# ago". Neither replaces the other — docs/DATA_SAFETY.md covers when to reach
+# for which.
 #
 # The manifest is the point. A backup nobody opened is a folder, not a backup —
 # so this one carries the same three numbers the tournament reconciles against
@@ -84,7 +91,32 @@ TABLES=(
   bets
   bet_picks
   bet_placements
+  # Sprint 11's save states. No foreign keys, so it can sit last without
+  # affecting the parent-first ordering the hand-restore path depends on.
+  snapshots
 )
+
+# Tables whose CSV is metadata only, and what to select instead of SELECT *.
+#
+# snapshots.payload is a jsonb dump of every other table on this list, times
+# however many snapshots are being kept. Putting that in a CSV produces a file
+# with multi-megabyte cells that no spreadsheet will open — which defeats the
+# entire reason the CSVs exist alongside full.dump: that a year from now
+# "what did Dan actually win" should be answerable by double-clicking a file.
+#
+# Nothing is lost. The payloads are historical copies of state this export
+# already captures in its own right, and full.dump carries them intact for the
+# case where you actually want to roll one back. See docs/DATA_SAFETY.md.
+csv_select() {
+  case "$1" in
+    snapshots)
+      echo "SELECT id, created_at, trigger, pg_column_size(payload) AS payload_bytes FROM public.snapshots"
+      ;;
+    *)
+      echo "SELECT * FROM public.$1"
+      ;;
+  esac
+}
 # The ones whose emptiness means the export failed — i.e. it ran against the
 # wrong project, or an empty one. Four is enough to catch that decisively.
 #
@@ -167,13 +199,13 @@ rm -f "$OUT/.dump.err"
 # ── CSVs ───────────────────────────────────────────────────────────────────
 for t in "${TABLES[@]}"; do
   psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 \
-    -c "\\copy (SELECT * FROM public.$t) TO '$OUT/csv/$t.csv' WITH (FORMAT csv, HEADER true)"
+    -c "\\copy ($(csv_select "$t")) TO '$OUT/csv/$t.csv' WITH (FORMAT csv, HEADER true)"
 done
 # The payout view too: it's derived, but it's the arithmetic everyone will want
 # to check a year from now, frozen as of this instant.
 psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 \
   -c "\\copy (SELECT * FROM public.placement_payouts_view) TO '$OUT/csv/placement_payouts_view.csv' WITH (FORMAT csv, HEADER true)"
-echo "    csv/ (${#TABLES[@]} tables + placement_payouts_view)"
+echo "    csv/ (${#TABLES[@]} tables + placement_payouts_view; snapshots.csv is metadata only)"
 
 # ── the manifest ───────────────────────────────────────────────────────────
 {
@@ -185,7 +217,7 @@ echo "    csv/ (${#TABLES[@]} tables + placement_payouts_view)"
   echo "  full.dump  : $([ "$DUMP_OK" = yes ] && echo "yes (public schema)" || echo "MISSING — $DUMP_NOTE")"
   echo "  auth.users : $([ "$AUTH_OK" = yes ] && echo "yes" || echo "no — see docs/DATA_SAFETY.md §What this does not cover")"
   echo
-  echo "Row counts"
+  echo "Row counts  (snapshots: CSV is metadata only; payloads are in full.dump)"
 } > "$OUT/MANIFEST.txt"
 
 FAILED=""
