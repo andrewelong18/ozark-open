@@ -266,7 +266,15 @@ export default async function BetsPage({
   if (closedPickIds.length > 0) {
     const { data: closedRows } = await supabase
       .from("bet_placements")
-      .select("pick_id, user_id, amount, users ( display_name, nickname, avatar_url )")
+      // `users!bet_placements_user_id_fkey`, not a bare `users`: since Sprint 23
+      // added placed_by_user_id there are TWO foreign keys from this table to
+      // users, so an unqualified embed is ambiguous and PostgREST rejects the
+      // whole request with PGRST201. The error was never checked, so `data`
+      // came back null and every closed bet quietly rendered "No wagers on this
+      // bet" — the reveal, gone, with nothing in the UI to say so.
+      .select(
+        "pick_id, user_id, amount, users!bet_placements_user_id_fkey ( display_name, nickname, avatar_url )"
+      )
       .in("pick_id", closedPickIds)
       .is("deleted_at", null)
     placementsByPick = groupPlacementsByPick(

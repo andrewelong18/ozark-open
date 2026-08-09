@@ -74,7 +74,11 @@ export default async function AdminViewPage() {
       supabase
         .from("bet_placements")
         .select(
-          "id, user_id, pick_id, amount, odds_at_placement, requires_admin_review, placed_by_user_id, users ( display_name, nickname, avatar_url ), bet_picks ( label, sheet_pick_id, result, bets ( title, phase, round, status, sheet_bet_id, tournament_id ) )"
+          // The embed must name the FK — placed_by_user_id (Sprint 23) is a
+          // second bet_placements → users relationship, so a bare `users` is
+          // ambiguous and PostgREST rejects the request (PGRST201). This is the
+          // bettor's row, never the admin who typed it in.
+          "id, user_id, pick_id, amount, odds_at_placement, requires_admin_review, placed_by_user_id, users!bet_placements_user_id_fkey ( display_name, nickname, avatar_url ), bet_picks ( label, sheet_pick_id, result, bets ( title, phase, round, status, sheet_bet_id, tournament_id ) )"
         )
         .is("deleted_at", null),
     ])

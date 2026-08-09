@@ -481,10 +481,14 @@ export function BetsMenu({
                       <div className="text-[11px] font-bold tracking-wider text-text-muted uppercase">
                         {name}
                       </div>
-                      {bets.map((bet) =>
-                        bet.wagering_open && isParticipant ? (
+                      {bets.map((bet) => (
+                        // The sheet's bet id is the one stable, human-readable
+                        // handle on a card — the title repeats ("Match — Round
+                        // 1" three times) and nothing else here is a heading.
+                        // The E2E journeys anchor on it; see e2e/bets-menu.spec.ts.
+                        <div key={bet.id} data-testid={`bet-${bet.sheet_bet_id}`}>
+                        {bet.wagering_open && isParticipant ? (
                           <BetPlacementCard
-                            key={bet.id}
                             title={bet.title}
                             totalProbability={
                               bet.total_probability != null
@@ -516,12 +520,12 @@ export function BetsMenu({
                           />
                         ) : (
                           <ClosedBetCard
-                            key={bet.id}
                             bet={bet}
                             placementsByPick={placementsByPick}
                           />
-                        )
-                      )}
+                        )}
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>

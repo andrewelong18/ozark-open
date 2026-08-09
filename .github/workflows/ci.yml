@@ -1,15 +1,23 @@
 # The pre-merge gate. `main` auto-deploys to Vercel, so every PR runs the
-# same four checks the sprint workflow runs locally: unit tests, lint,
-# a full-project typecheck (test files included — `next build` skips them),
-# and the production build. No secrets needed: the build doesn't require
-# Supabase env vars, and the DB round-trip scripts stay local-only
-# (see scripts/local-db-verify.sh).
+# same checks the sprint workflow runs locally: unit tests, lint, a
+# full-project typecheck (test files included — `next build` skips them),
+# the production build, and the database round-trips.
+#
+# No secrets needed: the build doesn't require Supabase env vars, and the
+# round-trips run against a throwaway Postgres cluster the script spins up
+# itself.
+#
+# The browser suite is deliberately NOT part of the gate (Sprint 19). It needs
+# Docker and the whole Supabase stack, and a flaky browser must never be able
+# to block a merge — run it on demand below, or locally with
+# `npm run test:e2e`.
 name: CI
 
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   checks:
@@ -25,3 +33,53 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm run build
+
+  database:
+    # RLS, import idempotency and the payout view, proven per-PR instead of
+    # only when someone remembers to run the script. These are the guarantees
+    # the money rests on and the ones unit tests structurally cannot reach.
+    #
+    # No `services: postgres` container: local-db-verify.sh creates its own
+    # cluster with initdb on a unix socket, and ubuntu-latest already ships the
+    # PostgreSQL 16 server binaries. Pointing it at a service container would
+    # mean rewriting the script to take an external PGURI — this way CI runs
+    # byte-for-byte what a developer runs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check the Postgres 16 server binaries are present
+        run: |
+          test -x /usr/lib/postgresql/16/bin/initdb || {
+            echo "PostgreSQL 16 server binaries missing from the runner image." >&2
+            echo "Install them, or set PGBIN to wherever they live." >&2
+            exit 1
+          }
+      - run: bash scripts/local-db-verify.sh
+      - name: Full-pool simulation (~32 members, pool reconciles)
+        run: bash scripts/sim-pool-verify.sh
+
+  e2e:
+    # On demand only — never a merge gate. Needs Docker and the local Supabase
+    # stack, which is a few minutes of image pulls before a single page loads.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
