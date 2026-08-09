@@ -5,7 +5,10 @@ import { ImportForm } from "@/components/admin/import-form"
 // menu by uploading the admin's spreadsheet. Non-admins get a 404 — the page
 // shouldn't exist for them.
 export default async function AdminImportPage() {
-  const { supabase } = await requireAdminPage()
+  // Called for its side effect: requireAdminPage() throws notFound() for a
+  // non-admin. The client it returns is unused here — this page renders a
+  // form and every read happens inside ImportForm's own requests (#129).
+  await requireAdminPage()
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
