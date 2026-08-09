@@ -9,6 +9,7 @@ import {
   type ExistingPick,
 } from "@/lib/import"
 import { toPhaseClock, TOURNAMENT_CLOCK_COLUMNS } from "@/lib/placements"
+import { takeSnapshot } from "@/lib/snapshots"
 
 // Spreadsheet ingestion endpoint (ADR 0001 §7). Writes run under the admin's
 // own session — the Sprint 1 RLS policies ("Admins can write bets/bet_picks")
@@ -139,6 +140,33 @@ export async function POST(request: Request) {
     users
   )
 
+  // Save state, before a single row moves (Sprint 11). The upload is the
+  // riskiest moment in the tournament: it is the one operation that rewrites
+  // the whole menu, it happens four times over a weekend, often on a phone at a
+  // tee box, and an upload of the wrong sheet looks exactly like an upload of
+  // the right one until someone reads the report.
+  //
+  // Deliberately placed AFTER the contract check and BEFORE the first write, so
+  // a rejected file doesn't accrue a pointless snapshot, and an accepted one
+  // can always be undone.
+  //
+  // A snapshot failure ABORTS the import. Reasonable people could argue for
+  // carrying on with a warning — but the entire value of a net is that it is
+  // there before the risk is taken, and an admin who has just been told
+  // "imported" will not go back and check whether the backup half worked.
+  // Nothing has been written at this point, so failing here is free.
+  const snapshot = await takeSnapshot(supabase, "pre-import")
+  if (!snapshot.ok) {
+    return NextResponse.json(
+      {
+        error:
+          `Couldn't take a pre-import snapshot, so nothing was imported: ` +
+          `${snapshot.message}`,
+      },
+      { status: 500 }
+    )
+  }
+
   // Apply. Not one transaction (PostgREST doesn't span calls), but the
   // contract check above rejected bad files before any write, and the
   // sheet-key upsert is idempotent — re-uploading heals a mid-write failure.
@@ -266,6 +294,9 @@ export async function POST(request: Request) {
       },
       unmatchedPickNames: plan.unmatchedPickNames,
       warnings,
+      // The undo button for the upload just applied. Surfaced in the report
+      // because this is the one moment an admin knows they might want it.
+      snapshotId: snapshot.id,
     },
   })
 }

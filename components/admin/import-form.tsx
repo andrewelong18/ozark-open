@@ -9,6 +9,9 @@ type ImportReport = {
   picks: { created: number; updated: number; unchanged: number }
   unmatchedPickNames: string[]
   warnings: string[]
+  /** Sprint 11: the save state taken automatically just before this upload
+   * applied. Optional only for defensiveness — the route always sends it. */
+  snapshotId?: string | null
 }
 
 // Sprint 11: take a save state on demand. Sits above the upload because that's
@@ -225,6 +228,27 @@ function ImportReportCard({ report }: { report: ImportReport }) {
                 <li key={w}>{w}</li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {/* The undo, offered at the one moment an admin might want it: right
+            after seeing what the upload actually did. Last in the card, below
+            the counts and warnings that would prompt reaching for it. */}
+        {report.snapshotId && (
+          <div className="rounded-lg border border-border bg-surface-sunken p-3">
+            <div className="text-sm font-semibold text-text-strong">
+              Undo this import
+            </div>
+            <p className="mt-1 text-xs text-text-muted">
+              A save state was taken before this upload applied. If the sheet
+              was wrong, roll the whole menu back to how it was a moment ago:
+            </p>
+            <p className="mt-1.5 text-xs break-all text-text-muted">
+              <code className="tabular">
+                node --experimental-strip-types scripts/restore-snapshot.ts{" "}
+                {report.snapshotId} --yes
+              </code>
+            </p>
           </div>
         )}
 
