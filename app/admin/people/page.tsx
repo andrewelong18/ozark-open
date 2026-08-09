@@ -2,6 +2,7 @@ import { requireAdminPage } from "@/lib/admin-gate"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { EmptyState } from "@/components/modules/empty-state"
+import { LoadError } from "@/components/modules/load-error"
 import { StatCard } from "@/components/modules/stat-card"
 import { PeopleConsole } from "@/components/admin/people-console"
 import {
@@ -58,12 +59,25 @@ export default async function AdminPeoplePage() {
 
   // The fee bounds come off the tournaments row — the approve/edit forms never
   // hardcode a dollar figure (and the API re-validates against the same row).
-  const { data: tournamentData } = await supabase
+  const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     .select("id, name, entry_fee_min, entry_fee_max")
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
+  // "No tournament yet" below is a real state; a failed read is not, and this
+  // row carries the fee bounds the approve form validates against (#132).
+  if (tournamentError) {
+    console.error("[admin/people] tournament read failed:", tournamentError.message)
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
+        <h1 className="font-heading text-3xl leading-tight text-text-strong">
+          People
+        </h1>
+        <LoadError subject="the tournament" />
+      </div>
+    )
+  }
   const tournament = tournamentData as {
     id: string
     name: string
@@ -107,6 +121,30 @@ export default async function AdminPeoplePage() {
     // take down the chase page.
     supabase.rpc("admin_auth_activity"),
   ])
+
+  // The three roster reads are the page. A silent failure renders an empty
+  // access funnel — "nobody has registered" — on the console an admin uses to
+  // decide who still needs chasing (#132). activityRes stays excluded on
+  // purpose: its degrade-to-"Never" is a decision, documented above.
+  const rosterError =
+    invitesRes.error ?? usersRes.error ?? participantsRes.error
+  if (rosterError) {
+    console.error("[admin/people] roster read failed:", rosterError.message)
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
+        <h1 className="font-heading text-3xl leading-tight text-text-strong">
+          People
+        </h1>
+        <LoadError subject="the roster" />
+      </div>
+    )
+  }
+  if (activityRes.error) {
+    console.error(
+      "[admin/people] auth-activity RPC failed, last-login shows Never:",
+      activityRes.error.message
+    )
+  }
 
   const roster = buildRoster({
     invites: (invitesRes.data ?? []) as InviteQueryRow[],
