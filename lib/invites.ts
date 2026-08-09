@@ -34,8 +34,13 @@ export type ParsedInviteList = {
   skipped: SkippedLine[]
 }
 
-/** Loose on purpose — Postgres already CHECKs position('@' in email) > 1. */
-function looksLikeEmail(value: string): boolean {
+/** Loose on purpose — Postgres already CHECKs position('@' in email) > 1.
+ *
+ *  Exported since Sprint 23 / #124: the admin "Add a member" form validates the
+ *  address it's about to create an account for, and that check must agree with
+ *  the paste box's. Two email validators in one console would eventually
+ *  disagree about the same address, and the two features sit side by side. */
+export function looksLikeEmail(value: string): boolean {
   if (/\s/.test(value)) return false
   const at = value.indexOf("@")
   if (at < 1 || at !== value.lastIndexOf("@")) return false
