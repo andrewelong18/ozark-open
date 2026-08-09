@@ -53,7 +53,14 @@ export function PickLabel({
           type="button"
           onClick={onNameClick}
           className={cn(
-            "min-w-0 cursor-pointer text-left text-pretty",
+            // When there's no profile link, the label IS the way to choose
+            // this pick — so it has to be a real target, not a line of text.
+            // The labels that end up here are "Field", "Yes", "No" — short
+            // enough that the text alone is a ~40px target — plus any golfer
+            // name the importer couldn't match. So: padding for width, pulled
+            // back by an equal negative margin so nothing moves, and min-w-0
+            // stays so a long unmatched name can still shrink.
+            "-mx-2 inline-flex min-h-11 min-w-0 cursor-pointer items-center px-2 text-left text-pretty",
             nameClassName
           )}
         >

@@ -11,6 +11,30 @@ import {
   type PayoutViewQueryRow,
 } from "@/lib/payouts"
 
+// Stacked on a phone, six columns at sm+ — see the note on the header row.
+const GRID =
+  "grid grid-cols-[24px_1fr] items-baseline gap-x-2 px-4 sm:grid-cols-[24px_1fr_repeat(4,68px)]"
+
+// One money column. On a phone the header row is gone, so each value carries
+// its own label; at sm+ the label disappears and the value right-aligns under
+// the heading it belongs to.
+function MoneyCell({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <span className="inline-flex items-baseline gap-1 sm:block sm:text-right">
+      <span className="text-[10px] font-bold tracking-wider text-text-muted uppercase sm:hidden">
+        {label}
+      </span>
+      {children}
+    </span>
+  )
+}
+
 // Final standings (Sprint 7): each participant's entry, theoretical payout,
 // actual pari-mutuel share, and profit/loss — to the cent (Q5). Visible only
 // once tournament.status = 'completed' (flipped in Studio when Saturday's
@@ -174,9 +198,14 @@ export default async function ResultsPage() {
           </div>
           )}
 
-          <Card className="gap-0 overflow-x-auto p-0">
-            <div className="min-w-[480px]">
-              <div className="grid grid-cols-[24px_1fr_repeat(4,68px)] gap-2 border-b border-border px-4 py-2.5 text-[10px] font-bold tracking-wider uppercase text-text-muted">
+          <Card className="gap-0 p-0">
+            <div>
+              {/* Six columns on a laptop, stacked on a phone — the same
+                  `sm:contents` move as the people console and the leaderboard.
+                  This table used to live behind a 480px horizontal scroller,
+                  which put "what did I win" one drag away on the device it's
+                  read on. */}
+              <div className={`${GRID} hidden border-b border-border py-2.5 text-[10px] font-bold tracking-wider uppercase text-text-muted sm:grid`}>
                 <span>#</span>
                 <span>Player</span>
                 <span className="text-right">Entry</span>
@@ -188,7 +217,7 @@ export default async function ResultsPage() {
                 <div
                   key={row.user_id}
                   className={
-                    "grid grid-cols-[24px_1fr_repeat(4,68px)] items-center gap-2 border-t border-border px-4 py-3 first:border-t-0" +
+                    `${GRID} border-t border-border py-3 first:border-t-0 sm:items-center` +
                     // Gold on the leader is a verdict too — hold it until the
                     // ordering is settled rather than provisional (#108).
                     (i === 0 && table.pending === 0 ? " bg-gold-100" : "")
@@ -216,35 +245,40 @@ export default async function ResultsPage() {
                       </span>
                     )}
                   </PlayerChip>
-                  <span className="text-right">
-                    <MoneyDisplay
-                      value={row.entry_fee}
-                      size="sm"
-                      weight="regular"
-                      className="text-text-muted"
-                    />
-                  </span>
-                  <span className="text-right">
-                    <MoneyDisplay
-                      value={row.theoretical}
-                      cents
-                      size="sm"
-                      weight="regular"
-                      className="text-text-body"
-                    />
-                  </span>
-                  <span className="text-right">
-                    <MoneyDisplay value={row.actual} cents size="sm" weight="bold" />
-                  </span>
-                  <span className="text-right">
-                    <MoneyDisplay
-                      value={row.profit_loss}
-                      cents
-                      pl
-                      size="sm"
-                      weight="semibold"
-                    />
-                  </span>
+                  {/* The four money columns wrap under the name on a phone,
+                      each labelled since the header row is sm+ only; at sm+
+                      `contents` dissolves this and they are columns again. */}
+                  <div className="col-start-2 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 pt-1 sm:contents">
+                    <MoneyCell label="Entry">
+                      <MoneyDisplay
+                        value={row.entry_fee}
+                        size="sm"
+                        weight="regular"
+                        className="text-text-muted"
+                      />
+                    </MoneyCell>
+                    <MoneyCell label="Theo">
+                      <MoneyDisplay
+                        value={row.theoretical}
+                        cents
+                        size="sm"
+                        weight="regular"
+                        className="text-text-body"
+                      />
+                    </MoneyCell>
+                    <MoneyCell label="Payout">
+                      <MoneyDisplay value={row.actual} cents size="sm" weight="bold" />
+                    </MoneyCell>
+                    <MoneyCell label="P/L">
+                      <MoneyDisplay
+                        value={row.profit_loss}
+                        cents
+                        pl
+                        size="sm"
+                        weight="semibold"
+                      />
+                    </MoneyCell>
+                  </div>
                 </div>
               ))}
             </div>

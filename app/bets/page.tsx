@@ -291,7 +291,10 @@ export default async function BetsPage({
       className={cn(
         "mx-auto grid max-w-[var(--container-max,1120px)] grid-cols-1 gap-4 px-4 py-6 lg:grid-cols-3 lg:gap-6",
         // Clear the fixed review bar so it never covers the last content.
-        slip && "pb-28"
+        // 7rem is the old pb-28; the inset is what a phone's home indicator
+        // adds to the bar's own bottom padding now that it resolves to a real
+        // number (app/layout.tsx sets viewportFit: "cover").
+        slip && "pb-[calc(7rem+env(safe-area-inset-bottom))]"
       )}
     >
       <div className="lg:col-span-2">

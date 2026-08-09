@@ -101,6 +101,8 @@ Four layers, fastest first. Each proves something the one above it structurally 
 - `npm run test:e2e` — the browser journeys, ~1 min plus stack start-up. Drives a real Chromium through sign-up → onboarding → admin approval → place/edit/remove → reveal-at-close → payouts, with no human clicking and no real email. **Needs Docker** (it boots the local Supabase stack itself) — see [`docs/DEV_TESTING.md`](docs/DEV_TESTING.md#the-browser-suite-e2e).
 - `bash scripts/dry-run-verify.sh` — the whole tournament lifecycle against the real spreadsheets, ~1 min. See [`docs/dry-run/GAMEPLAN.md`](docs/dry-run/GAMEPLAN.md). It regenerates `docs/dry-run/sheets/*.xlsx` as a side effect, so `git checkout -- docs/dry-run/sheets/` before committing.
 
+`npm run test:e2e` runs two Playwright projects: the 13 desktop journeys, and a Pixel 7 project (Sprint 9) that asserts phone geometry — no route overflows 412px, every control in the bet menu is a 44px target measured by where taps actually land, and one wager placed end to end with `tap()`. `bash scripts/mobile-shots.sh before|after` regenerates the screenshots in [`docs/mobile/`](docs/mobile); those are for a human to look at, and nothing automated replaces that.
+
 Every PR runs the gate plus the database and simulation jobs via GitHub Actions (`.github/workflows/ci.yml`). The browser suite is **not** a merge gate — it needs Docker and a full Supabase stack, and a flaky browser shouldn't be able to block a merge; run it locally, or on demand from the Actions tab. `main` auto-deploys to Vercel, so keep the gate green.
 
 ---
@@ -188,6 +190,8 @@ No deployments, no code, no Git — the app re-renders on the next page load.
 3. **It will refuse if anything is unresolved, and that refusal is the point.** The payout rollup *skips* a pending placement rather than scoring it zero, so publishing early divides the whole pool across only the settled wagers: every payout comes out too high, every number looks plausible, and the totals still reconcile against the pool. There is nothing on the page that would look wrong. Finish the uploads, then publish.
 
 ### The tournament itinerary
+
+**The executable version of this table is [`docs/PRE_TOURNAMENT_CHECKLIST.md`](docs/PRE_TOURNAMENT_CHECKLIST.md)** — the same weekend as a checkbox script an admin works top to bottom, with the waking-the-project, magic-link and database-export steps that don't fit in a column here. Use that on the weekend; use this table to remember which upload is which.
 
 | When | Upload |
 |---|---|

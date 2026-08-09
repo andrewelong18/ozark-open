@@ -219,7 +219,10 @@ function ClosedBetCard({
                 onClick={() => setExpanded((v) => !v)}
                 aria-expanded={expanded}
                 aria-controls={panelId}
-                className="mt-1 -ml-1 inline-flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                // The one control on a closed bet, and the weekend's social
+                // moment is behind it — 19px of it was not enough on the page
+                // people refresh one-handed all weekend.
+                className="-mt-1 -ml-2 inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 <span>
                   {expanded ? "Hide" : "Show"} {reveal.bettorCount}{" "}
@@ -385,7 +388,7 @@ export function BetsMenu({
                     onClick={() => setStatus(opt.value)}
                     aria-pressed={active}
                     className={cn(
-                      "min-h-9 cursor-pointer rounded-full px-4 py-1.5 text-sm font-semibold transition-colors",
+                      "min-h-11 cursor-pointer rounded-full px-4 py-1.5 text-sm font-semibold transition-colors",
                       active
                         ? "bg-surface-card text-text-strong shadow-xs"
                         : "text-text-muted hover:text-text-strong"
@@ -554,7 +557,10 @@ function FilterChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "shrink-0 rounded-full border px-3 py-1 text-xs font-semibold whitespace-nowrap transition-colors",
+        // min-h-11 rather than an expanded pseudo hit area: chips sit shoulder
+        // to shoulder in a scrolling row, so overlapping targets would just
+        // move the mis-tap somewhere else.
+        "inline-flex min-h-11 shrink-0 items-center rounded-full border px-3.5 text-xs font-semibold whitespace-nowrap transition-colors",
         active
           ? "border-indigo-200 bg-indigo-50 text-indigo-700"
           : "border-border bg-surface-card text-text-muted hover:border-border-strong hover:text-text-strong"

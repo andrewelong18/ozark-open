@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 
 import { cn } from "@/lib/utils"
@@ -49,6 +49,14 @@ export function ProfileTabs({
   maxPicks: number
 }) {
   const [tab, setTab] = useState<Tab>("status")
+  const activeRef = useRef<HTMLButtonElement | null>(null)
+
+  // Same rail, same fix as components/site-nav: an admin's four tabs overflow a
+  // phone, and tapping "Admin" scrolled the panel below without ever bringing
+  // the chosen tab into view.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }, [tab])
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "status", label: "Your status" },
@@ -85,10 +93,11 @@ export function ProfileTabs({
             <button
               key={t.id}
               type="button"
+              ref={active ? activeRef : undefined}
               onClick={() => setTab(t.id)}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "h-9 shrink-0 rounded-full px-4 text-sm whitespace-nowrap transition-colors",
+                "h-11 shrink-0 rounded-full px-4 text-sm whitespace-nowrap transition-colors",
                 active
                   ? "bg-accent-gold font-bold text-accent-gold-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_1px_3px_rgba(0,0,0,0.2)]"
                   : "font-medium text-text-muted hover:bg-surface-card hover:text-text-strong"

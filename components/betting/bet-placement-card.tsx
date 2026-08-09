@@ -296,7 +296,15 @@ export function BetPlacementCard({
                     aria-label={`Pick ${pick.label}`}
                     onClick={() => select(pick)}
                     className={cn(
-                      "mt-0.5 inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full border-[1.5px] transition-colors",
+                      "relative mt-0.5 inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full border-[1.5px] transition-colors",
+                      // 20px of dot, 44px of target. On a pick-one bet this
+                      // control IS the selector — the golfer's name beside it
+                      // is a profile link, not a second way to choose — so
+                      // missing it is missing the bet. The hit area grows by a
+                      // pseudo-element rather than by padding so the dot stays
+                      // the size the design system draws it and nothing in the
+                      // row reflows.
+                      "before:absolute before:-inset-3.5 before:content-['']",
                       selected === pick.id
                         ? "border-indigo-700"
                         : "border-border-strong"
@@ -355,7 +363,7 @@ export function BetPlacementCard({
                     type="button"
                     onClick={() => requestRemove(pick)}
                     disabled={busy === pick.id}
-                    className="cursor-pointer text-[11px] font-medium text-loss transition-colors hover:text-loss-strong"
+                    className="-mr-2 inline-flex min-h-11 cursor-pointer items-center px-2 text-[11px] font-medium text-loss transition-colors hover:text-loss-strong"
                   >
                     ✕ Remove bet
                   </button>

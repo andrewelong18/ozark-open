@@ -18,6 +18,13 @@ import type { ChaseList } from "@/lib/chase"
 // particular only *reports* the server's refusal — the guard is
 // finalizeReadiness() in lib/payouts.ts, not this component.
 
+// Every button on this page is pressed standing on a golf course, in the dark,
+// on the two evenings the tournament's money depends on. `size="sm"` draws a
+// 36px control, which is right for the dense desktop admin it's used in
+// everywhere else and wrong here — so these call sites, and only these, take a
+// 44px height back on a phone.
+const TOUCH = "h-11 sm:h-9"
+
 // <input type="datetime-local"> speaks naive local time; the deadline is a
 // tee time in Missouri. Convert through the tournament's own zone in both
 // directions so an admin in another timezone doesn't quietly shift the close.
@@ -151,6 +158,7 @@ export function CloseConsole({
           <Button
             variant="secondary"
             size="sm"
+            className={TOUCH}
             onClick={() => {
               void navigator.clipboard?.writeText(chase.line)
               setCopied(true)
@@ -219,6 +227,7 @@ export function CloseConsole({
             <Button
               variant="secondary"
               size="sm"
+              className={TOUCH}
               disabled={busy !== null}
               onClick={() =>
                 send(
@@ -237,6 +246,7 @@ export function CloseConsole({
             <Button
               variant="secondary"
               size="sm"
+              className={TOUCH}
               disabled={busy !== null}
               onClick={() =>
                 send(
@@ -251,9 +261,10 @@ export function CloseConsole({
           </div>
         ))}
 
-        <label className="flex items-center gap-2 text-sm text-text-body">
+        <label className="flex min-h-11 items-center gap-2.5 text-sm text-text-body">
           <input
             type="checkbox"
+            className="size-5 shrink-0"
             checked={countdown}
             disabled={busy !== null}
             onChange={(e) => {
@@ -306,6 +317,7 @@ export function CloseConsole({
           <Button
             variant="gold"
             size="sm"
+            className={TOUCH}
             disabled={busy !== null}
             onClick={() => send({ action: "finalize" }, "POST", "finalize")}
           >
