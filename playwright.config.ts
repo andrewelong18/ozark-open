@@ -55,8 +55,26 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: /mobile-.*\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
+        launchOptions: existsSync(CHROMIUM) ? { executablePath: CHROMIUM } : {},
+      },
+    },
+    // Sprint 9's mobile pass. Same Chromium, phone emulation: 412x915, touch
+    // events, and — the part that matters — the mobile viewport, so the
+    // `viewport-fit=cover` + `env(safe-area-inset-*)` work in app/layout.tsx is
+    // actually exercised rather than resolving to 0 like it does on desktop.
+    //
+    // Split by FILENAME rather than run twice: the 13 desktop journeys assert
+    // behaviour that doesn't change with viewport, so re-running them here would
+    // double the runtime to re-prove the same things. What's phone-specific
+    // lives in mobile-*.spec.ts and runs only here.
+    {
+      name: "mobile",
+      testMatch: /mobile-.*\.spec\.ts/,
+      use: {
+        ...devices["Pixel 7"],
         launchOptions: existsSync(CHROMIUM) ? { executablePath: CHROMIUM } : {},
       },
     },
