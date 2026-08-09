@@ -24,6 +24,11 @@ const azalea = localFont({
 export const metadata: Metadata = {
   title: "Ozark Open Sportsbook",
   description: "Private betting pool for tournament participants.",
+  // Renders `<meta name="robots" content="noindex, nofollow">` on every route.
+  // This is the half that actually removes the pool from search results — see
+  // app/robots.ts for why robots.txt deliberately does NOT disallow crawling,
+  // and why doing so would strand the existing listing instead of clearing it.
+  robots: { index: false, follow: false },
 }
 
 // The tournament happens on phones, so the viewport meta tag is load-bearing
