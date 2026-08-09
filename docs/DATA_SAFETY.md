@@ -229,10 +229,27 @@ checksum over all five tables — runs on every `bash scripts/local-db-verify.sh
 
 ### The schedule
 
-Scheduled snapshots run on **Supabase pg_cron**, inside the database, so the app holds no
-service-role key and no cron secret. **This is live in production as of Aug 9, 2026** —
-`ozark-snapshot`, every 6 hours — so there is nothing to set up unless you are rebuilding the
-project from scratch.
+Scheduled snapshots run on **Supabase pg_cron**, inside the database, so the app holds no cron
+secret. **This is live in production as of Aug 9, 2026** — `ozark-snapshot`, every 6 hours — so
+there is nothing to set up unless you are rebuilding the project from scratch.
+
+> **A paused project runs no cron jobs.** Free-tier Supabase projects pause after **1 week of
+> inactivity**, and when that happens `ozark-snapshot` simply stops — no error, no gap in any UI,
+> nothing that looks wrong until you come looking for a save state that was never taken. Production
+> is near-idle between tournaments, so this is the ordinary case rather than the unlucky one.
+>
+> **Decided Aug 9, 2026 ([#18](https://github.com/andrewelong18/ozark-open/issues/18)): pay for
+> Supabase Pro for September** — $25/month at the organization level, upgraded late in August so
+> it's one billed month. Pro doesn't pause, so the job keeps firing, and it adds **daily backups
+> with 7-day retention**, which is the only thing that backs up `auth.users` (see *What this doesn't
+> cover* below — neither snapshots nor `db-export.sh` reach the accounts on a hosted project).
+> The steps, and what to do in the still-free stretch before the upgrade, are in
+> [`PRE_TOURNAMENT_CHECKLIST.md`](PRE_TOURNAMENT_CHECKLIST.md) §Late August.
+>
+> Note that the app holding no service-role key was part of this design and is **no longer strictly
+> true** as of #124 — one admin route creates auth accounts with one. It changes nothing here:
+> pg_cron still runs inside the database, and nothing in the snapshot path touches that key. See
+> `lib/supabase/admin.ts`.
 
 Both steps are ordinary SQL, and both can be run through the Management API's query endpoint
 (which connects as `postgres`) rather than the dashboard:
@@ -286,6 +303,11 @@ That's survivable at this scale — magic-link sign-in recreates an account, and
 fees and wagers are all in the export keyed by the same UUIDs — but it is not a one-command restore.
 If the accounts matter, use Supabase's own dashboard backup, or `supabase db dump --linked`, which
 runs with the credentials that can read `auth`.
+
+**As of the Pro upgrade (#18), the dashboard backup is the answer to this gap** — daily, automatic,
+7-day retention, and it includes `auth` because it runs as Supabase rather than as a client. That is
+the second reason to pay, and it's a different reason from the pausing one: even a project that
+never pauses still has no account backup on the free tier.
 
 **Storage.** Avatar images live in the `avatars` bucket, not in Postgres, and aren't in the export.
 Losing them costs everyone their picture and nothing else.
