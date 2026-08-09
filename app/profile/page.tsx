@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 import { ProfileTabs } from "@/components/profile/profile-tabs"
+import { LoadError } from "@/components/modules/load-error"
 import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
 
 // Self-serve profile (Sprint 15; reorganized into tabbed sub-nav): the one
@@ -16,11 +17,22 @@ export default async function ProfilePage() {
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const { data: profileData } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from("users")
     .select("display_name, nickname, avatar_url, is_admin, email")
     .eq("id", user.id)
     .single()
+  // This read IS the page's identity, and it carries is_admin — a dropped
+  // error renders you as "You" with the admin entry point missing, which
+  // reads as "my access was revoked" rather than "something broke" (#132).
+  if (profileError) {
+    console.error("[profile] profile read failed:", profileError.message)
+    return (
+      <div className="mx-auto max-w-lg px-4 py-10">
+        <LoadError subject="your profile" />
+      </div>
+    )
+  }
   const profile = (profileData ?? null) as {
     display_name: string
     nickname: string | null
@@ -32,18 +44,26 @@ export default async function ProfilePage() {
   const displayName = profile?.display_name ?? user.email ?? "You"
   const isAdmin = profile?.is_admin ?? false
 
-  const { data: tournamentData } = await supabase
+  // The two reads below only feed the status strip. They log and degrade to
+  // null rather than replacing the page: blocking /profile on a tournament
+  // read would also block the avatar and nickname controls, which are the
+  // reason a member came here. A decided fail direction, not an inherited one
+  // (#132) — same judgement call middleware.ts:62 documents.
+  const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     .select(`id, name, status, ${TOURNAMENT_RULE_COLUMNS}`)
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
+  if (tournamentError) {
+    console.error("[profile] tournament read failed:", tournamentError.message)
+  }
   const tournament = tournamentData as
     | ({ id: string; name: string; status: string } & Record<string, unknown>)
     | null
   const rules = tournament ? toTournamentRules(tournament) : null
 
-  const { data: participantData } = tournament
+  const { data: participantData, error: participantError } = tournament
     ? await supabase
         .from("tournament_participants")
         .select("entry_fee, is_player")
@@ -51,7 +71,10 @@ export default async function ProfilePage() {
         .eq("tournament_id", tournament.id)
         .is("revoked_at", null)
         .maybeSingle()
-    : { data: null }
+    : { data: null, error: null }
+  if (participantError) {
+    console.error("[profile] participant read failed:", participantError.message)
+  }
   const participant = participantData as {
     entry_fee: number
     is_player: boolean

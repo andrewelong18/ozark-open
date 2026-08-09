@@ -28,17 +28,32 @@ async function readJson(request: Request): Promise<unknown> {
   }
 }
 
+// Returns a ready-to-return error response when the LOOKUP fails, separately
+// from a null row meaning "there is no active tournament" (#132). Same union
+// shape as requireAdminRoute, so callers read the same way.
 async function activeTournament(
   supabase: Awaited<ReturnType<typeof createClient>>
-) {
-  const { data } = await supabase
+): Promise<{
+  tournament: { id: string; status: string } | null
+  error?: NextResponse
+}> {
+  const { data, error } = await supabase
     .from("tournaments")
     .select("id, status")
     .in("status", ["upcoming", "active"])
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
-  return data as { id: string; status: string } | null
+  if (error) {
+    return {
+      tournament: null,
+      error: NextResponse.json(
+        { error: `Couldn't load the tournament: ${error.message}` },
+        { status: 500 }
+      ),
+    }
+  }
+  return { tournament: data as { id: string; status: string } | null }
 }
 
 // ---------------------------------------------------------------------------
@@ -55,7 +70,8 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Request body must be JSON." }, { status: 400 })
   }
 
-  const tournament = await activeTournament(supabase)
+  const { tournament, error: tournamentError } = await activeTournament(supabase)
+  if (tournamentError) return tournamentError
   if (!tournament) {
     return NextResponse.json({ error: "No active tournament." }, { status: 400 })
   }
@@ -132,7 +148,8 @@ export async function POST(request: Request) {
     )
   }
 
-  const tournament = await activeTournament(supabase)
+  const { tournament, error: tournamentError } = await activeTournament(supabase)
+  if (tournamentError) return tournamentError
   if (!tournament) {
     return NextResponse.json(
       { error: "No active tournament to finalize." },

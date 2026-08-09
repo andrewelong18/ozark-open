@@ -50,8 +50,14 @@ export function PlayerProfileModal({
       .select(PROFILE_COLUMNS)
       .eq("id", userId)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (!active) return
+        // Logged, not surfaced: normalizeProfileRow already renders a sane
+        // placeholder card for a null row, and a modal is a peek at someone's
+        // profile — not a number anyone acts on (#132).
+        if (error) {
+          console.error("[player-profile] read failed:", error.message)
+        }
         setProfile(normalizeProfileRow(data as ProfileQueryRow | null, userId))
         setLoading(false)
       })

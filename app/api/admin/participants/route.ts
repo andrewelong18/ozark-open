@@ -24,15 +24,33 @@ import { normalizeDisplayName, validateDisplayName } from "@/lib/profile"
 // the users.display_name write bypasses the self-update guard because it runs
 // under an admin session. We still gate is_admin here for clean 403s.
 
-/** The single active tournament (latest by year) + its entry-fee rule bounds. */
-async function activeTournament(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data } = await supabase
+/** The single active tournament (latest by year) + its entry-fee rule bounds.
+ *  Returns a ready-to-return error response when the LOOKUP fails, separately
+ *  from a null row meaning "there is no tournament" (#132) — approving someone
+ *  against unreadable fee bounds is exactly the write to refuse. Same union
+ *  shape as requireAdminRoute, so callers read the same way. */
+async function activeTournament(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<{
+  tournament: ({ id: string } & Record<string, unknown>) | null
+  error?: NextResponse
+}> {
+  const { data, error } = await supabase
     .from("tournaments")
     .select(`id, ${TOURNAMENT_RULE_COLUMNS}`)
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
-  return data as ({ id: string } & Record<string, unknown>) | null
+  if (error) {
+    return {
+      tournament: null,
+      error: NextResponse.json(
+        { error: `Couldn't load the tournament: ${error.message}` },
+        { status: 500 }
+      ),
+    }
+  }
+  return { tournament: data as ({ id: string } & Record<string, unknown>) | null }
 }
 
 async function readJson(request: Request): Promise<unknown> {
@@ -93,7 +111,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing userId." }, { status: 400 })
   }
 
-  const tournament = await activeTournament(supabase)
+  const { tournament, error: tournamentError } = await activeTournament(supabase)
+  if (tournamentError) return tournamentError
   if (!tournament) {
     return NextResponse.json({ error: "No tournament to approve into." }, { status: 400 })
   }
@@ -153,7 +172,8 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Missing userId." }, { status: 400 })
   }
 
-  const tournament = await activeTournament(supabase)
+  const { tournament, error: tournamentError } = await activeTournament(supabase)
+  if (tournamentError) return tournamentError
   if (!tournament) {
     return NextResponse.json({ error: "No tournament." }, { status: 400 })
   }
@@ -206,7 +226,8 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Missing userId." }, { status: 400 })
   }
 
-  const tournament = await activeTournament(supabase)
+  const { tournament, error: tournamentError } = await activeTournament(supabase)
+  if (tournamentError) return tournamentError
   if (!tournament) {
     return NextResponse.json({ error: "No tournament." }, { status: 400 })
   }

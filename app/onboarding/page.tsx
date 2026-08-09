@@ -13,22 +13,36 @@ export default async function OnboardingPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("users")
     .select("onboarded_at")
     .eq("id", user.id)
     .maybeSingle()
+  // Fail direction, decided rather than inherited (#132): a failed read keeps
+  // the member ON this page. The alternative — redirecting to /dashboard —
+  // bounces off middleware straight back here for anyone genuinely not
+  // onboarded, and a redirect loop is the one outcome nobody can escape.
+  // middleware.ts:62 documents the same reasoning for the same gate.
+  if (profileError) {
+    console.error("[onboarding] onboarded_at read failed:", profileError.message)
+  }
   if ((profile as { onboarded_at: string | null } | null)?.onboarded_at) {
     redirect("/dashboard")
   }
 
   // The pick-count range is a tournament rule — read it, never hardcode it.
-  const { data: tournament } = await supabase
+  const { data: tournament, error: tournamentError } = await supabase
     .from("tournaments")
     .select("min_picks_per_tournament, max_picks_per_phase")
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
+  // Copy-only (the "pick 5 to 10" line), and the fallbacks below already cover
+  // a missing row — so this logs and carries on rather than blocking the one
+  // step every member must complete.
+  if (tournamentError) {
+    console.error("[onboarding] pick-count rules read failed:", tournamentError.message)
+  }
   const rules = tournament as {
     min_picks_per_tournament: number
     max_picks_per_phase: number

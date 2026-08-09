@@ -67,9 +67,9 @@ export function OnboardingForm({
 
     try {
       // Upload straight to Storage under our own folder; the bucket's RLS
-      // enforces the <uid>/ prefix. uploadAvatar awaits session hydration
-      // first — without that the request races the browser client's cookie
-      // read, goes out anonymously, and fails as an RLS violation (#90).
+      // enforces the <uid>/ prefix. uploadAvatar checks for a session first,
+      // so a signed-out member gets a sentence rather than the RLS string that
+      // sent two rounds of #90 hunting through storage policies.
       if (file) {
         const uploadError = await uploadAvatar(createClient(), userId, file)
         if (uploadError) {

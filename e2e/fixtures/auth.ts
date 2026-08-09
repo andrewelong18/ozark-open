@@ -96,9 +96,16 @@ export async function resetOnboarding(email: string): Promise<void> {
   const supabase = serviceClient()
   const userId = await userIdFor(email)
 
+  // avatar_url is cleared too, or the avatar spec (#90) would pass on the
+  // photo a previous run left behind instead of the one it just uploaded.
   const { error } = await supabase
     .from("users")
-    .update({ onboarded_at: null, display_name: email, nickname: null })
+    .update({
+      onboarded_at: null,
+      display_name: email,
+      nickname: null,
+      avatar_url: null,
+    })
     .eq("id", userId)
   if (error) throw new Error(`Couldn't reset onboarding for ${email}: ${error.message}`)
 

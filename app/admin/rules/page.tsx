@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation"
 import { requireAdminPage } from "@/lib/admin-gate"
+import { LoadError } from "@/components/modules/load-error"
 import { RulesForm } from "@/components/admin/rules-form"
 import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
 
@@ -15,12 +16,22 @@ import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
 export default async function AdminRulesPage() {
   const { supabase } = await requireAdminPage()
 
-  const { data: tournamentData } = await supabase
+  const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     .select(`id, name, ${TOURNAMENT_RULE_COLUMNS}`)
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
+  // notFound() on a failed read would tell an admin this page doesn't exist,
+  // which is a different and more alarming claim than "it didn't load" (#132).
+  if (tournamentError) {
+    console.error("[admin/rules] tournament read failed:", tournamentError.message)
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-10">
+        <LoadError subject="the rules" />
+      </div>
+    )
+  }
   if (!tournamentData) notFound()
 
   const tournament = tournamentData as unknown as { name: string }

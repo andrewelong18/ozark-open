@@ -70,7 +70,7 @@ export async function POST(request: Request) {
   }
   const rows = validation.rows
 
-  const { data: tournamentData } = await supabase
+  const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     // The clock columns ride along so the stale-open warning can compare the
     // sheet against the phase deadlines, not just against itself (#122).
@@ -79,6 +79,14 @@ export async function POST(request: Request) {
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
+  // "No tournament to import into" is a real, actionable state; a failed read
+  // is not, and must not be reported as one (#132).
+  if (tournamentError) {
+    return NextResponse.json(
+      { error: `Couldn't load the target tournament: ${tournamentError.message}` },
+      { status: 500 }
+    )
+  }
   if (!tournamentData) {
     return NextResponse.json(
       { error: "No upcoming or active tournament to import into." },
@@ -237,8 +245,12 @@ export async function POST(request: Request) {
   // Odds-changed-with-live-placements warning. Harmless for payouts —
   // placements snapshot odds at write time (PRD §7.1) — but the admin should
   // know. Warning only; the upload has already been applied above. A lookup
-  // failure degrades to no warning rather than failing the import.
+  // failure still degrades to no warning rather than failing the import —
+  // that part was right — but it now SAYS so instead of going quiet (#132).
+  // "Nobody had bet on these" and "we couldn't check" are different facts,
+  // and only one of them means the admin can stop worrying.
   const pickIdsWithPlacements = new Set<number>()
+  let placementLookupFailed: string | null = null
   if (plan.oddsChanges.length > 0) {
     const sheetIdByUuid = new Map(
       existingPicks.map((p) => [p.id, p.sheet_pick_id])
@@ -248,11 +260,14 @@ export async function POST(request: Request) {
         plan.oddsChanges.some((c) => c.sheetPickId === p.sheet_pick_id)
       )
       .map((p) => p.id)
-    const { data: livePlacements } = await supabase
+    const { data: livePlacements, error: livePlacementsError } = await supabase
       .from("bet_placements")
       .select("pick_id")
       .in("pick_id", changedUuids)
       .is("deleted_at", null)
+    if (livePlacementsError) {
+      placementLookupFailed = livePlacementsError.message
+    }
     for (const row of (livePlacements ?? []) as { pick_id: string }[]) {
       const sheetPickId = sheetIdByUuid.get(row.pick_id)
       if (sheetPickId !== undefined) pickIdsWithPlacements.add(sheetPickId)
@@ -278,6 +293,13 @@ export async function POST(request: Request) {
           `${change.from.fractionalOdds} → ${change.to.fractionalOdds}. Existing placements keep ` +
           `their snapshotted odds; only future placements get the new price.`
       ),
+    ...(placementLookupFailed
+      ? [
+          `Couldn't check whether the odds-changed picks already have wagers on them: ` +
+            `${placementLookupFailed}. The import applied fine — but if any of those picks ` +
+            `were already bet, this report didn't tell you.`,
+        ]
+      : []),
   ]
 
   return NextResponse.json({

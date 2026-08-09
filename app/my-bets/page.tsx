@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { StatCard } from "@/components/modules/stat-card"
 import { EmptyState } from "@/components/modules/empty-state"
+import { LoadError } from "@/components/modules/load-error"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import { OddsChip } from "@/components/betting/odds-chip"
 import { checkTournamentTotal } from "@/lib/validation"
@@ -44,13 +45,22 @@ export default async function MyBetsPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const { data: tournamentData } = await supabase
+  const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     .select(`id, name, ${TOURNAMENT_RULE_COLUMNS}`)
     .in("status", ["upcoming", "active"])
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
+
+  if (tournamentError) {
+    console.error("[my-bets] tournament read failed:", tournamentError.message)
+    return (
+      <div className="mx-auto max-w-lg px-4 py-10">
+        <LoadError subject="the tournament" />
+      </div>
+    )
+  }
 
   if (!tournamentData) {
     return (
@@ -68,7 +78,7 @@ export default async function MyBetsPage() {
   >
   const rules = toTournamentRules(tournament)
 
-  const { data: participantData } = user
+  const { data: participantData, error: participantError } = user
     ? await supabase
         .from("tournament_participants")
         .select("entry_fee, is_player")
@@ -76,7 +86,18 @@ export default async function MyBetsPage() {
         .eq("tournament_id", tournament.id)
         .is("revoked_at", null)
         .maybeSingle()
-    : { data: null }
+    : { data: null, error: null }
+  // Without this, a failed read shows an approved bettor the "Approval
+  // pending" card — telling them to go chase an admin who already approved
+  // them, on the page where their own money lives (#132).
+  if (participantError) {
+    console.error("[my-bets] participant read failed:", participantError.message)
+    return (
+      <div className="mx-auto max-w-lg px-4 py-10">
+        <LoadError subject="your registration" />
+      </div>
+    )
+  }
   const participant = participantData as Participant | null
 
   if (!participant) {
@@ -93,13 +114,24 @@ export default async function MyBetsPage() {
   const entryFee = Number(participant.entry_fee)
 
   // Own live placements across the tournament, flattened for display.
-  const { data: placementData } = await supabase
+  const { data: placementData, error: placementError } = await supabase
     .from("bet_placements")
     .select(
       "pick_id, amount, odds_at_placement, bet_picks ( label, sheet_pick_id, player_user_id, result, bets ( id, title, phase, round, status, sheet_bet_id, tournament_id ) )"
     )
     .eq("user_id", user!.id)
     .is("deleted_at", null)
+
+  // This page IS the member's wagers. An empty read here is the single most
+  // alarming possible false statement the app can make (#132).
+  if (placementError) {
+    console.error("[my-bets] placements read failed:", placementError.message)
+    return (
+      <div className="mx-auto max-w-lg px-4 py-10">
+        <LoadError subject="your wagers" />
+      </div>
+    )
+  }
 
   const entries = normalizeMyBets(
     (placementData ?? []) as unknown as MyBetsQueryRow[],

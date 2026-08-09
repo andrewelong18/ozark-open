@@ -172,9 +172,11 @@ function PickPlacementTotal({ group }: { group: PickPlacements }) {
 function ClosedBetCard({
   bet,
   placementsByPick,
+  revealUnavailable = false,
 }: {
   bet: Bet
   placementsByPick: Record<string, PickPlacements>
+  revealUnavailable?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -208,8 +210,15 @@ function ClosedBetCard({
           )}
           {/* The reveal control. A bet nobody backed still renders — it just
               says so, in plain muted text, with nothing to tap. */}
+          {/* "Nobody bet" and "we couldn't load the bets" are the same shape
+              of nothing, and conflating them is exactly how the reveal stayed
+              broken for two sprints (#132). Say which one it is. */}
           {reveal &&
-            (reveal.bettorCount === 0 ? (
+            (revealUnavailable ? (
+              <div className="mt-1 text-[11px] font-semibold text-amber-700">
+                Couldn&rsquo;t load the wagers on this bet
+              </div>
+            ) : reveal.bettorCount === 0 ? (
               <div className="mt-1 text-[11px] text-text-muted">
                 No wagers on this bet
               </div>
@@ -302,6 +311,9 @@ export type BetsMenuProps = {
   placements: Record<string, number>
   lockedOdds: Record<string, number>
   placementsByPick: Record<string, PickPlacements>
+  /** The closed-bet reveal query failed, so placementsByPick is empty because
+   * we don't know, not because nobody bet (#132). */
+  revealUnavailable?: boolean
   /** Set when an admin is entering wagers for a member (Sprint 23 / #101) —
    * passed straight down to the placement cards, which swap endpoints. Every
    * other prop already describes the MEMBER in that mode: the page loads their
@@ -318,6 +330,7 @@ export function BetsMenu({
   placements,
   lockedOdds,
   placementsByPick,
+  revealUnavailable = false,
   onBehalfOf = null,
 }: BetsMenuProps) {
   // The view the menu opens on, computed from the bets actually on the page:
@@ -525,6 +538,7 @@ export function BetsMenu({
                           <ClosedBetCard
                             bet={bet}
                             placementsByPick={placementsByPick}
+                            revealUnavailable={revealUnavailable}
                           />
                         )}
                         </div>

@@ -111,11 +111,17 @@ export async function placeOrEditPlacement(
   }
 
   // The tournaments row is the rulebook — passed verbatim to validation.
-  const { data: tournamentData } = await supabase
+  const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     .select(`${TOURNAMENT_RULE_COLUMNS}, ${TOURNAMENT_CLOCK_COLUMNS}`)
     .eq("id", target.tournament_id)
     .maybeSingle()
+  if (tournamentError) {
+    return {
+      status: 500,
+      body: { error: `Couldn't load the tournament rules: ${tournamentError.message}` },
+    }
+  }
   if (!tournamentData) {
     return { status: 500, body: { error: "Couldn't load the tournament rules." } }
   }
@@ -130,13 +136,22 @@ export async function placeOrEditPlacement(
   // Non-participants can browse the menu but never wager — and eligibility is
   // the BETTOR's, not the actor's. An admin acting for a revoked member is
   // refused here, exactly as the member would be (Sprint 21 / #91).
-  const { data: participantData } = await supabase
+  const { data: participantData, error: participantError } = await supabase
     .from("tournament_participants")
     .select("user_id, entry_fee, is_player")
     .eq("user_id", identity.bettor_id)
     .eq("tournament_id", target.tournament_id)
     .is("revoked_at", null)
     .maybeSingle()
+  // A failed read is not "you aren't registered" (#132). Sending a member to
+  // an admin over a transient database error wastes the one support channel
+  // this tournament has, on a problem the admin cannot see or fix.
+  if (participantError) {
+    return {
+      status: 500,
+      body: { error: `Couldn't check betting eligibility: ${participantError.message}` },
+    }
+  }
   if (!participantData) {
     return {
       status: 403,
@@ -187,12 +202,21 @@ export async function placeOrEditPlacement(
   // The bettor's row on this pick, read WITHOUT filtering deleted_at (the
   // SELECT policies deliberately allow it) so a soft-deleted row revives
   // instead of colliding with UNIQUE (user_id, pick_id).
-  const { data: ownRowData } = await supabase
+  const { data: ownRowData, error: ownRowError } = await supabase
     .from("bet_placements")
     .select("id, deleted_at")
     .eq("user_id", identity.bettor_id)
     .eq("pick_id", input.pick_id)
     .maybeSingle()
+  // Swallowing this one is the worst of the four: a null read plans an INSERT,
+  // which then collides with UNIQUE (user_id, pick_id) and surfaces a raw
+  // constraint error instead of reviving the soft-deleted row.
+  if (ownRowError) {
+    return {
+      status: 500,
+      body: { error: `Couldn't load your existing wager: ${ownRowError.message}` },
+    }
+  }
 
   const plan = planWrite(
     (ownRowData as OwnPlacementRow | null) ?? null,
@@ -288,11 +312,20 @@ export async function removePlacement(
   const phase = betJoin?.phase === 2 ? 2 : 1
   let phaseClosed = false
   if (betJoin?.tournament_id) {
-    const { data: clockData } = await supabase
+    const { data: clockData, error: clockError } = await supabase
       .from("tournaments")
       .select(TOURNAMENT_CLOCK_COLUMNS)
       .eq("id", betJoin.tournament_id)
       .maybeSingle()
+    // Fail closed: a clock we can't read must not become "the phase is open",
+    // or a failed query would reopen the window for pulling money off the
+    // board after the deadline (Sprint 25 / #106).
+    if (clockError) {
+      return {
+        status: 500,
+        body: { error: `Couldn't check the deadline: ${clockError.message}` },
+      }
+    }
     if (clockData) {
       phaseClosed = phaseClosedByClock(
         phase,

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 import { requireAdminPage } from "@/lib/admin-gate"
 import { CloseConsole } from "@/components/admin/close-console"
+import { LoadError } from "@/components/modules/load-error"
 import { buildChaseList, closingPhase, type ChaseParticipant } from "@/lib/chase"
 import {
   toPhaseClock,
@@ -26,7 +27,7 @@ import type { ExistingPlacement } from "@/lib/validation"
 export default async function AdminClosePage() {
   const { supabase } = await requireAdminPage()
 
-  const { data: tournamentData } = await supabase
+  const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     .select(
       `id, name, status, ${TOURNAMENT_RULE_COLUMNS}, ${TOURNAMENT_CLOCK_COLUMNS}`
@@ -35,6 +36,18 @@ export default async function AdminClosePage() {
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
+  // Every read on this page feeds a close-out decision, so each one that fails
+  // stops the page rather than under-reporting (#132). An admin who closes a
+  // phase against a silently-empty chase list closes it against the wrong
+  // facts, and the close is the irreversible bit.
+  if (tournamentError) {
+    console.error("[admin/close] tournament read failed:", tournamentError.message)
+    return (
+      <div className="mx-auto max-w-xl px-4 py-10">
+        <LoadError subject="the tournament" />
+      </div>
+    )
+  }
   if (!tournamentData) notFound()
 
   const tournamentRow = tournamentData as unknown as Record<string, unknown>
@@ -47,28 +60,54 @@ export default async function AdminClosePage() {
   const clock = toPhaseClock(tournamentRow)
 
   // Bets tell us which close this is, and how much is left unsettled.
-  const { data: betsData } = await supabase
+  const { data: betsData, error: betsError } = await supabase
     .from("bets")
     .select("id, phase, status")
     .eq("tournament_id", tournament.id)
+  if (betsError) {
+    console.error("[admin/close] bets read failed:", betsError.message)
+    return (
+      <div className="mx-auto max-w-xl px-4 py-10">
+        <LoadError subject="the bets" />
+      </div>
+    )
+  }
   const bets = (betsData ?? []) as { id: string; phase: number; status: string }[]
 
-  const { count: pendingPicks } = await supabase
+  const { count: pendingPicks, error: pendingError } = await supabase
     .from("bet_picks")
     .select("id, bets!inner(tournament_id)", { count: "exact", head: true })
     .eq("result", "pending")
     .eq("bets.tournament_id", tournament.id)
+  // A failed count reads as zero pending picks — i.e. "everything is settled,
+  // go ahead and finalize". Exactly the wrong thing to guess at.
+  if (pendingError) {
+    console.error("[admin/close] pending-pick count failed:", pendingError.message)
+    return (
+      <div className="mx-auto max-w-xl px-4 py-10">
+        <LoadError subject="the unsettled picks" />
+      </div>
+    )
+  }
 
   const unclosedBets = bets.filter((b) => b.status !== "closed").length
 
   // Live participants and their live placements — the same two filters the
   // pool arithmetic uses, so the chase list can't disagree with the payouts
   // about who is even in (Sprint 21 / #91).
-  const { data: participantData } = await supabase
+  const { data: participantData, error: participantError } = await supabase
     .from("tournament_participants")
     .select("user_id, entry_fee, users ( display_name )")
     .eq("tournament_id", tournament.id)
     .is("revoked_at", null)
+  if (participantError) {
+    console.error("[admin/close] participants read failed:", participantError.message)
+    return (
+      <div className="mx-auto max-w-xl px-4 py-10">
+        <LoadError subject="the participants" />
+      </div>
+    )
+  }
 
   type UserJoin = { display_name: string }
   const participants: ChaseParticipant[] = (
@@ -86,10 +125,20 @@ export default async function AdminClosePage() {
     }
   })
 
-  const { data: placementData } = await supabase
+  const { data: placementData, error: placementError } = await supabase
     .from("bet_placements")
     .select("user_id, pick_id, amount, bet_picks ( bet_id, bets ( phase, tournament_id ) )")
     .is("deleted_at", null)
+  // The chase list is built from these. Empty means "nobody owes a pick",
+  // which is the single most expensive thing to be wrong about at close.
+  if (placementError) {
+    console.error("[admin/close] placements read failed:", placementError.message)
+    return (
+      <div className="mx-auto max-w-xl px-4 py-10">
+        <LoadError subject="the wagers" />
+      </div>
+    )
+  }
 
   type BetJoin = { phase: number; tournament_id: string }
   type PickJoin = { bet_id: string; bets: BetJoin | BetJoin[] | null }

@@ -1,5 +1,10 @@
 // Unit tests for lib/avatar.ts (#90).
 //
+// Note on what these pin: the ordering test below is a contract about THIS
+// module (don't call Storage without having checked for a session), not a
+// regression test for the original bug. supabase-js awaits getSession() inside
+// its own fetch wrapper regardless — see the header note in avatar.ts.
+//
 // The root cause was a race between session hydration and the storage call,
 // which no amount of policy testing would have caught — the policies were
 // correct. What these pin is the ordering contract: the session is resolved
@@ -45,7 +50,7 @@ test("avatarPath is the <uid>/ prefix the bucket policy enforces", () => {
   assert.equal(avatarPath(ME), `${ME}/avatar`)
 })
 
-test("the session is resolved BEFORE the upload — the #90 ordering", async () => {
+test("the session is resolved BEFORE the upload", async () => {
   const { client, calls } = fakeClient({ session: { user: { id: ME } } })
   assert.equal(await uploadAvatar(client, ME, FILE), null)
   assert.deepEqual(calls, ["getSession", "upload:avatars"])

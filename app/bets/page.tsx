@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server"
 import { StatusBadge, type BetStatus } from "@/components/betting/status-badge"
 import { BetSlipSummary } from "@/components/betting/bet-slip-summary"
 import { EmptyState } from "@/components/modules/empty-state"
+import { LoadError } from "@/components/modules/load-error"
 import {
   BetsMenu,
   type Bet,
@@ -115,11 +116,16 @@ async function resolveOnBehalf(
 ): Promise<{ userId: string; name: string } | null> {
   if (!forParam) return null
   const { supabase } = await requireAdminPage()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("users")
     .select("id, display_name")
     .eq("id", forParam)
     .maybeSingle()
+  // A failed lookup must not 404 as "no such member" (#132) — an admin would
+  // read that as "I typed the wrong id" and go hunting for a user who exists.
+  if (error) {
+    throw new Error(`Couldn't look up that member: ${error.message}`)
+  }
   const member = data as { id: string; display_name: string } | null
   if (!member) notFound()
   return { userId: member.id, name: member.display_name }
@@ -140,7 +146,7 @@ export default async function BetsPage({
   } = await supabase.auth.getUser()
   const bettorId = onBehalfOf?.userId ?? viewer?.id ?? null
 
-  const { data: tournament } = await supabase
+  const { data: tournament, error: tournamentError } = await supabase
     .from("tournaments")
     .select(`id, ${TOURNAMENT_RULE_COLUMNS}, ${TOURNAMENT_CLOCK_COLUMNS}`)
     .in("status", ["upcoming", "active"])
@@ -157,6 +163,16 @@ export default async function BetsPage({
     </div>
   )
 
+  const loadErrorState = (subject: string) => (
+    <div className="mx-auto max-w-xl px-4 py-10">
+      <LoadError subject={subject} />
+    </div>
+  )
+
+  if (tournamentError) {
+    console.error("[bets] tournament read failed:", tournamentError.message)
+    return loadErrorState("the betting menu")
+  }
   if (!tournament) return emptyState
   const tournamentId = (tournament as { id: string }).id
   // One `now` for the render, so two bets in the same phase can't disagree
@@ -164,13 +180,17 @@ export default async function BetsPage({
   const clock = toPhaseClock(tournament as unknown as Record<string, unknown>)
   const now = new Date()
 
-  const { data: betsData } = await supabase
+  const { data: betsData, error: betsError } = await supabase
     .from("bets")
     .select(
       "id, sheet_bet_id, title, phase, round, status, total_probability, bet_categories ( name, slug, allows_multiple_picks ), bet_picks ( id, sheet_pick_id, label, american_odds, fractional_odds, probability, result, player_user_id, users ( avatar_url ) )"
     )
     .eq("tournament_id", tournamentId)
     .neq("status", "hidden")
+  if (betsError) {
+    console.error("[bets] menu read failed:", betsError.message)
+    return loadErrorState("the betting menu")
+  }
 
   // Wagering context: only participants get the inline stake inputs, and
   // their live placements pre-fill them (amount + the locked-odds receipt).
@@ -187,13 +207,20 @@ export default async function BetsPage({
     items: ComplianceItem[]
   } | null = null
   if (bettorId) {
-    const { data: participant } = await supabase
+    const { data: participant, error: participantError } = await supabase
       .from("tournament_participants")
       .select("entry_fee, is_player")
       .eq("user_id", bettorId)
       .eq("tournament_id", tournamentId)
       .is("revoked_at", null)
       .maybeSingle()
+    // Failing here would silently hide the stake inputs and show the "waiting
+    // for approval" note to an approved bettor — a wrong statement about their
+    // standing, not a missing feature (#132).
+    if (participantError) {
+      console.error("[bets] participant read failed:", participantError.message)
+      return loadErrorState("your betting status")
+    }
     isParticipant = participant !== null
     if (participant) {
       const entryFee = Number((participant as { entry_fee: number }).entry_fee)
@@ -202,13 +229,19 @@ export default async function BetsPage({
       )
       // Same query shape as /my-bets, so normalizeMyBets → the §8.1 checks run
       // verbatim and the summary numbers can't drift from that page.
-      const { data: placementRows } = await supabase
+      const { data: placementRows, error: placementRowsError } = await supabase
         .from("bet_placements")
         .select(
           "pick_id, amount, odds_at_placement, bet_picks ( label, sheet_pick_id, player_user_id, result, bets ( id, title, phase, round, status, sheet_bet_id, tournament_id ) )"
         )
         .eq("user_id", bettorId)
         .is("deleted_at", null)
+      // Their own money. An empty read here would show a full budget and no
+      // existing stakes — an invitation to re-bet what they've already bet.
+      if (placementRowsError) {
+        console.error("[bets] placements read failed:", placementRowsError.message)
+        return loadErrorState("your wagers")
+      }
       const entries = normalizeMyBets(
         (placementRows ?? []) as unknown as MyBetsQueryRow[],
         tournamentId
@@ -263,8 +296,9 @@ export default async function BetsPage({
     .filter((bet) => bet.status === "closed")
     .flatMap((bet) => bet.bet_picks.map((pick) => pick.id))
   let placementsByPick: Record<string, PickPlacements> = {}
+  let revealUnavailable = false
   if (closedPickIds.length > 0) {
-    const { data: closedRows } = await supabase
+    const { data: closedRows, error: closedRowsError } = await supabase
       .from("bet_placements")
       // `users!bet_placements_user_id_fkey`, not a bare `users`: since Sprint 23
       // added placed_by_user_id there are TWO foreign keys from this table to
@@ -277,6 +311,14 @@ export default async function BetsPage({
       )
       .in("pick_id", closedPickIds)
       .is("deleted_at", null)
+    // THE regression this issue is named for. The rest of the menu is still
+    // worth rendering, so this degrades rather than replacing the page — but
+    // the flag makes each closed bet say "couldn't load" instead of the
+    // "No wagers on this bet" that hid the outage for two sprints (#132).
+    if (closedRowsError) {
+      console.error("[bets] closed-bet reveal read failed:", closedRowsError.message)
+      revealUnavailable = true
+    }
     placementsByPick = groupPlacementsByPick(
       normalizeClosedPlacements(
         (closedRows ?? []) as ClosedPlacementQueryRow[]
@@ -347,6 +389,7 @@ export default async function BetsPage({
           placements={placements}
           lockedOdds={lockedOdds}
           placementsByPick={placementsByPick}
+          revealUnavailable={revealUnavailable}
           onBehalfOf={onBehalfOf}
         />
       </div>

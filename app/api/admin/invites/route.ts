@@ -46,12 +46,18 @@ export async function POST(request: Request) {
     )
   }
 
-  const { data: tournamentData } = await supabase
+  const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     .select("id")
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
+  if (tournamentError) {
+    return NextResponse.json(
+      { error: `Couldn't load the tournament: ${tournamentError.message}` },
+      { status: 500 }
+    )
+  }
   const tournament = tournamentData as { id: string } | null
   if (!tournament) {
     return NextResponse.json({ error: "No tournament to invite into." }, { status: 400 })
