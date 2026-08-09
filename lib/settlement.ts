@@ -107,6 +107,16 @@ export function buildSettlementSummary(
     if (roundCents(row.refunded) > 0) {
       parts.push(`incl. ${money(row.refunded)} returned from voided wagers`)
     }
+    // Per-row pending, flagged on the row itself. Someone whose wagers are all
+    // unscored reads as "$0.00 back (−$20.00)" — identical to having lost
+    // everything. On the page the caution card sits right next to that number;
+    // in a pasted block the line travels on its own, so it has to carry its
+    // own caveat or it libels somebody.
+    if (row.pending > 0) {
+      parts.push(
+        `${row.pending} wager${row.pending === 1 ? "" : "s"} of theirs not scored yet`
+      )
+    }
     lines.push(parts.join(", "))
   })
 
