@@ -124,7 +124,10 @@ The full protocol Claude follows is in `CLAUDE.md`.
 
 1. Push your branch to GitHub.
 2. In Vercel, click "New Project" and import the GitHub repo.
-3. Add the same environment variables from your `.env.local` to Vercel's project settings.
+3. Add the same environment variables from your `.env.local` to Vercel's project settings. Add
+   `SUPABASE_SERVICE_ROLE_KEY` too if admins need to create members who can't use the magic link
+   (#124) — it's the one variable that isn't in `.env.local` by default, and the only one that
+   bypasses row-level security. Never give it a `NEXT_PUBLIC_` prefix.
 4. Click Deploy. Vercel auto-deploys every push to `main` from then on.
 
 No CI/CD pipeline to configure. No servers to manage. Updating bets, odds, statuses, and results is done by re-uploading the bets spreadsheet — **no code changes or redeployments required.**
@@ -217,7 +220,32 @@ Two things to know:
 - **Every rule is checked against them, not you.** Their entry fee, their running total, their self-bet cap, their opponent block. A wager that would break one of their limits is refused, in the same words they would see.
 - **The wager is recorded as entered by you.** `/admin/view` shows "Entered by <name>" on those rows. It's their wager and their money — the attribution just makes a September dispute reconstructable.
 
-This does **not** create accounts. The person needs to have logged in once and been approved; if they never got that far, the magic link is still the only way in.
+If they never logged in at all, create their account first — the next recipe.
+
+### Recipe: add a member who can't use the magic link at all
+
+On **`/admin/people`**, open **"Add a member who can't use the magic link"**. Type their email, their
+display name, their entry fee and whether they're playing, then **Add and approve**. That creates
+their account outright — **no email is sent and there is nothing for them to click** — approves them,
+and puts their entry fee in the pool. You can place wagers for them immediately (previous recipe).
+
+Three things to know:
+
+- **Check the email carefully.** It becomes a real, confirmed login. A typo'd address that happens
+  to belong to somebody else is an account that person could sign in to. You can correct it in
+  Studio (`users` → `email`) before anyone uses it.
+- **The name must match the bet sheet**, for the same reason as every other display name: the
+  importer links picks to people by matching it, and a mismatch silently disables that person's
+  self-bet cap, self-pick flag and opponent block.
+- **They can still claim the account later.** It's an ordinary account — if they eventually get the
+  magic link working, that address signs them into *this* account, with their entry fee, name and
+  wagers all intact. Nothing to merge.
+
+**Requires `SUPABASE_SERVICE_ROLE_KEY`** in Vercel's environment variables (Supabase dashboard →
+Settings → API; see `.env.local.example` for the warnings that come with it). Without it the form
+answers "account creation isn't configured on this deployment" and the rest of the app is
+unaffected. It is the only place this project uses a key that bypasses row-level security, and it's
+confined to one module with one importer — `docs/DATA_MODEL.md` §5.1 explains why and how.
 
 ### Recipe: undo a bad import or a bad edit
 

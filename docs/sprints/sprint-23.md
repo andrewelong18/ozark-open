@@ -46,11 +46,27 @@ Two decisions worth keeping visible:
 - **The DB refuses a forged attribution, not just the route.** Both admin policies carry `placed_by_user_id = auth.uid()` in `WITH CHECK`, so an admin cannot write a row claiming somebody else entered it. The audit trail doesn't depend on the route being honest — which is the property a September dispute actually needs.
 - **An admin gate is permission to act *for* someone, not permission to break the rules.** A revoked participant can't be wagered for, a bet that isn't open still refuses, and a phase past its deadline stays closed for admins too.
 
-### Deferred — creating a member without an email round-trip ([#124](https://github.com/andrewelong18/ozark-open/issues/124))
+### ~~Deferred~~ Shipped Aug 9, 2026 — creating a member without an email round-trip ([#124](https://github.com/andrewelong18/ozark-open/issues/124))
 
-Half 1 of #101 is **not built**, deliberately. `public.users.id REFERENCES auth.users(id)` and the app holds only the anon key, so an account created without an email round-trip needs one of four mechanisms — a service-role key in the prod runtime, a `SECURITY DEFINER` function writing GoTrue's own tables, shadow users with the FK dropped, or an admin-triggered invite (which is still an email). That is a security-posture decision, not an implementation detail, and none of the four can be verified from this container. #124 carries the write-up.
+Half 1 of #101 was deferred here on purpose: `public.users.id REFERENCES auth.users(id)` and the app held only the anon key, so an account created without an email round-trip needed one of four mechanisms — a service-role key in the prod runtime, a `SECURITY DEFINER` function writing GoTrue's own tables, shadow users with the FK dropped, or an admin-triggered invite (which is still an email). That is a security-posture decision, not an implementation detail.
 
-The wager half does not depend on it: it works for any approved member, which is everyone who did get through the magic link.
+**Decided Aug 9, 2026 (Andrew): the service-role route.** `POST /api/admin/members` calls `auth.admin.createUser({ email, email_confirm: true })` — confirmed without sending anything. The account is entirely ordinary, so **claiming is free**: a member who later works out the magic link signs into that same account with their fee, name and wagers intact. That's the property none of the other three had. Full rationale, the rejected alternatives and the residual typo risk are in [ADR 0001 §14](../adr/0001-bet-pick-architecture.md).
+
+The cost is a full-bypass key in the Vercel runtime for the first time, against `DATA_MODEL.md` §5 and Sprint 11's reason for choosing pg_cron over Vercel Cron. It is contained to one module and one importer, asserted by `lib/admin-client-containment.test.ts` rather than documented — see `DATA_MODEL.md` §5.1.
+
+**A bug fell out of building it.** There was **no admin `UPDATE` policy on `public.users`** — the only one was the own-row `USING (auth.uid() = id)`. So this sprint's own #99 display-name edit was a **silent no-op for every user but the acting admin**: RLS filtered the row out, zero rows matched, PostgREST returned success with no error, and the console said "saved". The route's comment credited `guard_users_self_update` for letting the write land, but RLS is evaluated *before* the trigger, so no row ever reached it. Every local harness runs SQL as superuser, where RLS is bypassed — nothing local could have caught it, which is filed as its own issue. Fixed in `20260814000000_admin_manages_users.sql` plus a zero-row check in `writeDisplayName()`, because "no error" was never evidence the write happened.
+
+| What | Where |
+|---|---|
+| Admin `UPDATE` policy + `created_by_user_id` | `supabase/migrations/20260814000000_admin_manages_users.sql` |
+| The contained service-role client | `lib/supabase/admin.ts` (+ `server-only`) |
+| Validation (pure) | `lib/members.ts`, `lib/members.test.ts` |
+| The route | `app/api/admin/members/route.ts` — the only importer of the admin client |
+| Blast-radius guard | `lib/admin-client-containment.test.ts` |
+| The form | `AddMemberBox` in `components/admin/people-console.tsx` |
+| The decision | ADR 0001 §14; `DATA_MODEL.md` §3.1 + §5.1 |
+
+**Not verified in-container, deliberately reported rather than glossed:** `auth.admin.createUser` against real GoTrue needs a service-role key and a reachable project, and this container has neither (no `SUPABASE_SERVICE_ROLE_KEY`, no Docker daemon for a local stack, no prod credentials). The validation, the containment and the RLS change are all covered; the GoTrue call itself is the residual gap and is filed as an issue.
 
 ### Shipped — Aug 8, 2026
 

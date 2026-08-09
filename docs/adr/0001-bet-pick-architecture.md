@@ -163,7 +163,35 @@ Four things follow, none of them negotiable:
 - **Odds still snapshot at write.** Nothing about acting on behalf touches §12 or PRD §7.1. The admin path reuses the same `planWrite` that the member path does, including the insert/update/revive semantics and the soft delete.
 - **Eligibility is still the bettor's.** A revoked participant cannot be wagered for (`revoked_at IS NULL`, PRD §12 A13), and a phase that has closed by the clock stays closed for admins too (§5a) — an admin gate is permission to act *for* someone, not permission to break the tournament's own rules.
 
-**What this does not add:** admin creation of member accounts. `public.users.id` references `auth.users(id)` and the app holds only the anon key, so an account with no email round-trip needs either a service-role key in the runtime or a definer function writing GoTrue's own tables. That is a security-posture decision of its own and is deliberately not made here.
+**What this does not add:** admin creation of member accounts. `public.users.id` references `auth.users(id)` and the app holds only the anon key, so an account with no email round-trip needs either a service-role key in the runtime or a definer function writing GoTrue's own tables. That is a security-posture decision of its own and is deliberately not made here. **Made in §14 below (Aug 9, 2026).**
+
+### 14. Admin-created accounts — added Aug 2026 (Sprint 23 / [#124](https://github.com/andrewelong18/ozark-open/issues/124))
+
+§13 deferred exactly one thing, and this is it. §13 gave Pat the ability to *bet* for a member; it did nothing for a member who has no account, which is the same person §13 was written for. The Thursday-morning failure is concrete: ~32 people, three of them can't get through magic-link, and the admin has the wager tool and no way to create them.
+
+**Decision: an admin-gated server route creates a real Supabase auth account with a service-role key.** `POST /api/admin/members` → `auth.admin.createUser({ email, email_confirm: true })`. `email_confirm` marks the address confirmed **without sending anything**, which is what "no email round-trip" means here.
+
+**The three rejected alternatives**, because each fails on something specific rather than on taste:
+
+| Option | Fails on |
+|---|---|
+| `SECURITY DEFINER` function inserting `auth.users` + `auth.identities`, gated on `is_admin()` | Hand-writing GoTrue's internal schema. It cannot be verified anywhere we can run it — every local harness stubs `auth` with a fake schema, so a green round trip proves nothing about real GoTrue — and a Supabase auth upgrade can break it silently, mid-tournament. No new secret was the only thing it had going for it. |
+| Shadow users — drop the `auth.users` FK, generate a uuid | **The member can never cleanly claim the account.** Their real login would hit the `email` UNIQUE constraint and make `handle_new_user()` throw, breaking their sign-in outright. A merge path means `ON UPDATE CASCADE` on all five FKs to `users.id`, including `bet_placements` — surgery on money data, six weeks out. |
+| Admin-triggered invite (the app sends the magic link) | It is still an email round-trip. It doesn't solve the stated problem. |
+
+**Why A wins on the thing that matters: claiming is free.** The account genuinely *is* the member's. If they later work out the magic link, they sign in to that same account and their entry fee, display name and wagers are all there. Every other option strands something.
+
+**The integrity properties of §13 all carry over, because nothing about the *wagering* path changes.** The rules still evaluate against the bettor, `placed_by_user_id` still records the actor, RLS is not loosened — an admin-created member is an ordinary member from the moment the account exists.
+
+Three things this decision adds on its own:
+
+- **Creating an account grants nothing.** Approval remains a separate call to `POST /api/admin/participants`, which owns the entry fee and creates the `tournament_participants` row whose existence — with `revoked_at IS NULL` — *is* betting eligibility (PRD §12 A12/A13). The pool math has one source of truth, and it isn't this route.
+- **An account-level audit trail**, mirroring `placed_by_user_id`: `users.created_by_user_id` records which admin created the account. NULL means self-registered, true of every pre-existing row. No backfill.
+- **`onboarded_at` is stamped at creation.** Left NULL, the member would land in the first-run onboarding gate, where `guard_users_self_update` permits a one-time self-set of `display_name` — mid-tournament, on the field `lib/import.ts` matches picks by (§11, PRD §12 A10). The admin has already named them, so onboarding is done and the name stays admin-owned.
+
+**The cost, recorded rather than buried.** This puts a full-bypass credential in the production runtime for the first time. `DATA_MODEL.md` §5 argued against it and Sprint 11 chose pg_cron over Vercel Cron specifically to avoid it; that reasoning stands and is overridden once, for the one feature with no alternative. The containment is four properties (`server-only`, a single importer asserted by a test, one call, never `NEXT_PUBLIC_`) and is documented in `DATA_MODEL.md` §5.1 and `lib/supabase/admin.ts`.
+
+**The residual risk, stated plainly: a typo'd email is a real, confirmed account.** If an admin creates `dna@x.com` and that address exists, its owner could request a magic link and reach that member's wagers. This is inherent to any model where the account is claimable by email — it is the same exposure the ordinary registration flow has, moved from the member to the admin. Mitigated by making the email admin-correctable and by the form's copy saying so, not by a mechanism.
 
 ---
 
