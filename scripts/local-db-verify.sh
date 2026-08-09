@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # One-command local DB verification: spins up a throwaway Postgres cluster,
 # applies every migration + the Phase 1 seed over the stub Supabase auth
-# schema, runs the three round-trip harnesses (import, placement RLS,
-# payout view), and smoke-tests the admin chase SQL. No Supabase creds,
+# schema, runs the four round-trip harnesses (import, placement RLS,
+# payout view, onboarding guard), and smoke-tests the admin chase SQL. No Supabase creds,
 # no TCP port (unix socket only), no leftovers — the cluster is deleted
 # on exit. This is the recipe from the round-trip scripts' headers, scripted.
 #
