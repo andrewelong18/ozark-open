@@ -66,6 +66,10 @@ The cost is a full-bypass key in the Vercel runtime for the first time, against 
 | The form | `AddMemberBox` in `components/admin/people-console.tsx` |
 | The decision | ADR 0001 §14; `DATA_MODEL.md` §3.1 + §5.1 |
 
+**The prod migration is applied and verified** (Aug 9, 2026) — `public.users` now carries five policies (the new admin `UPDATE` alongside the three `SELECT`s and the member's own-row `UPDATE`, which is **unchanged** on both `USING` and `WITH CHECK`), and `created_by_user_id` is present, nullable, FK'd to `public.users`. Applied through the Management API's query endpoint, which records nothing in `supabase_migrations` — see [#156](https://github.com/andrewelong18/ozark-open/issues/156) for the tracking-table drift that exposes. It's additive, so merge order isn't load-bearing.
+
+**Worth doing once #151 deploys:** re-check display names on `/admin/people` against the bet sheet. Any name an admin corrected between Aug 8 and Aug 9 reported success and silently didn't save.
+
 **Not verified in-container, deliberately reported rather than glossed:** `auth.admin.createUser` against real GoTrue needs a service-role key and a reachable project, and this container has neither (no `SUPABASE_SERVICE_ROLE_KEY`, no Docker daemon for a local stack, no prod credentials). The validation, the containment and the RLS change are all covered; the GoTrue call itself is the residual gap, filed as [#155](https://github.com/andrewelong18/ozark-open/issues/155) with the walkthrough. The env var ([#152](https://github.com/andrewelong18/ozark-open/issues/152)) and the prod migration ([#153](https://github.com/andrewelong18/ozark-open/issues/153)) are the two manual steps.
 
 ### Shipped — Aug 8, 2026
