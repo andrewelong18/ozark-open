@@ -71,10 +71,24 @@ function asObject(raw: unknown): Record<string, unknown> | null {
  * that's always populated, and a PATCH that only moves the entry fee mustn't
  * blank the name out.
  *
- * The write lands because this runs under an ADMIN session:
- * `guard_users_self_update` pins display_name once onboarded_at is set, but
- * exempts admins (Sprint 16 / #99). Don't fight the trigger — this is the path
- * it was built to allow.
+ * TWO things have to permit this write, and until #124 only one of them
+ * existed:
+ *
+ *   RLS policy  — decides whether the row is visible to the UPDATE at all.
+ *                 "Admins can update any user" (20260814000000). Before that
+ *                 migration the only UPDATE policy was USING (auth.uid() = id),
+ *                 so this function was a SILENT NO-OP for every user but the
+ *                 acting admin — zero rows matched, PostgREST returned success
+ *                 with no error, and the console said "saved".
+ *   Trigger     — `guard_users_self_update` pins display_name once onboarded_at
+ *                 is set, but exempts admins (Sprint 16 / #99).
+ *
+ * RLS runs FIRST. The trigger's admin exemption was written expecting a row to
+ * reach it; without the policy, none did. Every local harness runs SQL as
+ * superuser (RLS bypassed), which is why this shipped green.
+ *
+ * Hence `.select()` and the zero-row check below: this failure mode is silent
+ * by construction, so the absence of an error is not evidence the write landed.
  */
 async function writeDisplayName(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -87,13 +101,30 @@ async function writeDisplayName(
   const nameError = validateDisplayName(displayName)
   if (nameError) return NextResponse.json({ errors: [nameError] }, { status: 400 })
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("users")
     .update({ display_name: displayName })
     .eq("id", userId)
+    .select("id")
+    .maybeSingle()
   if (error) {
     return NextResponse.json(
       { error: `Couldn't update the name: ${error.message}` },
+      { status: 500 }
+    )
+  }
+  if (!data) {
+    // No error and no row: RLS filtered the UPDATE to nothing, or the user id
+    // doesn't exist. Never report this as success — display_name is what
+    // lib/import.ts matches picks to people by, so a name that silently didn't
+    // change disables that member's self-bet cap, self-pick flag and opponent
+    // block on the next upload.
+    return NextResponse.json(
+      {
+        error:
+          "The name didn't save — no matching account, or the database refused the update. " +
+          "Check that you're still signed in as an admin.",
+      },
       { status: 500 }
     )
   }
