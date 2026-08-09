@@ -304,7 +304,7 @@ export function BetPlacementCard({
                       // pseudo-element rather than by padding so the dot stays
                       // the size the design system draws it and nothing in the
                       // row reflows.
-                      "before:absolute before:-inset-3 before:content-['']",
+                      "before:absolute before:-inset-3.5 before:content-['']",
                       selected === pick.id
                         ? "border-indigo-700"
                         : "border-border-strong"

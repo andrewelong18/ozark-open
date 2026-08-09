@@ -80,7 +80,11 @@ export function StakeInput({
           onKeyDown={(e) => {
             if (e.key === "Enter") onPlace?.()
           }}
-          className="tabular min-w-0 flex-1 border-none bg-transparent text-left font-semibold text-text-body outline-none"
+          // h-full, not the input's intrinsic ~21px line box: without it the
+          // digits are a 21px-tall target sitting inside a 48px control, and a
+          // tap anywhere else in the field lands on the wrapper and focuses
+          // nothing. The border is drawn by the wrapper either way.
+          className="tabular h-full min-w-0 flex-1 border-none bg-transparent text-left font-semibold text-text-body outline-none"
         />
         <button
           type="button"
