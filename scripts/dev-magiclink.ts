@@ -13,60 +13,30 @@
 // → URL Configuration). The service_role key is admin-level — keep it out of
 // git and out of NEXT_PUBLIC_*.
 //
-// Why not properties.action_link (Sprint 21 / #94): that's the legacy
-// /auth/v1/verify?token=… URL, which hands the session back as a URL *hash
-// fragment*. A hash never reaches the server, so /auth/callback — a server
-// route — correctly answers "Login link was missing its token." We emit the
-// token_hash shape the callback actually verifies (verifyOtp), which is also
-// the shape the production email template uses.
+// Use localhost, not 127.0.0.1: /auth/callback redirects to the origin Next
+// derives from the request, which normalises to localhost. Opening the link on
+// 127.0.0.1 sets the session cookie on one origin and lands you on another, so
+// you arrive back at /login as though the link had expired.
+//
+// The link-minting itself lives in scripts/magic-link.ts, shared with the
+// Playwright sign-in fixture so the two can't drift apart.
 
-import { createClient } from "@supabase/supabase-js"
+import { magicLinkConfigFromEnv, mintMagicLink } from "./magic-link.ts"
 
 async function main() {
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const email = process.argv[2]
-  const siteUrl =
-    process.env.SITE_URL ??
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    "http://localhost:3000"
-
-  if (!url || !serviceKey) {
-    console.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the environment.")
-    process.exit(1)
-  }
   if (!email) {
     console.error("Usage: dev-magiclink.ts <email>  (the account must already exist)")
     process.exit(1)
   }
 
-  const supabase = createClient(url, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
-
-  const { data, error } = await supabase.auth.admin.generateLink({
-    type: "magiclink",
-    email,
-    options: { redirectTo: `${siteUrl}/auth/callback` },
-  })
-
-  if (error) {
-    console.error(`Couldn't generate a link for ${email}: ${error.message}`)
-    console.error("(The account must already exist — seed it or log in once first.)")
+  let link: string
+  try {
+    link = await mintMagicLink(email, magicLinkConfigFromEnv())
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
     process.exit(1)
   }
-
-  const tokenHash = data.properties?.hashed_token
-  if (!tokenHash) {
-    console.error(
-      `Supabase returned no hashed_token for ${email} — can't build a callback link.`
-    )
-    process.exit(1)
-  }
-
-  const link = `${siteUrl.replace(/\/+$/, "")}/auth/callback?token_hash=${encodeURIComponent(
-    tokenHash
-  )}&type=magiclink`
 
   console.log(`\nMagic link for ${email} — open this in your browser to sign in:\n`)
   console.log(link)
