@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { MoneyDisplay } from "@/components/betting/money-display"
+import { BET_FOOTER_TOAST_SLOT } from "@/components/betting/bet-footer"
 import type { ComplianceItem } from "@/lib/my-bets"
 
 // Bet-slip review summary (Sprint 17 · Competitive Analysis §1.3). A fixed
@@ -56,12 +57,25 @@ export function BetSlipSummary({
         : lead.title
 
   return (
-    <aside className="fixed inset-x-0 bottom-0 z-30 px-4 pb-3">
-      <div className="mx-auto flex max-w-[var(--container-max,1120px)] items-center justify-between gap-4 rounded-xl border border-border bg-surface-card px-4 py-3 shadow-[0_-2px_16px_rgba(31,29,60,0.12)]">
+    // The whole bottom-of-screen furniture, in one column: the menu's error
+    // toast portals into the slot, the bar sits under it. The toast used to be
+    // its own fixed element offset by a hardcoded bar height, which was a guess
+    // that went stale the moment the bar wrapped to two lines or a phone put a
+    // home indicator under it. Stacked in flow, any bar height works.
+    //
+    // pb: 12px on a laptop, the home indicator's own height on a phone — real
+    // numbers only because app/layout.tsx sets viewportFit: "cover".
+    <aside
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+    >
+      <div id={BET_FOOTER_TOAST_SLOT} className="mb-2 empty:mb-0" />
+      <div className="pointer-events-auto mx-auto flex max-w-[var(--container-max,1120px)] items-center justify-between gap-4 rounded-xl border border-border bg-surface-card px-4 py-3 shadow-[0_-2px_16px_rgba(31,29,60,0.12)]">
         <div className="min-w-0">
-          <div className="flex items-baseline gap-1.5">
+          {/* One line, always. Wrapping this pushed the bar taller and ate the
+              bet card behind it — on the screen where the next tap lives. */}
+          <div className="flex items-baseline gap-1.5 truncate">
             <MoneyDisplay value={totalWagered} size="md" weight="bold" />
-            <span className="text-sm text-text-muted">
+            <span className="truncate text-sm whitespace-nowrap text-text-muted">
               of ${entryFee}
               {pickCount > 0 && (
                 <>
@@ -83,7 +97,7 @@ export function BetSlipSummary({
         </div>
         <Link
           href="/my-bets"
-          className="shrink-0 text-sm font-semibold text-indigo-700 underline-offset-4 hover:underline"
+          className="inline-flex min-h-11 shrink-0 items-center text-sm font-semibold text-indigo-700 underline-offset-4 hover:underline"
         >
           Review all →
         </Link>

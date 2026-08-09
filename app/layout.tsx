@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Montserrat } from "next/font/google"
 import localFont from "next/font/local"
 import "./globals.css"
@@ -24,6 +24,18 @@ const azalea = localFont({
 export const metadata: Metadata = {
   title: "Ozark Open Sportsbook",
   description: "Private betting pool for tournament participants.",
+}
+
+// The tournament happens on phones, so the viewport meta tag is load-bearing
+// rather than boilerplate. `viewportFit: "cover"` is the half that matters:
+// without it the browser letterboxes the page above the home indicator and
+// every `env(safe-area-inset-*)` in the app resolves to 0 — which is what the
+// fixed bet-slip bar was quietly relying on. With it, the page runs edge to
+// edge and the insets carry real numbers the footers can pad by.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 }
 
 export default function RootLayout({
