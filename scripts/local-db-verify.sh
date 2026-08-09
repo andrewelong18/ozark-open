@@ -68,9 +68,19 @@ done
 run_sql -f "$REPO/supabase/seed-sample-phase1.sql"
 echo "    applied seed-sample-phase1.sql"
 
-echo "==> round trips (import → placement RLS → payout view → onboarding guard → snapshots)"
+# The cluster is deleted on exit, so regenerating the manifest can't be "run
+# this against that database" — it has to happen inside a run. Hence the flag:
+#   POLICY_MANIFEST_WRITE=1 bash scripts/local-db-verify.sh
+echo "==> policy manifest (every RLS policy, against the checked-in expectation)"
+node --experimental-strip-types "$REPO/scripts/policy-manifest.ts" ${POLICY_MANIFEST_WRITE:+--write}
+
+echo "==> round trips (import → placement RLS → users RLS → payout view → onboarding guard → snapshots)"
 node --experimental-strip-types "$REPO/scripts/import-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/placement-roundtrip.ts"
+# users RLS (#154) runs after placement-roundtrip, which installs the
+# GUC-backed auth.uid() these scripts share. Covers the POLICY layer;
+# onboarding-guard-roundtrip below covers the guard TRIGGER layer.
+node --experimental-strip-types "$REPO/scripts/users-rls-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/payout-view-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/onboarding-guard-roundtrip.ts"
 # Sprint 11's "Done when", run rather than asserted: snapshot → mangle → restore

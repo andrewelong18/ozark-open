@@ -1,0 +1,26 @@
+bet_categories | ALL | Admins can write bet_categories | authenticated
+bet_categories | SELECT | Authenticated users can read bet_categories | authenticated
+bet_picks | ALL | Admins can write bet_picks | authenticated
+bet_picks | SELECT | Admins can read all bet_picks | authenticated
+bet_picks | SELECT | Authenticated users can read picks of non-hidden bets | authenticated
+bet_placements | INSERT | Admins can place on behalf of a bettor | authenticated
+bet_placements | INSERT | Users can place on picks of open bets | authenticated
+bet_placements | SELECT | Admins can read all placements | authenticated
+bet_placements | SELECT | Placements are visible to all once the bet closes | authenticated
+bet_placements | SELECT | Users can read own placements | authenticated
+bet_placements | UPDATE | Admins can edit placements they entered on behalf | authenticated
+bet_placements | UPDATE | Users can edit own placements while the bet is open | authenticated
+bets | ALL | Admins can write bets | authenticated
+bets | SELECT | Admins can read all bets | authenticated
+bets | SELECT | Authenticated users can read non-hidden bets | authenticated
+snapshots | ALL | Admins manage snapshots | authenticated
+tournament_invites | ALL | Admins manage invites | authenticated
+tournament_participants | ALL | Admins can write participants | authenticated
+tournament_participants | SELECT | Authenticated users can read participants | authenticated
+tournaments | ALL | Admins can write tournaments | authenticated
+tournaments | SELECT | Authenticated users can read tournaments | authenticated
+users | SELECT | Admins can read all users | public
+users | SELECT | Authenticated users can read all users | authenticated
+users | SELECT | Users can read own row | public
+users | UPDATE | Admins can update any user | authenticated
+users | UPDATE | Users can update own row | authenticated
