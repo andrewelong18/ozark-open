@@ -40,6 +40,15 @@ Uploads never touch anybody's wagers. Only participants write those, through the
       *(If sleeping projects are still a worry the week of, #18 is the open call on paying for Pro
       for September.)*
 
+- [ ] **Send people `https://ozark-open.com` — not a `.vercel.app` link.** Both
+      `ozark-open.com` and `ozark-open-sportsbook.vercel.app` are open to the public and work
+      fine (checked Aug 9, 2026). But the project has Vercel SSO on *"all except custom
+      domains"*, and two of its other URLs — the `-nerdyandyproject` and `-git-main` aliases —
+      bounce anyone who isn't on Andrew's Vercel team to a Vercel login wall. Those are the URLs
+      you get by copying from the Vercel dashboard, so it is an easy link to paste into a group
+      text by mistake. A member who hits it will report "the app is asking me to log into
+      something called Vercel", which reads like a broken invite.
+
 - [ ] **Verify magic-link email works end to end.** Not "the login page loads" — an actual email,
       to an actual inbox, clicked:
       1. Open `/login` in a private window.
