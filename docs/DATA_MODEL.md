@@ -385,7 +385,13 @@ actual(user) = theoretical(user) / sum(theoretical(all)) × pool_total
 
 ## 5. Row-Level Security Highlights
 
-Policies live inline in each table's migration file under `supabase/migrations/` (e.g., `20260507000000_users_table.sql`, `20260507000001_tournaments.sql`, `20260507000002_bets.sql`). Summary:
+Policies live inline in each table's migration file under `supabase/migrations/` (e.g., `20260507000000_users_table.sql`, `20260507000001_tournaments.sql`, `20260507000002_bets.sql`).
+
+**The full set is asserted, not just described** (#154). `supabase/expected-policies.txt` lists all 26 policies — table, command, name, roles — and `scripts/policy-manifest.ts` diffs the live set against it on every `local-db-verify.sh` run. Adding, removing or re-scoping a policy fails the build until the manifest is regenerated in the same commit (`POLICY_MANIFEST_WRITE=1 bash scripts/local-db-verify.sh`). This exists because **a missing policy is invisible at runtime**: an `UPDATE` with no policy matches zero rows and returns success, which is indistinguishable from a write that had nothing to do. That is how the #99 display-name edit ran inert in production. Behaviour tests only cover cases someone thought to write; the manifest covers the ones nobody did.
+
+**One structural note worth keeping.** Every admin-writable table except `users` grants admin write through a single `FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin())`, which covers INSERT/UPDATE/DELETE in one statement and **cannot** develop the `users` gap. `public.users` is the only table whose policies were assembled per-command, across four migrations — which is exactly why it was the only one missing an admin write path. When adding a table, prefer the `FOR ALL` shape.
+
+Summary:
 
 - **`bets`**: anyone authenticated can `SELECT` rows where `status != 'hidden'`. Only admins can `INSERT` / `UPDATE` / `DELETE` (in practice: the import route, running as the admin).
 - **`bet_picks`**: readable whenever the parent bet is readable (not `hidden`). Write: admins only (the import route).
