@@ -6,6 +6,8 @@
 // test-only login route, no password backdoor, no relaxed guard. If magic-link
 // sign-in breaks in production, these specs break too, which is the point.
 
+import { execFileSync } from "node:child_process"
+
 import { expect, type Page } from "@playwright/test"
 import { createClient } from "@supabase/supabase-js"
 
@@ -69,6 +71,24 @@ export async function deletePlacementsFor(email: string): Promise<void> {
   const userId = await userIdFor(email)
   const { error } = await supabase.from("bet_placements").delete().eq("user_id", userId)
   if (error) throw new Error(`Couldn't clear wagers for ${email}: ${error.message}`)
+}
+
+/**
+ * Re-apply supabase/seed-e2e.sql — the fixture's single source of truth.
+ *
+ * For the journeys that drive the menu through its real lifecycle: closing a
+ * bet and publishing results are one-way doors in the app, so those specs put
+ * the fixture back rather than leaving whoever runs next to inherit a settled
+ * tournament.
+ */
+export function reloadFixture(): void {
+  const dbUrl = process.env.E2E_DB_URL
+  if (!dbUrl) {
+    throw new Error("E2E_DB_URL isn't set — run the suite through scripts/e2e-verify.sh.")
+  }
+  execFileSync("psql", [dbUrl, "-X", "-q", "-v", "ON_ERROR_STOP=1", "-f", "supabase/seed-e2e.sql"], {
+    encoding: "utf-8",
+  })
 }
 
 /** Put an account back to un-onboarded so the onboarding journey can re-run. */

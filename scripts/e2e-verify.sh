@@ -47,6 +47,10 @@ export SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL"
 export SUPABASE_SERVICE_ROLE_KEY="$(read_key SERVICE_ROLE_KEY)"
 export SITE_URL="$E2E_BASE_URL"
 DB_URL="$(read_key DB_URL)"
+# Exported so a spec that deliberately drives the menu through its lifecycle
+# (close a bet, publish results) can put the fixture back afterwards, instead of
+# leaving the next spec to inherit a settled tournament.
+export E2E_DB_URL="$DB_URL"
 
 [ -n "$NEXT_PUBLIC_SUPABASE_URL" ] && [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] || {
   echo "Couldn't read the stack's URL/keys from \`supabase status\`." >&2; exit 1; }
