@@ -54,14 +54,23 @@ BEGIN
   --
   -- So: refuse unless every wager is a simulated one. Clearing the decks is
   -- 00-reset.sql's job, and doing it deliberately is the point.
+  --
+  -- ESCAPE HATCH. scripts/dry-run-verify.ts rehearses this whole lifecycle
+  -- against a throwaway local stack, and its slates deliberately include
+  -- andrewelong18@gmail.com — a non-sim address — so the rehearsal exercises
+  -- the same mixed-ownership shape a real session has. There, deleting
+  -- everything is the point. It sets this GUC before running the file; a human
+  -- pasting this into the Supabase SQL editor never will, which is exactly the
+  -- asymmetry we want.
   SELECT count(*) INTO n_real_wagers
   FROM public.bet_placements p
   JOIN public.users u ON u.id = p.user_id
   WHERE u.email NOT LIKE '%@dryrun.ozark.test';
 
-  IF n_real_wagers > 0 THEN
+  IF n_real_wagers > 0
+     AND coalesce(current_setting('ozark.teardown_force', true), '') <> 'on' THEN
     RAISE EXCEPTION
-      'Refusing to run: % wager(s) belong to real accounts and this file deletes every row in bet_placements. Take a snapshot, then clear them deliberately with 00-reset.sql if that is what you want.',
+      'Refusing to run: % wager(s) belong to real accounts and this file deletes every row in bet_placements. Take a snapshot, then clear them deliberately with 00-reset.sql if that is what you want. (Automated rehearsals set ozark.teardown_force=on.)',
       n_real_wagers;
   END IF;
 
