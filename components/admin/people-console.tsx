@@ -527,6 +527,12 @@ export function PeopleConsole({
           return (
             <div
               key={person.key}
+              // The funnel is a CSS grid, not a <table>, so a row has no role to
+              // address it by. person.key is the user id (or `invite:<email>`),
+              // which is what the E2E approval journey targets — and asserting
+              // the panel that opens is id'd with the SAME key is how that spec
+              // proves the console opened the right person's lever.
+              data-testid={`person-${person.key}`}
               className="border-t border-border first:border-t-0"
             >
               <div className={`${GRID} items-center py-3`}>
