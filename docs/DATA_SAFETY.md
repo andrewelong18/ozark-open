@@ -230,14 +230,36 @@ checksum over all five tables — runs on every `bash scripts/local-db-verify.sh
 ### The schedule
 
 Scheduled snapshots run on **Supabase pg_cron**, inside the database, so the app holds no
-service-role key and no cron secret. Enabling it is a one-time dashboard step (Database →
-Extensions → `pg_cron`), then:
+service-role key and no cron secret. **This is live in production as of Aug 9, 2026** —
+`ozark-snapshot`, every 6 hours — so there is nothing to set up unless you are rebuilding the
+project from scratch.
+
+Both steps are ordinary SQL, and both can be run through the Management API's query endpoint
+(which connects as `postgres`) rather than the dashboard:
 
 ```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
 SELECT cron.schedule(
   'ozark-snapshot', '0 */6 * * *',
   $job$ SELECT public.take_snapshot('cron', 50) $job$
 );
+```
+
+No wrapper function and no grant are needed: a pg_cron job runs as the role that scheduled it,
+`postgres` owns `take_snapshot`, and a direct connection carries no JWT — which is the case
+`take_snapshot`'s gate deliberately admits.
+
+Check that it is actually *firing*, not merely scheduled — a broken EXECUTE grant would give you
+the first without the second:
+
+```sql
+SELECT jobname, status, return_message, start_time
+  FROM cron.job_run_details d JOIN cron.job j USING (jobid)
+ ORDER BY start_time DESC LIMIT 5;
+
+SELECT created_at, trigger FROM public.snapshots WHERE trigger = 'cron'
+ ORDER BY created_at DESC LIMIT 5;
 ```
 
 Changing the interval later is one statement, never a deploy:
