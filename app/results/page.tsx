@@ -6,11 +6,13 @@ import { PlayerChip } from "@/components/player/player-chip"
 import { EmptyState } from "@/components/modules/empty-state"
 import { LoadError } from "@/components/modules/load-error"
 import { MoneyDisplay } from "@/components/betting/money-display"
+import { SettlementSummary } from "@/components/results/settlement-summary"
 import {
   buildResultsTable,
   normalizePayoutRows,
   type PayoutViewQueryRow,
 } from "@/lib/payouts"
+import { buildSettlementSummary } from "@/lib/settlement"
 
 // Stacked on a phone, six columns at sm+ — see the note on the header row.
 const GRID =
@@ -295,6 +297,13 @@ export default async function ResultsPage() {
               ))}
             </div>
           </Card>
+
+          {/* The table is what you read; this is what you send (#151 follow-up).
+              Below it deliberately — the standings answer "what did I win",
+              which is why anyone opened the page. */}
+          <SettlementSummary
+            text={buildSettlementSummary(table, tournament.name)}
+          />
 
           <p className="text-center text-xs text-text-muted">
             Actual share = your theoretical payout ÷ everyone&apos;s theoretical
