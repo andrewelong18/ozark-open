@@ -35,7 +35,10 @@ export default async function LoginPage({ searchParams }: Props) {
   const params = await searchParams
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-gradient-to-t from-ink-100 to-background px-6">
+    // dvh, not vh: mobile Safari's 100vh is the viewport with the URL bar
+    // hidden, so a vh-sized panel overshoots by the bar's height on the very
+    // first screen a cold user sees. components/ui/dialog already uses dvh.
+    <div className="flex min-h-[calc(100dvh-3.5rem)] items-center justify-center bg-gradient-to-t from-ink-100 to-background px-6">
       <div className="w-full max-w-sm">
         <Brand />
         <Card accent elevated>
@@ -60,10 +63,20 @@ export default async function LoginPage({ searchParams }: Props) {
                 <form action={signIn} className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="email">Email</Label>
+                    {/* The first field a cold user touches, on a phone, and
+                        the only one standing between them and their invite.
+                        Without these, iOS capitalises the first letter and
+                        offers a spell-check underline on an email address, and
+                        the saved-address autofill never appears. */}
                     <Input
                       id="email"
                       name="email"
                       type="email"
+                      inputMode="email"
+                      autoComplete="email"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       placeholder="you@example.com"
                       required
                     />

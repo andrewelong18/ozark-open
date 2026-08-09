@@ -165,7 +165,10 @@ export default async function AdminViewPage() {
         view.bettors.map((bettor) => (
           <section key={bettor.user_id} className="flex flex-col gap-2">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <h2 className="flex items-center gap-2 font-heading text-2xl text-indigo-700">
+              {/* min-w-0 + wrap: an avatar, a long display name and a
+                  self-pick badge on one 24px line pushed the row past the
+                  viewport on a phone. */}
+              <h2 className="flex min-w-0 flex-wrap items-center gap-2 font-heading text-xl text-indigo-700 sm:text-2xl">
                 <Avatar
                   src={bettor.avatar_url}
                   name={bettor.display_name}

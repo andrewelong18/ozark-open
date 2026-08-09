@@ -35,7 +35,9 @@ export default async function OnboardingPage() {
   } | null
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-gradient-to-t from-ink-100 to-background px-6 py-8">
+    // dvh, not vh — see the note on app/login/page.tsx; same panel, same
+    // mobile-Safari overshoot.
+    <div className="flex min-h-[calc(100dvh-3.5rem)] items-center justify-center bg-gradient-to-t from-ink-100 to-background px-6 py-8">
       <div className="w-full max-w-md">
         {/* The brand block belongs to the identity step only, so it lives inside
             the form component — the walkthrough steps lead with Jake instead. */}

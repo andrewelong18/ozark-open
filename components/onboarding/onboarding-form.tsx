@@ -188,6 +188,8 @@ export function OnboardingForm({
                 value={displayName}
                 maxLength={DISPLAY_NAME_MAX}
                 placeholder="e.g. Andrew Long"
+                autoComplete="name"
+                autoCapitalize="words"
                 autoFocus
                 required
                 onChange={(e) => setDisplayName(e.target.value)}
@@ -205,6 +207,8 @@ export function OnboardingForm({
                 value={nickname}
                 maxLength={NICKNAME_MAX}
                 placeholder="e.g. Slim"
+                autoComplete="off"
+                autoCapitalize="words"
                 onChange={(e) => setNickname(e.target.value)}
               />
               <p className="text-xs text-text-muted">
