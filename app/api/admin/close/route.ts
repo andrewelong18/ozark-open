@@ -118,13 +118,27 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Nothing to change." }, { status: 400 })
   }
 
-  const { error } = await supabase
+  // Zero rows is a failure, not a success (#154) — see the note on the
+  // finalize write below.
+  const { data, error } = await supabase
     .from("tournaments")
     .update(updates)
     .eq("id", tournament.id)
+    .select("id")
+    .maybeSingle()
   if (error) {
     return NextResponse.json(
       { error: `Updating the clock failed: ${error.message}` },
+      { status: 500 }
+    )
+  }
+  if (!data) {
+    return NextResponse.json(
+      {
+        error:
+          "The clock didn't change — the database refused the update, so the old deadline still stands. " +
+          "Check that you're still signed in as an admin.",
+      },
       { status: 500 }
     )
   }
@@ -191,13 +205,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ errors: readiness.blockers }, { status: 409 })
   }
 
-  const { error } = await supabase
+  // The sharpest instance of the #154 shape in the app. A PostgREST write that
+  // matches zero rows returns success with error === null, so without this
+  // check a finalize that never landed would answer { finalized: true } — and
+  // /results would stay gated behind status !== 'completed' while the admin
+  // believed the tournament was closed out. That is a Saturday-night failure
+  // with nothing on screen to explain it.
+  const { data, error } = await supabase
     .from("tournaments")
     .update({ status: "completed" })
     .eq("id", tournament.id)
+    .select("id")
+    .maybeSingle()
   if (error) {
     return NextResponse.json(
       { error: `Finalizing failed: ${error.message}` },
+      { status: 500 }
+    )
+  }
+  if (!data) {
+    return NextResponse.json(
+      {
+        error:
+          "Finalizing didn't take — the database refused the update, so the tournament is still open " +
+          "and the results page stays hidden. Check that you're still signed in as an admin.",
+      },
       { status: 500 }
     )
   }
