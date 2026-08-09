@@ -92,11 +92,16 @@ ozark-open/
 
 ### Tests & verification
 
-- `npm run test` — unit tests (every `lib/*.test.ts`: validation, placements, my-bets, closed-bets, payouts, admin view).
-- `npm run lint` · `npx tsc --noEmit` · `npm run build` — the rest of the gate.
-- `bash scripts/local-db-verify.sh` — the database half: spins up a throwaway local Postgres (no Supabase creds, no ports), applies every migration + the Phase 1 seed, runs the three round-trip harnesses (import idempotency, placement lifecycle under RLS, the payout view), and smoke-tests `docs/admin/phase-compliance.sql`. Needs `postgresql-16` server binaries installed.
+Four layers, fastest first. Each proves something the one above it structurally can't.
 
-Every PR runs the first four checks via GitHub Actions (`.github/workflows/ci.yml`); `main` auto-deploys to Vercel, so keep the gate green.
+- `npm run test` — unit tests, ~2s (every `lib/*.test.ts`: validation, placements, my-bets, closed-bets, payouts, admin view). Pure functions only: no Supabase, no `@/` imports. That's what keeps it this fast — don't add either.
+- `npm run lint` · `npx tsc --noEmit` · `npm run build` — the rest of the gate.
+- `bash scripts/local-db-verify.sh` — the database half, ~30s: spins up a throwaway local Postgres (no Supabase creds, no Docker, no ports), applies every migration + the Phase 1 seed, runs the four round-trip harnesses (import idempotency, placement lifecycle under RLS, the payout view, the onboarding guard), and smoke-tests `docs/admin/phase-compliance.sql`. Needs `postgresql-16` server binaries installed.
+- `npm run test:sim` — the full-pool simulation, ~40s: ~32 members with rule-valid wagers on the 19-bet menu, every wager replayed through `lib/validation.ts`, and the pari-mutuel split reconciled to the cent at field size. Same throwaway Postgres, no Docker.
+- `npm run test:e2e` — the browser journeys, ~1 min plus stack start-up. Drives a real Chromium through sign-up → onboarding → admin approval → place/edit/remove → reveal-at-close → payouts, with no human clicking and no real email. **Needs Docker** (it boots the local Supabase stack itself) — see [`docs/DEV_TESTING.md`](docs/DEV_TESTING.md#the-browser-suite-e2e).
+- `bash scripts/dry-run-verify.sh` — the whole tournament lifecycle against the real spreadsheets, ~1 min. See [`docs/dry-run/GAMEPLAN.md`](docs/dry-run/GAMEPLAN.md). It regenerates `docs/dry-run/sheets/*.xlsx` as a side effect, so `git checkout -- docs/dry-run/sheets/` before committing.
+
+Every PR runs the gate plus the database and simulation jobs via GitHub Actions (`.github/workflows/ci.yml`). The browser suite is **not** a merge gate — it needs Docker and a full Supabase stack, and a flaky browser shouldn't be able to block a merge; run it locally, or on demand from the Actions tab. `main` auto-deploys to Vercel, so keep the gate green.
 
 ---
 
