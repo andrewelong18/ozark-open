@@ -19,6 +19,8 @@ Next.js 15 (App Router) + TypeScript · Supabase (Postgres, magic-link auth, RLS
 | `docs/OUTSTANDING_DECISIONS.md` | Before building anything touching non-player limits, entry collection, or the items Pat's Jul 11 review left open — the still-open calls live here. |
 | `docs/DESIGN_SYSTEM.md` | How the brand's visual system is wired into the app (tokens, fonts, ports). The `ozark-open-design` skill (`.claude/skills/ozark-open-design/`) is the visual source of truth. |
 | `docs/dry-run/GAMEPLAN.md` | Running (or preparing) the full-lifecycle dry run with Pat. Self-contained checkbox script; supporting SQL lives in `supabase/dry-run/`, fallback sheets in `docs/dry-run/sheets/`, and `scripts/dry-run-verify.sh` rehearses the whole thing locally. |
+| `docs/PRE_TOURNAMENT_CHECKLIST.md` | The tournament weekend as an admin executes it — week of, day before, each morning, each night, anchored on the four uploads (PRD §8 as a checkbox script). Read before changing anything an admin does on the weekend. |
+| `docs/DATA_SAFETY.md` | Backing up the database — `scripts/db-export.sh`, the two moments Sprint 9 named, reading the manifest, restoring. The free tier has no automated backups. |
 | `docs/AGENT_AUTOMATION.md` | Doing prod Supabase/Vercel work directly — the Supabase MCP (migrations + data edits), the auth-config script, Vercel env vars. Read when a task would otherwise become a "manual step" GitHub issue. |
 | `README.md` | Local setup, deploy, the admin workflow (spreadsheet upload + Studio). |
 
