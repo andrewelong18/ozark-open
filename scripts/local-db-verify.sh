@@ -68,11 +68,15 @@ done
 run_sql -f "$REPO/supabase/seed-sample-phase1.sql"
 echo "    applied seed-sample-phase1.sql"
 
-echo "==> round trips (import → placement RLS → payout view → onboarding guard)"
+echo "==> round trips (import → placement RLS → payout view → onboarding guard → snapshots)"
 node --experimental-strip-types "$REPO/scripts/import-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/placement-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/payout-view-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/onboarding-guard-roundtrip.ts"
+# Sprint 11's "Done when", run rather than asserted: snapshot → mangle → restore
+# → the five money tables match byte for byte. Last, because it deliberately
+# rewrites state and the checks above want the seed as the seed left it.
+node --experimental-strip-types "$REPO/scripts/snapshot-roundtrip.ts"
 
 echo "==> admin chase SQL smoke (docs/admin/phase-compliance.sql)"
 psql "$PGURI" -X -v ON_ERROR_STOP=1 -f "$REPO/docs/admin/phase-compliance.sql"

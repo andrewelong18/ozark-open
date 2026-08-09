@@ -45,6 +45,9 @@ erDiagram
         int entry_fee_max
         int min_picks_per_tournament
         int max_picks_per_phase
+        timestamptz phase1_closes_at
+        timestamptz phase2_closes_at
+        boolean show_countdown
         timestamptz created_at
     }
 
@@ -54,6 +57,7 @@ erDiagram
         uuid tournament_id FK
         int entry_fee
         boolean is_player
+        timestamptz revoked_at
     }
 
     tournament_invites {
@@ -101,6 +105,7 @@ erDiagram
         uuid id PK
         uuid user_id FK
         uuid pick_id FK
+        uuid placed_by_user_id FK
         int amount
         int odds_at_placement
         boolean requires_admin_review
@@ -109,6 +114,15 @@ erDiagram
         timestamptz updated_at
     }
 ```
+
+The two columns easiest to misread from the diagram alone:
+
+- **`tournament_participants.revoked_at`** — eligibility is "a row exists **and**
+  `revoked_at IS NULL`" (A13), never bare row-existence. The row is kept when access is
+  revoked because it carries the `entry_fee`, which is a pool input. See §3.3.
+- **`bet_placements.placed_by_user_id`** — the admin who last wrote the row, not whose wager
+  it is. The **bettor** is always `user_id`, and that is what every §7 rule and all pool math
+  mean by "whose". See §3.7.
 
 ---
 

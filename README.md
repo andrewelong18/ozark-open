@@ -219,6 +219,26 @@ Two things to know:
 
 This does **not** create accounts. The person needs to have logged in once and been approved; if they never got that far, the magic link is still the only way in.
 
+### Recipe: undo a bad import or a bad edit
+
+Uploaded last week's sheet? Fat-fingered a cell in Studio? The app keeps save states of the money tables, and rolling back is one command.
+
+**You already have a snapshot.** Every import takes one automatically before it applies — the import report prints its id and the exact command to undo that upload. There's also a **Snapshot now** button on `/admin/import`; press it before editing anything by hand.
+
+```bash
+# What can I go back to?
+node --experimental-strip-types scripts/restore-snapshot.ts --list
+
+# Go back.
+node --experimental-strip-types scripts/restore-snapshot.ts <id> "$SUPABASE_DB_URL" --yes
+```
+
+**This overwrites current state.** Bets, picks, wagers, participants and the tournament row all go back to how they were at that instant — *including throwing away wagers people placed since*. On a Friday afternoon that can be real money someone typed in. The script tells you how old the snapshot is and how many rows it's about to discard before it touches anything, and refuses to run without `--yes`. Read those numbers, then decide.
+
+It does **not** touch accounts, the invite list, avatars or the bet categories — undoing a bad bet import never costs you the roster. Afterwards it prints row counts and the pool reconciliation, and exits non-zero if they don't match the save state.
+
+Full detail, including the schedule and retention: [`docs/DATA_SAFETY.md`](docs/DATA_SAFETY.md). That doc also covers the *other* backup — `scripts/db-export.sh`, which is the fire escape to this undo button.
+
 ### Track 2 — Supabase Studio
 
 Studio (https://supabase.com/dashboard → Project → Table Editor) is the admin UI for everything that isn't the menu — **data only, never schema**:
@@ -230,7 +250,7 @@ Studio (https://supabase.com/dashboard → Project → Table Editor) is the admi
 - **Link an unmatched pick to a player:** `bet_picks` → set `player_user_id` (this powers self-pick flagging). The importer respects hand-set links on every future upload.
 - **One-off data fixes** as needed.
 
-> **Until the prod database steps land** (rework migration + admin flag, issues #12/#15), the fallback remains pasting `supabase/seed-sample-phase1.sql` into the Supabase SQL editor (after the migrations). Seed and importer upsert by the same sheet IDs, so either can safely run over the other.
+> **Both prod database steps landed Jul 18, 2026** (the rework migration and the admin flags — issues #12 and #15, closed). `supabase/seed-sample-phase1.sql` remains available as a fallback: paste it into the Supabase SQL editor after the migrations. Seed and importer upsert by the same sheet IDs, so either can safely run over the other.
 
 ### Track 3 — Claude Code (automated)
 

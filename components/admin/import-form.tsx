@@ -9,6 +9,79 @@ type ImportReport = {
   picks: { created: number; updated: number; unchanged: number }
   unmatchedPickNames: string[]
   warnings: string[]
+  /** Sprint 11: the save state taken automatically just before this upload
+   * applied. Optional only for defensiveness — the route always sends it. */
+  snapshotId?: string | null
+}
+
+// Sprint 11: take a save state on demand. Sits above the upload because that's
+// the order you want it in — snapshot, then do the risky thing — even though
+// the import now takes its own snapshot automatically. This button is for the
+// OTHER risky moments: a Studio edit, a bulk approval, anything about to be
+// done by hand.
+function SnapshotButton() {
+  const [busy, setBusy] = useState(false)
+  const [taken, setTaken] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function snapshot() {
+    setBusy(true)
+    setError(null)
+    setTaken(null)
+    try {
+      const res = await fetch("/api/admin/snapshot", { method: "POST" })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        setError(json?.error ?? `Snapshot failed (${res.status})`)
+        return
+      }
+      setTaken(json?.id ?? null)
+    } catch {
+      setError("Snapshot failed — check your connection and try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3.5">
+        <div>
+          <div className="font-heading text-lg text-text-strong">Save state</div>
+          <p className="mt-0.5 text-sm text-text-muted">
+            Snapshots the bets, picks, wagers, participants and tournament row
+            as they are right now. Take one before editing anything by hand.
+            Imports snapshot themselves.
+          </p>
+        </div>
+        <Button type="button" variant="outline" onClick={snapshot} disabled={busy}>
+          {busy ? "Taking snapshot…" : "Snapshot now"}
+        </Button>
+        {taken && <SnapshotTaken id={taken} />}
+        {error && <p className="text-sm font-medium text-loss-strong">{error}</p>}
+      </CardContent>
+    </Card>
+  )
+}
+
+// The id is the whole point of showing anything: it's the argument to
+// scripts/restore-snapshot.ts, and it's unguessable, so an admin who doesn't
+// copy it now has to go find it in the database later.
+function SnapshotTaken({ id }: { id: string }) {
+  return (
+    <div className="rounded-lg border border-win-border bg-win-surface p-3">
+      <div className="text-sm font-semibold text-win-strong">
+        ✓ Snapshot taken
+      </div>
+      <p className="mt-1 text-xs break-all text-text-muted">
+        To roll back to this exact state:
+        <br />
+        <code className="tabular">
+          node --experimental-strip-types scripts/restore-snapshot.ts {id} --yes
+        </code>
+      </p>
+    </div>
+  )
 }
 
 export function ImportForm() {
@@ -54,6 +127,7 @@ export function ImportForm() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SnapshotButton />
       <Card>
         <CardContent>
           <form onSubmit={submit} className="flex flex-col gap-3.5">
@@ -154,6 +228,27 @@ function ImportReportCard({ report }: { report: ImportReport }) {
                 <li key={w}>{w}</li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {/* The undo, offered at the one moment an admin might want it: right
+            after seeing what the upload actually did. Last in the card, below
+            the counts and warnings that would prompt reaching for it. */}
+        {report.snapshotId && (
+          <div className="rounded-lg border border-border bg-surface-sunken p-3">
+            <div className="text-sm font-semibold text-text-strong">
+              Undo this import
+            </div>
+            <p className="mt-1 text-xs text-text-muted">
+              A save state was taken before this upload applied. If the sheet
+              was wrong, roll the whole menu back to how it was a moment ago:
+            </p>
+            <p className="mt-1.5 text-xs break-all text-text-muted">
+              <code className="tabular">
+                node --experimental-strip-types scripts/restore-snapshot.ts{" "}
+                {report.snapshotId} --yes
+              </code>
+            </p>
           </div>
         )}
 
