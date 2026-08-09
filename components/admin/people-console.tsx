@@ -474,6 +474,184 @@ function InviteBox() {
   )
 }
 
+/**
+ * Add a member who can't work the magic link (#124 — half 1 of #101).
+ *
+ * Pat's ask from the Jul 31 dry run. The wager half already shipped
+ * (`/bets?for=<userId>`), so once this creates the account he can bet for them
+ * immediately — which is the whole point on a Thursday morning when three of
+ * ~32 people can't get through their email.
+ *
+ * TWO requests, one button. Creating the account and approving it are separate
+ * endpoints on purpose: /api/admin/participants owns the entry fee and creates
+ * the row whose existence IS betting eligibility (PRD §12 A12/A13). If the
+ * approve leg fails, the account still exists and the person drops into the
+ * table as "Needs approval" — a normal, visible, recoverable state — so the
+ * message says that rather than implying nothing happened.
+ */
+function AddMemberBox({
+  entryFeeMin,
+  entryFeeMax,
+}: {
+  entryFeeMin: number
+  entryFeeMax: number
+}) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [email, setEmail] = useState("")
+  const [name, setName] = useState("")
+  const [entryFee, setEntryFee] = useState(String(entryFeeMin))
+  const [isPlayer, setIsPlayer] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState<string | null>(null)
+  const [errors, setErrors] = useState<string[]>([])
+
+  async function submit() {
+    setBusy(true)
+    setErrors([])
+    setDone(null)
+
+    const res = await fetch("/api/admin/members", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, displayName: name }),
+    })
+    const json = await res.json().catch(() => null)
+    if (!res.ok) {
+      setBusy(false)
+      setErrors(
+        Array.isArray(json?.errors)
+          ? json.errors
+          : [json?.error ?? `Request failed (${res.status}).`]
+      )
+      // A 409 means they already exist and a 500 may mean the account was
+      // created — either way the table is now stale, so refresh it.
+      router.refresh()
+      return
+    }
+
+    const approveErrors = await callParticipants("POST", {
+      userId: json.userId,
+      displayName: name,
+      entryFee: Number(entryFee),
+      isPlayer,
+    })
+    setBusy(false)
+    router.refresh()
+
+    if (approveErrors) {
+      setErrors([
+        `${name}'s account was created, but approving them failed — they're in the list below as "Needs approval". Approve them there.`,
+        ...approveErrors,
+      ])
+      return
+    }
+
+    setDone(`${name} is added and approved — you can place wagers for them now.`)
+    setEmail("")
+    setName("")
+    setEntryFee(String(entryFeeMin))
+    setIsPlayer(true)
+  }
+
+  return (
+    <Card className="gap-0 p-0">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex items-center justify-between gap-3 px-4 py-3 text-left"
+      >
+        <span>
+          <span className="text-sm font-semibold text-text-strong">
+            Add a member who can&rsquo;t use the magic link
+          </span>
+          <span className="mt-0.5 block text-xs text-text-muted">
+            Creates their account outright — no email is sent, nothing for them
+            to click.
+          </span>
+        </span>
+        <span aria-hidden className="text-text-muted">
+          {open ? "▲" : "▼"}
+        </span>
+      </button>
+
+      {open && (
+        <div className="flex flex-col gap-3 border-t border-border px-4 py-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="add-member-email">Email</Label>
+            <Input
+              id="add-member-email"
+              type="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="dan@example.com"
+            />
+            {/* The typo warning is the point of this line. The address becomes a
+                real, confirmed login — so a wrong one is an account somebody
+                else could sign in to, and it's also how this member claims the
+                account later. */}
+            <span className="text-xs text-text-muted">
+              Check this carefully. It becomes a real login, and it&rsquo;s how
+              they sign in themselves later if they ever get the email working.
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="add-member-name">Display name (matches the field)</Label>
+            <Input
+              id="add-member-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Dan Smith"
+            />
+            <span className="text-xs text-text-muted">
+              Must match the name on the bet sheet, or their picks won&rsquo;t
+              link and their self-bet and opponent rules stop applying.
+            </span>
+          </div>
+
+          <ParticipantFields
+            idPrefix="add-member"
+            entryFee={entryFee}
+            setEntryFee={setEntryFee}
+            isPlayer={isPlayer}
+            setIsPlayer={setIsPlayer}
+            entryFeeMin={entryFeeMin}
+            entryFeeMax={entryFeeMax}
+          />
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={submit}
+              disabled={busy || email.trim() === "" || name.trim() === ""}
+            >
+              {busy ? "Adding…" : "Add and approve"}
+            </Button>
+            <span className="text-xs text-text-muted">
+              Their entry fee counts in the pool from the moment they&rsquo;re
+              approved.
+            </span>
+          </div>
+
+          {done && (
+            <div className="rounded-lg border border-border bg-surface-sunken px-3 py-2 text-sm text-text-body">
+              {done}
+            </div>
+          )}
+
+          <ErrorList errors={errors} />
+        </div>
+      )}
+    </Card>
+  )
+}
+
 export function PeopleConsole({
   people,
   hasInvites,
@@ -491,6 +669,7 @@ export function PeopleConsole({
   return (
     <div className="flex flex-col gap-4">
       <InviteBox />
+      <AddMemberBox entryFeeMin={entryFeeMin} entryFeeMax={entryFeeMax} />
 
       {people.length === 0 ? (
         <EmptyState

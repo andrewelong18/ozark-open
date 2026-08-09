@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { requireAdminRoute as requireAdmin } from "@/lib/admin-gate"
-import { createClient } from "@/lib/supabase/server"
 import { AdminClientUnavailableError, createAdminClient } from "@/lib/supabase/admin"
 import { parseNewMemberBody, validateNewMember } from "@/lib/members"
 
