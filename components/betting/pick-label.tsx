@@ -53,7 +53,9 @@ export function PickLabel({
           type="button"
           onClick={onNameClick}
           className={cn(
-            "min-w-0 cursor-pointer text-left text-pretty",
+            // When there's no profile link, the label IS the way to choose
+            // this pick — so it has to be a real target, not a line of text.
+            "inline-flex min-h-11 min-w-0 cursor-pointer items-center text-left text-pretty",
             nameClassName
           )}
         >

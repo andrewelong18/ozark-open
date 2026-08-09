@@ -18,6 +18,10 @@ import { BET_FOOTER_TOAST_SLOT } from "@/components/betting/bet-footer"
 // and the toast portals into it, stacked directly above whatever height the bar
 // actually is. No slot (no bar) → pinned to the bottom edge, safe-area padded.
 
+/** The slot never moves once the page is up, so there is nothing to subscribe
+ * to; each toast render re-reads the snapshot anyway. */
+const subscribeNever = () => () => {}
+
 export function BetErrorToast({
   message,
   onDismiss,
@@ -38,13 +42,17 @@ export function BetErrorToast({
     return () => clearTimeout(id)
   }, [message])
 
-  // Resolved after mount — the slot belongs to a server component rendered
-  // alongside this one, so it doesn't exist during the first client render, and
-  // a portal target has to be a real node.
-  const [slot, setSlot] = React.useState<HTMLElement | null>(null)
-  React.useEffect(() => {
-    setSlot(document.getElementById(BET_FOOTER_TOAST_SLOT))
-  }, [message])
+  // The slot is rendered by BetSlipSummary — a server component — so it can't
+  // be a ref, and on the server there is no document to look in at all.
+  // useSyncExternalStore gives the two answers separately without a
+  // setState-in-effect: null while rendering server-side, the live node once
+  // the client is running. getElementById hands back the same node every call,
+  // so the snapshot is referentially stable and never resubscribes.
+  const slot = React.useSyncExternalStore(
+    subscribeNever,
+    () => document.getElementById(BET_FOOTER_TOAST_SLOT),
+    () => null
+  )
 
   if (!message) return null
 

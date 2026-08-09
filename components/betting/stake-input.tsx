@@ -46,7 +46,10 @@ export function StakeInput({
     <div className={cn("inline-flex flex-col gap-1", className)}>
       <div
         className={cn(
-          "flex h-10 w-[108px] items-center rounded-lg border-[1.5px] pr-1 pl-2.5 transition-[border-color,box-shadow]",
+          // 44px tall and wider on a phone so the ↵ below can be a real target
+          // without squeezing the digits; back to the compact desktop control
+          // at sm+, where the pointer is a mouse.
+          "flex h-12 w-[132px] items-center rounded-lg border-[1.5px] pr-1 pl-2.5 transition-[border-color,box-shadow] sm:h-10 sm:w-[108px]",
           borderColor,
           disabled ? "bg-surface-sunken opacity-60" : "bg-surface-card",
           // Gold ring flashes once each time `placed` flips true; the class is
@@ -85,7 +88,10 @@ export function StakeInput({
           disabled={disabled || !value}
           aria-label="Place stake"
           className={cn(
-            "inline-flex size-[30px] shrink-0 items-center justify-center rounded-md text-[15px] leading-none font-bold transition-colors",
+            // The button that commits a wager. 30px was the smallest target on
+            // the busiest screen; it's the full height of the field now, and a
+            // real 44 wide on a phone. sm+ keeps the old square.
+            "inline-flex size-11 shrink-0 items-center justify-center rounded-md text-[15px] leading-none font-bold transition-colors sm:size-[30px]",
             placed
               ? "bg-win text-white"
               : value
