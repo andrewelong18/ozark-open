@@ -8,18 +8,23 @@
 - [x] Confirm the Vercel project exists, is connected to the repo, and auto-deploys `main`; create it if not. — **created fresh** under `nerdyandyproject`, Jul 16, 2026.
 - [x] Confirm the production Supabase project exists and **is not paused** (free tier pauses after ~1 week idle); apply all three migrations (`npx supabase db push` or SQL editor). — new project `rbjqqzjqhsbcotqfrwhb`; all three migrations applied via SQL editor; 2026 tournament + 7 categories seeded.
 - [x] Set env vars in Vercel (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`). — see the env-var gotcha below.
-- [ ] **Configure custom SMTP (Resend free tier) for Supabase Auth emails.** The built-in email service is dev-only and rate-limited to a few messages/hour — it will drop magic links on tournament morning. — **deferred**; built-in email is sufficient for solo dev, required before the group dry run.
-- [ ] Extend session/JWT duration in Supabase Auth settings so a login during dry-run week survives through Sept 27.
-- [ ] Decide: upgrade to Supabase Pro ($25) for September (backups + no pausing), or accept manual mitigation.
+- [x] **Configure custom SMTP (Resend free tier) for Supabase Auth emails.** The built-in email service is dev-only and rate-limited to a few messages/hour — it will drop magic links on tournament morning. *(Done Jul 20, 2026 — [#16](https://github.com/andrewelong18/ozark-open/issues/16), closed.)*
+- [x] Extend session/JWT duration in Supabase Auth settings so a login during dry-run week survives through Sept 27. *(Done — [#17](https://github.com/andrewelong18/ozark-open/issues/17), closed.)*
+- [ ] Decide: upgrade to Supabase Pro ($25) for September (backups + no pausing), or accept manual mitigation. *(Still open — [#18](https://github.com/andrewelong18/ozark-open/issues/18). A real decision, not a chore. Sprint 9's [`scripts/db-export.sh`](../../scripts/db-export.sh) and Sprint 11's snapshots are the manual-mitigation half being built out regardless.)*
 - [x] ~~Ask Steve to enable Issues on `riversteve/ozark-open`~~ — **moot:** issue-filing retargeted to `andrewelong18/ozark-open` (own fork) on Jul 16, 2026.
 - [x] Log in via magic link on a phone (real-world email deliverability check through Resend). — verified Jul 16, 2026 on the production URL via Supabase's **built-in** email; the Resend deliverability check still stands (see deferred item above).
-- [ ] Promote Andrew, Pat, Jake, Steve to `is_admin = true` in Studio. — Pat/Jake/Steve must log in once before their rows exist.
-- [ ] Fix the four admins' `display_name` values in Studio (they default to email addresses) — admin-set per PRD §12 Q13. **Also enter proper display names for the players named in the sample sheet** — Sprint 1's seed and Sprint 2's name-matching key off `users.display_name`.
-- [ ] Confirm `/bets` and `/dashboard` render on prod (empty menu is fine — the bet schema gets reworked in Sprint 1; don't seed old-shape sample bets). — `/dashboard` confirmed Jul 16, 2026; `/bets` not yet clicked through while logged in.
+- [x] Promote Andrew, Pat, Jake, Steve to `is_admin = true` in Studio. — Pat/Jake/Steve must log in once before their rows exist. *(Done — [#15](https://github.com/andrewelong18/ozark-open/issues/15), closed. **Jake is still outstanding** and carried forward as [#60](https://github.com/andrewelong18/ozark-open/issues/60): he has to log in once before there's a row to flip.)*
+- [x] Fix the four admins' `display_name` values in Studio (they default to email addresses) — admin-set per PRD §12 Q13. **Also enter proper display names for the players named in the sample sheet** — Sprint 1's seed and Sprint 2's name-matching key off `users.display_name`. *(Done — [#6](https://github.com/andrewelong18/ozark-open/issues/6) / [#11](https://github.com/andrewelong18/ozark-open/issues/11), both closed; Sprint 1's seed linked 13 bets / 57 picks off the result. Since Sprint 23 an admin can also do this from `/admin/people` instead of Studio.)*
+- [x] Confirm `/bets` and `/dashboard` render on prod (empty menu is fine — the bet schema gets reworked in Sprint 1; don't seed old-shape sample bets). *(`/dashboard` confirmed Jul 16, 2026; `/bets` closed Jul 18 as a duplicate of the Sprint 1 verification — [#8](https://github.com/andrewelong18/ozark-open/issues/8), [#13](https://github.com/andrewelong18/ozark-open/issues/13).)*
 - [x] ~~Send PRD §12 questions to Pat and Jake~~ — **answered by Jake, July 9, 2026**; decisions logged in PRD §12.
 
 **Done when:** any admin can log in on their phone at the production URL and see the dashboard.
-→ **Met Jul 16, 2026.** Remaining unchecked items are hardening (Resend, JWT, Pro) and admin data entry; the display-name item **blocks Sprint 1's seed**.
+→ **Met Jul 16, 2026.** The hardening and data-entry items were closed out over the following
+week (Resend #16, JWT #17, admins #15, display names #6/#11); ticked here Aug 9, 2026 during a
+roadmap audit that found them still reading as open. **One item is genuinely still open:** the
+Supabase Pro decision ([#18](https://github.com/andrewelong18/ozark-open/issues/18)), plus
+Jake's admin flag ([#60](https://github.com/andrewelong18/ozark-open/issues/60)), which waits
+on him logging in once.
 
 ---
 

@@ -9,10 +9,21 @@
 
 **Not a real bet slip.** No draft/uncommitted state, no new commit flow, no new wager types, rules, or schema (ADR 0001 is settled). Placement stays inline and immediate — this is a review/confirm *surface* that reads existing data. The numbers come straight from the same `lib/validation.ts` + `lib/my-bets.ts` helpers `/my-bets` uses, so the two views can never disagree.
 
-- [ ] Sticky balance/review bar on `/bets` (participants only): total wagered `$X of $Y`, pick count, remaining `$Z`, and the balanced / `$Z-to-go` / phase-incomplete standing — reusing `checkTournamentTotal` + `buildComplianceSummary` (no new rule logic). Links to `/my-bets` for the full per-pick panel.
-- [ ] Clear "you still owe $Z / you're balanced" messaging tied to the exact-total rule — surfaced verbatim from the §8.1 checks, friendly, never blocking (Q3).
-- [ ] Per-placement receipt on place **and** edit: the snapshotted `odds_at_placement` + stake shown as a locked-odds confirmation under the row ("✓ Locked in · +450 · $5 · odds locked at placement"); cleared on remove. Surfaces data the API already returns.
-- [ ] Explicit confirm step on both writes (the literal "review before commit"): placing stages an inline "Lock in $X on <pick> at <odds>?" strip and only POSTs on confirm; removing — a destructive action — stages a "Remove your $X on <pick>?" strip and only soft-deletes on confirm. No single-tap lock-in or wipe; inline strips, no browser dialogs.
-- [ ] Reuse, don't duplicate: the `/bets` page loads placements in the same shape as `/my-bets` so `normalizeMyBets` and the compliance checks run verbatim; the receipt reads the write's own return row.
+- [x] Sticky balance/review bar on `/bets` (participants only): total wagered `$X of $Y`, pick count, remaining `$Z`, and the balanced / `$Z-to-go` / phase-incomplete standing — reusing `checkTournamentTotal` + `buildComplianceSummary` (no new rule logic). Links to `/my-bets` for the full per-pick panel. *(`components/betting/bet-slip-summary.tsx`, rendered from `app/bets/page.tsx`. A server component, so it re-renders on the `router.refresh()` each placement already fires — no second source of truth to keep in sync.)*
+- [x] Clear "you still owe $Z / you're balanced" messaging tied to the exact-total rule — surfaced verbatim from the §8.1 checks, friendly, never blocking (Q3). *(The `ComplianceItem[]` from `buildComplianceSummary` is handed in precomputed; the bar renders the strings, it doesn't author them.)*
+- [x] Per-placement receipt on place **and** edit: the snapshotted `odds_at_placement` + stake shown as a locked-odds confirmation under the row ("✓ Locked in · +450 · $5 · odds locked at placement"); cleared on remove. Surfaces data the API already returns. *(`bet-placement-card.tsx` — the `Receipt` type is kept deliberately separate from the row's live odds, so the receipt keeps showing what was locked even after the line is repriced.)*
+- [x] Explicit confirm step on both writes (the literal "review before commit"): placing stages an inline "Lock in $X on <pick> at <odds>?" strip and only POSTs on confirm; removing — a destructive action — stages a "Remove your $X on <pick>?" strip and only soft-deletes on confirm. No single-tap lock-in or wipe; inline strips, no browser dialogs. *(`bet-placement-card.tsx`'s `confirming: "place" | "remove" | null` row state. The receipt hides while a confirm strip owns the row, so the two can't be misread for each other.)*
+- [x] Reuse, don't duplicate: the `/bets` page loads placements in the same shape as `/my-bets` so `normalizeMyBets` and the compliance checks run verbatim; the receipt reads the write's own return row. *(`app/bets/page.tsx` — same query shape, then `normalizeMyBets` → `checkTournamentTotal` → `buildComplianceSummary`, all imported, none re-derived.)*
 
 **Done when:** a participant placing bets on `/bets` sees a live running summary (total vs entry, remaining, balanced ↔ short) update as they place, must confirm before a bet locks in or is removed, gets a receipt showing the locked odds on each place/edit, and never has to leave for `/my-bets` to know where they stand — with the summary numbers matching `/my-bets` exactly.
+→ **Met.** Shipped Jul 18, 2026; the ticks above were backfilled Aug 9, 2026 when a roadmap
+audit found the sprint recorded as not started while all five items were live in
+`components/betting/`. `COMPETITIVE_ANALYSIS.md` §1.3/§1.5 had it right the whole time —
+`ROADMAP.md` was the only doc that disagreed. Nothing was built during the backfill.
+
+The confirm strips and the receipt have automated coverage from Sprint 19 onward:
+`e2e/placement.spec.ts` drives place → **Confirm bet**, edit → **Confirm change**, and
+remove → **Remove bet**, re-reading `/my-bets` after each, and Sprint 9's Pixel 7 project
+walks the same path with `tap()` (`e2e/mobile-journey.spec.ts`). So the "Done when" is
+exercised on every `npm run test:e2e` even though it was never hand-verified in a production
+browser.
