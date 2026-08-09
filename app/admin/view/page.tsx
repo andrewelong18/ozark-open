@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { StatCard } from "@/components/modules/stat-card"
 import { EmptyState } from "@/components/modules/empty-state"
+import { LoadError } from "@/components/modules/load-error"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import { OddsChip } from "@/components/betting/odds-chip"
 import { OutcomeBadge } from "@/components/betting/outcome-badge"
@@ -45,12 +46,23 @@ export default async function AdminViewPage() {
 
   // Latest tournament regardless of status — this page serves the whole
   // lifecycle, from chasing stragglers to reading final numbers.
-  const { data: tournament } = await supabase
+  const { data: tournament, error: tournamentError } = await supabase
     .from("tournaments")
     .select("id, name, status")
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
+
+  // This page is the admin's replica of the View sheet — its whole job is to
+  // be trusted as a faithful read of the database (#132).
+  if (tournamentError) {
+    console.error("[admin/view] tournament read failed:", tournamentError.message)
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-10">
+        <LoadError subject="the tournament" />
+      </div>
+    )
+  }
 
   if (!tournament) {
     return (
@@ -112,10 +124,16 @@ export default async function AdminViewPage() {
   ]
   let placerNames: Record<string, string> = {}
   if (placerIds.length > 0) {
-    const { data: placerData } = await supabase
+    const { data: placerData, error: placerError } = await supabase
       .from("users")
       .select("id, display_name")
       .in("id", placerIds)
+    // Names only. A failure degrades to the fallback the map already has for
+    // an unmatched id, so it logs and carries on rather than blanking a page
+    // the admin may be reading mid-close.
+    if (placerError) {
+      console.error("[admin/view] placer-name read failed:", placerError.message)
+    }
     placerNames = Object.fromEntries(
       ((placerData ?? []) as { id: string; display_name: string }[]).map((u) => [
         u.id,

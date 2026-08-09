@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar } from "@/components/avatar"
 import { PlayerChip } from "@/components/player/player-chip"
 import { EmptyState } from "@/components/modules/empty-state"
+import { LoadError } from "@/components/modules/load-error"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import {
   buildResultsTable,
@@ -46,12 +47,23 @@ function MoneyCell({
 export default async function ResultsPage() {
   const supabase = await createClient()
 
-  const { data: tournamentData } = await supabase
+  const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     .select("id, name, status")
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
+
+  // This page renders payouts. "No results yet" is a fine thing to tell
+  // someone; an unreported failure that looks identical is not (#132).
+  if (tournamentError) {
+    console.error("[results] tournament read failed:", tournamentError.message)
+    return (
+      <div className="mx-auto max-w-lg px-4 py-10">
+        <LoadError subject="the results" />
+      </div>
+    )
+  }
 
   const tournament = tournamentData as {
     id: string

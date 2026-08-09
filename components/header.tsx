@@ -22,7 +22,10 @@ export async function Header() {
   let avatarUrl: string | null = null
   const extraItems: NavItem[] = []
   if (user) {
-    const [{ data }, { data: tournamentData }] = await Promise.all([
+    const [
+      { data, error: profileError },
+      { data: tournamentData, error: tournamentError },
+    ] = await Promise.all([
       supabase
         .from("users")
         .select("display_name, nickname, avatar_url, is_admin")
@@ -35,6 +38,15 @@ export async function Header() {
         .limit(1)
         .maybeSingle(),
     ])
+    // The header degrades on purpose: a failed read here must not take down
+    // every page's chrome. But it logs, because a silently missing admin link
+    // is indistinguishable from having lost admin (#132).
+    if (profileError) {
+      console.error("[header] profile read failed:", profileError.message)
+    }
+    if (tournamentError) {
+      console.error("[header] tournament read failed:", tournamentError.message)
+    }
     const profile = data as {
       display_name: string
       nickname: string | null
