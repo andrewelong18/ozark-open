@@ -118,14 +118,29 @@ export async function POST(request: Request) {
     }
   }
 
+  // Zero rows is a failure here too (#154): the response reports `updated: N`,
+  // and without the check that count would be a claim about writes that may
+  // never have happened.
   for (const row of toRename) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("tournament_invites")
       .update({ invited_name: row.invited_name })
       .eq("id", row.id)
+      .select("id")
+      .maybeSingle()
     if (error) {
       return NextResponse.json(
         { error: `Couldn't update a name: ${error.message}` },
+        { status: 500 }
+      )
+    }
+    if (!data) {
+      return NextResponse.json(
+        {
+          error:
+            `Couldn't update the name for ${row.invited_name} — the database refused the write. ` +
+            `Check that you're still signed in as an admin.`,
+        },
         { status: 500 }
       )
     }

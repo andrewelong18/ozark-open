@@ -72,13 +72,30 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "No tournament to edit." }, { status: 400 })
   }
 
-  const { error } = await supabase
+  // .select() + a zero-row check, not just `error` (#154). A write that RLS
+  // filters to nothing succeeds with error === null, so "no error" is not
+  // evidence it landed — that is exactly how the #99 name edit reported
+  // success while changing nothing for a month. Every house rule the app
+  // enforces goes through this one statement.
+  const { data, error } = await supabase
     .from("tournaments")
     .update(parsed.value)
     .eq("id", tournament.id)
+    .select("id")
+    .maybeSingle()
   if (error) {
     return NextResponse.json(
       { error: `Saving the rules failed: ${error.message}` },
+      { status: 500 }
+    )
+  }
+  if (!data) {
+    return NextResponse.json(
+      {
+        error:
+          "The rules didn't save — the database refused the update and the old values still stand. " +
+          "Check that you're still signed in as an admin, then try again.",
+      },
       { status: 500 }
     )
   }
