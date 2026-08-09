@@ -58,7 +58,7 @@ type SeededWager = {
   pick_id: string
   bet_id: string
   sheet_pick_id: number
-  phase: number
+  phase: 1 | 2
   amount: number
   allows_multiple_picks: boolean
   pick_player_user_id: string | null
