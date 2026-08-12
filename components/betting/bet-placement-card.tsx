@@ -3,7 +3,9 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import {
+  placedPickIdIn,
   placementTarget,
+  scopePlacements,
   stakeEntryError,
   type OnBehalfOf,
 } from "@/lib/placements"
@@ -36,7 +38,9 @@ export type BetPlacementCardProps = {
   /** From bet_categories: false for Match / Group Match — pick-one UI. */
   allowsMultiplePicks: boolean
   picks: PlacementPick[]
-  /** The viewer's live placement amounts by pick id. */
+  /** The viewer's live placement amounts by pick id — TOURNAMENT-WIDE as the
+   * menu passes it, covering every bet. Scoped to this card's own picks on
+   * arrival (#161); never read raw, or the card adopts another bet's wager. */
   placements: Record<string, number>
   /** The odds_at_placement snapshot per placed pick — powers the locked-odds
    * receipt (Sprint 17 §1.5). Kept separate from live odds so the receipt
@@ -117,9 +121,17 @@ export function BetPlacementCard({
       })
     )
   )
-  // Live placements as known client-side (kept in sync after each write).
-  const [live, setLive] = React.useState(placements)
-  const placedPickId = Object.keys(live)[0] ?? null
+  const pickIds = picks.map((pick) => pick.id)
+  // Live placements as known client-side (kept in sync after each write), and
+  // scoped to THIS bet on the way in. Reading the menu's tournament-wide map
+  // straight was #161: the first key of that map belongs to whatever bet the
+  // bettor happened to wager on first, so a card would treat another bet's
+  // pick as its own placed one — refusing every pick it owned, and hiding the
+  // remove control on the wager it thought was there.
+  const [live, setLive] = React.useState(() =>
+    scopePlacements(pickIds, placements)
+  )
+  const placedPickId = placedPickIdIn(pickIds, live)
   const [selected, setSelected] = React.useState<string | null>(placedPickId)
   const [busy, setBusy] = React.useState<string | null>(null)
 
