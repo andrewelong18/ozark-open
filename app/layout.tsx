@@ -3,6 +3,7 @@ import { Montserrat } from "next/font/google"
 import localFont from "next/font/local"
 import "./globals.css"
 import { Header } from "@/components/header"
+import { RouteFade } from "@/components/route-fade"
 import { PlayerProfileProvider } from "@/components/player/player-profile-provider"
 
 // Workhorse UI + body face. Exposed as --font-montserrat → --font-sans.
@@ -53,7 +54,12 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <PlayerProfileProvider>
           <Header />
-          <main>{children}</main>
+          {/* RouteFade wraps only the page body, never the header or the nav
+              rail — chrome that fades on every navigation costs the user their
+              spatial anchor. See the file for why this is not <ViewTransition>. */}
+          <main>
+            <RouteFade>{children}</RouteFade>
+          </main>
         </PlayerProfileProvider>
       </body>
     </html>

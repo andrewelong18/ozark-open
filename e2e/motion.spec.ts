@@ -164,3 +164,39 @@ test.describe("filter swap", () => {
     await expect(field).toHaveValue("7")
   })
 })
+
+// ---------------------------------------------------------------------------
+// The route fade wraps <main>, and the bet slip is position: fixed inside it.
+// An ancestor running a TRANSFORM animation becomes a containing block for
+// fixed descendants, which would peel the bar off the viewport for the duration
+// of every navigation — on the page that matters most, on the device it is read
+// on. RouteFade animates opacity only for exactly this reason; this asserts it,
+// mid-flight rather than after, because after is when it looks fine again.
+// ---------------------------------------------------------------------------
+test.describe("route fade", () => {
+  test.use({ contextOptions: { reducedMotion: "no-preference" } })
+
+  test("the fixed bet slip stays pinned to the viewport during the entrance", async ({
+    page,
+  }) => {
+    await signInAs(page, ACCOUNTS.approved)
+    await page.goto("/dashboard")
+    await page.getByRole("link", { name: "Bet Menu" }).click()
+    await page.waitForURL("**/bets")
+
+    // The fixed element is the <aside> that HOLDS the toast slot, not a div.
+    const bar = page.locator("aside").filter({ has: page.locator("#bet-footer-toast") })
+    await expect(bar).toHaveCount(1)
+
+    // Sampled while the 320ms entrance is still running.
+    const viewport = page.viewportSize()!
+    const box = (await bar.boundingBox())!
+    const bottomGap = viewport.height - (box.y + box.height)
+    console.log(`bet slip bottom gap mid-entrance: ${bottomGap}px`)
+
+    // Pinned means it sits at the bottom of the VIEWPORT. If an ancestor
+    // transform had made itself the containing block, the bar would be
+    // positioned against that box instead and this gap would be large.
+    expect(Math.abs(bottomGap)).toBeLessThan(4)
+  })
+})
