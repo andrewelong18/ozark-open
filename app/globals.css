@@ -282,6 +282,31 @@
     opacity: 1;
   }
 }
+/* Two identical keyframes, alternated. A CSS animation only restarts when its
+   NAME changes, so this is how the bet menu replays its entrance when a filter
+   swaps the list — see the [data-swap] rules further down and the flip-flop in
+   components/betting/bets-menu.tsx. */
+@keyframes list-swap-a {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes list-swap-b {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* One-shot gold confirmation flash on stake placement (see StakeInput). */
 @keyframes stake-flash {
   from {
@@ -560,6 +585,31 @@
     calc(var(--index, 0) * var(--stagger-step)),
     var(--stagger-max)
   );
+}
+
+/* Replaying the bet menu's entrance when a filter changes, without remounting.
+   Motion would express this as AnimatePresence mode="wait"; the CSS-only
+   equivalent is to flip between two identical keyframes, because an animation
+   restarts only when its name changes.
+
+   The obvious alternative — a `key` on the list container — was rejected on
+   purpose. Changing the key unmounts every BetPlacementCard, and those hold
+   per-pick state: a typed-but-unplaced stake, and a pending place-confirm
+   strip. A bet present in both the old and new filter would silently lose
+   both. A money surface must not throw away someone's input to play an
+   animation.
+
+   The `> *` targets the phase <section>s, not individual bets: thirty cards
+   fading independently is noise, and it would fight the row stagger used on the
+   read-only pages. Wrapped in motion-safe because this is decoration — unlike
+   the toast, nothing here unmounts on animationend. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-swap="a"] > * {
+    animation: list-swap-a var(--dur-base) var(--ease-standard) both;
+  }
+  [data-swap="b"] > * {
+    animation: list-swap-b var(--dur-base) var(--ease-standard) both;
+  }
 }
 
 /* Pill-nav scroll affordance (see SiteNav / ProfileTabs): hide the scrollbar

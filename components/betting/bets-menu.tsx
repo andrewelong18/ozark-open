@@ -388,6 +388,24 @@ export function BetsMenu({
     [phases, status, activeFacet]
   )
 
+  // Replays the list's entrance whenever the filter changes, by alternating
+  // between two identical keyframes (a CSS animation restarts only when its
+  // name changes). See the [data-swap] rules in app/globals.css for why this
+  // is a flip-flop and not a `key` on the container — a key would remount every
+  // BetPlacementCard and discard typed stakes and pending confirms.
+  //
+  // Adjusting state during render is React's sanctioned escape hatch for
+  // derived state: it discards this render and re-runs immediately, before
+  // paint. In an effect it would be a cascading render, and
+  // react-hooks/set-state-in-effect rejects it.
+  const facetKey = `${status}|${activeFacet.kind}|${
+    activeFacet.kind === "all" ? "" : activeFacet.value
+  }`
+  const [swap, setSwap] = useState({ key: facetKey, phase: "a" as "a" | "b" })
+  if (swap.key !== facetKey) {
+    setSwap({ key: facetKey, phase: swap.phase === "a" ? "b" : "a" })
+  }
+
   const hasFilters = showStatus || showRoundTabs || showCategoryChips
 
   // Selecting either dimension clears the other — they never combine.
@@ -497,7 +515,7 @@ export function BetsMenu({
           />
         </div>
       ) : (
-        <div className="flex flex-col gap-8">
+        <div data-swap={swap.phase} className="flex flex-col gap-8">
           {filteredPhases.map(({ phase, rounds }) => (
             <section key={phase} className="flex flex-col gap-5">
               {rounds.map(({ round: roundKey, categories: cats }) => (

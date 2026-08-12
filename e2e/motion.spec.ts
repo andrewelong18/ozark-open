@@ -121,3 +121,46 @@ test.describe("with prefers-reduced-motion: no-preference", () => {
     await expect(toast).toHaveCount(0, { timeout: 12_000 })
   })
 })
+
+// ---------------------------------------------------------------------------
+// The bet-menu filter swap. This is the regression guard for a bug that was
+// designed OUT rather than fixed: the obvious way to replay the list entrance
+// is a `key` on the container, which remounts every BetPlacementCard and
+// silently discards a typed-but-unplaced stake. The flip-flop in bets-menu.tsx
+// exists precisely so this test can pass.
+// ---------------------------------------------------------------------------
+test.describe("filter swap", () => {
+  test.use({ contextOptions: { reducedMotion: "no-preference" } })
+
+  test("changing a filter replays the list without discarding a typed stake", async ({
+    page,
+  }) => {
+    await signInAs(page, ACCOUNTS.approved)
+    await page.goto("/bets")
+
+    // Narrow to one round first, then widen back to "All Bet Rounds". Widening
+    // is the direction that cannot filter the card away, whichever round the
+    // fixture happens to put it in — a specific tab would depend on the sheet.
+    const tabs = page.getByRole("button", { name: /^(R[123]|Tournament)$/ })
+    if ((await tabs.count()) === 0) test.skip(true, "no round tab strip in this fixture")
+    await tabs.first().click()
+
+    const list = page.locator("[data-swap]")
+    await expect(list).toHaveCount(1)
+
+    // Whatever bet this round shows, as long as it takes a stake.
+    const field = page.getByRole("textbox").first()
+    await expect(field).toBeVisible()
+    await field.fill("7")
+    await expect(field).toHaveValue("7")
+
+    const before = await list.getAttribute("data-swap")
+    await page.getByRole("button", { name: "All Bet Rounds", exact: true }).click()
+
+    // The container flipped, so the entrance replayed…
+    await expect(list).not.toHaveAttribute("data-swap", before!)
+    // …and the card did not remount, so the stake is still typed. A `key` on
+    // the container fails exactly here.
+    await expect(field).toHaveValue("7")
+  })
+})
