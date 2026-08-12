@@ -138,7 +138,7 @@ export function PlayerProfileView({
         </div>
         <DialogClose
           aria-label="Close"
-          className="absolute top-3 right-3 inline-flex size-8 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+          className="absolute top-3 right-3 inline-flex size-8 items-center justify-center rounded-full text-white/80 transition-colors duration-fast ease-standard hover:bg-white/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
         >
           <X className="size-4.5" aria-hidden />
         </DialogClose>

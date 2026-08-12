@@ -137,7 +137,7 @@ export function BetErrorToast({
         type="button"
         onClick={onDismiss}
         aria-label="Dismiss"
-        className="-mt-1 -mr-2 inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-loss-strong/60 transition-colors hover:text-loss-strong"
+        className="-mt-1 -mr-2 inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-loss-strong/60 transition-colors duration-fast ease-standard hover:text-loss-strong"
       >
         ✕
       </button>

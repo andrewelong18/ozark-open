@@ -77,7 +77,7 @@ export async function Header() {
         {user ? (
           <Link
             href="/profile"
-            className="flex shrink-0 items-center gap-2 rounded-full py-0.5 pr-2 pl-0.5 transition-colors hover:bg-white/10"
+            className="flex shrink-0 items-center gap-2 rounded-full py-0.5 pr-2 pl-0.5 transition-colors duration-fast ease-standard hover:bg-white/10"
           >
             <Avatar src={avatarUrl} name={displayName ?? "You"} size="sm" />
             {displayName && (
@@ -91,7 +91,7 @@ export async function Header() {
         ) : (
           <Link
             href="/login"
-            className="h-8 shrink-0 rounded-md border border-white/25 px-3 text-sm font-semibold leading-8 text-white transition-colors hover:bg-white/10"
+            className="h-8 shrink-0 rounded-md border border-white/25 px-3 text-sm font-semibold leading-8 text-white transition-colors duration-fast ease-standard hover:bg-white/10"
           >
             Log in
           </Link>

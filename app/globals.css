@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+
 /* ===================================================================
    Ozark Open Sportsbook — token layer.
 
@@ -304,6 +305,17 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* Reference-page only: the travelling bar in /style-guide's Motion section, so
+   the duration tiers can be compared side by side rather than imagined. */
+@keyframes style-guide-sweep {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(200%);
   }
 }
 

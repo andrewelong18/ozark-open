@@ -97,7 +97,7 @@ export function ProfileTabs({
               onClick={() => setTab(t.id)}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "h-11 shrink-0 rounded-full px-4 text-sm whitespace-nowrap transition-colors",
+                "h-11 shrink-0 rounded-full px-4 text-sm whitespace-nowrap transition-colors duration-fast ease-standard",
                 active
                   ? "bg-accent-gold font-bold text-accent-gold-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_1px_3px_rgba(0,0,0,0.2)]"
                   : "font-medium text-text-muted hover:bg-surface-card hover:text-text-strong"

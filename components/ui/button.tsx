@@ -7,7 +7,16 @@ import { cn } from "@/lib/utils"
 // sunlight/mobile use; indigo primary with a rationed gold variant reserved
 // for the single marquee action per screen.
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-transparent bg-clip-padding font-semibold whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px active:shadow-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  // Motion: `transition-all` narrowed to the three properties that actually
+  // change on hover/press/focus. `all` also transitioned width, height and
+  // border-radius, so a button that resized for any reason animated its
+  // geometry on the layout thread — and it made the press nudge fight every
+  // other property on the same timing.
+  //
+  // The 1px downward nudge with the shadow removed is this system's press
+  // feedback (readme § Hover/press); it stands in for the `scale(0.97)` most
+  // libraries use, and it reads as more physical on a squared-off surface.
+  "group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-transparent bg-clip-padding font-semibold whitespace-nowrap transition-[background-color,box-shadow,transform,border-color] duration-fast ease-standard outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px active:shadow-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

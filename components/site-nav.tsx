@@ -59,7 +59,7 @@ export function SiteNav({ extraItems = [] }: { extraItems?: NavItem[] }) {
             ref={active ? activeRef : undefined}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "relative flex h-11 shrink-0 items-center rounded-full px-4 text-sm whitespace-nowrap transition-colors",
+              "relative flex h-11 shrink-0 items-center rounded-full px-4 text-sm whitespace-nowrap transition-colors duration-fast ease-standard",
               active
                 ? "bg-accent-gold font-bold text-accent-gold-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-3px_5px_-2px_rgba(0,0,0,0.45),0_2px_5px_rgba(0,0,0,0.35)]"
                 : "font-medium text-indigo-200 hover:bg-white/10 hover:text-white"
