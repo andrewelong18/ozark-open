@@ -1,0 +1,68 @@
+/* ===================================================================
+   Ozark Open Sportsbook — motion tokens.
+
+   Split out of spacing.css when motion became a first-class part of the
+   system rather than a footnote. Two tiers, borrowed from IBM Carbon's
+   productive/expressive split:
+
+     PRODUCTIVE  efficient, subtle, out of the way — for moments when the
+                 user is completing a task. This is the entire betting path.
+                 Someone tapping stakes into 13 bets in a golf cart must
+                 never wait on a flourish.
+
+     EXPRESSIVE  reserved for occasional, important moments — arrival and
+                 confirmation. Rationed exactly the way brand gold is:
+                 roughly one expressive moment per screen.
+
+   Every curve here is a named industry value, not an eyeballed one. Two of
+   them were already in this system before the motion pass and turned out to
+   be standards; the other three were chosen to extend the same lineage
+   rather than introduce a second dialect.
+   =================================================================== */
+
+:root {
+  /* ---------- Easings ----------
+     --ease-standard  Material 3 `standard` / `emphasized`.
+     --ease-out       Penner `easeOutExpo` (easings.net).
+     --ease-entrance  Material 3 `emphasized-decelerate` — M3's designated
+                      curve for content ENTERING the screen. Starts fast and
+                      settles, so arrival reads as quick.
+     --ease-exit      Material 3 `emphasized-accelerate` — …and for content
+                      LEAVING it. Pairs with --dur-exit.
+     --ease-overshoot Penner `easeOutBack` (normally …1.56…), DAMPED to 1.35.
+                      The damping is the deliberate reconciliation with this
+                      system's "no bounces" rule: it reads as confident, and
+                      settles once instead of oscillating.
+
+     TRANSFORM ONLY for --ease-overshoot. An overshoot applied to colour or
+     opacity overshoots past the token value, which is off-brand and can
+     break contrast. */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* @kind other */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* @kind other */
+  --ease-entrance: cubic-bezier(0.05, 0.7, 0.1, 1); /* @kind other */
+  --ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15); /* @kind other */
+  --ease-overshoot: cubic-bezier(0.34, 1.35, 0.64, 1); /* @kind other */
+
+  /* ---------- Durations ----------
+     Productive tier first. Nothing on the betting path exceeds --dur-slow.
+
+     --dur-exit is shorter than any enter on purpose: old content should
+     leave quickly so it does not compete with what is arriving. */
+  --dur-fast: 120ms; /* @kind other */ /* hover, colour, press — state echo */
+  --dur-base: 180ms; /* @kind other */ /* the default: reveals, swaps, collapses */
+  --dur-slow: 260ms; /* @kind other */ /* overlays: dialog, backdrop, toast enter */
+  --dur-enter: 320ms; /* @kind other */ /* expressive: route + list entrance */
+  --dur-exit: 160ms; /* @kind other */ /* exits leave fast */
+
+  /* ---------- Stagger ----------
+     The CSS equivalent of Motion's stagger(). 40ms per item sits in the
+     30–60ms band every practitioner converges on; below 30 the cascade is
+     invisible, above 60 it reads as a slideshow.
+
+     --stagger-max is the ceiling, and it is what makes this safe on a long
+     table: at a 40ms step with a 240ms cap, item 0 starts immediately and
+     everything from the 6th onward starts together, so a 25-row leaderboard
+     is fully in at 240 + 320 = 560ms no matter how long it grows. */
+  --stagger-step: 40ms; /* @kind other */
+  --stagger-max: 240ms; /* @kind other */
+}

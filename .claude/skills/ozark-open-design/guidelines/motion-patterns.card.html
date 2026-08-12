@@ -1,0 +1,123 @@
+<!-- @dsCard group="Motion" viewport="820x400" name="Patterns" subtitle="What to apply where. Each is modelled on a named production library and built with CSS only." -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; background: #f4f2ea; font-family: "Montserrat", system-ui, sans-serif; padding: 22px; color: #2b2c40; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .panel { background: #fff; border: 1px solid #e0dfd7; border-radius: 12px; padding: 13px; }
+  .panel h5 { margin: 0 0 2px; font-size: 12px; font-weight: 700; }
+  .panel .src { margin: 0 0 10px; font-size: 10px; color: #6f7082; line-height: 1.4; }
+  .panel .src i { color: #312f8c; font-style: normal; font-weight: 600; }
+  button { font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; border: 1px solid #cbc9f2;
+           background: #f2f1fc; color: #312f8c; border-radius: 6px; padding: 5px 10px; }
+
+  /* 1 — stagger */
+  .rows .r { display: flex; justify-content: space-between; font-size: 11px; padding: 5px 8px; border-radius: 5px;
+             background: #faf8f2; margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+  .rows.run .r { animation: rise-in 320ms cubic-bezier(.05,.7,.1,1) both;
+                 animation-delay: min(calc(var(--i) * 40ms), 240ms); }
+  @keyframes rise-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* 2 — collapse. grid-template-rows 0fr→1fr, no JS measurement. */
+  .coll { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 180ms cubic-bezier(.2,0,0,1); }
+  .coll.open { grid-template-rows: 1fr; }
+  .coll > div { overflow: hidden; }
+  .coll p { margin: 0; padding-top: 8px; font-size: 11px; line-height: 1.5; color: #565769; }
+
+  /* 3 — toast, Sonner's data-state mechanics */
+  .toast { display: flex; gap: 8px; align-items: flex-start; font-size: 11px; line-height: 1.4;
+           border: 1px solid #f6c9c5; background: #fdeeec; color: #8f2019; border-radius: 8px; padding: 8px 10px; }
+  .toast[data-state="open"]   { animation: t-in  260ms cubic-bezier(.16,1,.3,1) both; }
+  .toast[data-state="closed"] { animation: t-out 160ms cubic-bezier(.3,0,.8,.15) forwards; }
+  @keyframes t-in  { from { opacity: 0; transform: translateY(8px); } }
+  @keyframes t-out { to   { opacity: 0; transform: translateY(4px); } }
+
+  /* 4 — press. 1px nudge, hover guarded so a phone tap can't stick it. */
+  .btn { font: inherit; font-size: 12px; font-weight: 600; color: #fff; background: #312f8c; border: 0;
+         border-radius: 8px; padding: 9px 16px; cursor: pointer;
+         box-shadow: 0 1px 3px rgba(30,31,51,.18);
+         transition: background 120ms cubic-bezier(.2,0,0,1), transform 120ms cubic-bezier(.2,0,0,1), box-shadow 120ms cubic-bezier(.2,0,0,1); }
+  @media (hover: hover) and (pointer: fine) { .btn:hover { background: #262573; } }
+  .btn:active { transform: translateY(1px); box-shadow: none; }
+
+  /* 5 — the gold confirmation flash, the one sanctioned glow */
+  .stake { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; font-weight: 600;
+           border: 1.5px solid #e0dfd7; border-radius: 8px; padding: 7px 10px; font-variant-numeric: tabular-nums; }
+  .stake.flash { animation: stake-flash 260ms cubic-bezier(.16,1,.3,1); }
+  @keyframes stake-flash { from { box-shadow: 0 0 0 3px rgba(253,218,0,.4); } to { box-shadow: 0 0 0 3px rgba(253,218,0,0); } }
+
+  .rules { grid-column: 1 / -1; background: #f2f1fc; border: 1px solid #cbc9f2; border-radius: 10px; padding: 11px 13px; }
+  .rules h5 { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #312f8c; }
+  .rules ul { margin: 0; padding-left: 16px; font-size: 10.5px; line-height: 1.65; color: #3d3e52; columns: 2; column-gap: 22px; }
+  .rules b { color: #14133a; }
+</style>
+</head>
+<body>
+<div class="grid">
+
+  <div class="panel">
+    <h5>List entrance</h5>
+    <p class="src">Modelled on Motion's <i>stagger()</i> — 40ms step, capped at 240ms so a long table can't crawl.</p>
+    <div id="rows" class="rows run">
+      <div class="r" style="--i:0"><span>Boemer</span><b>&minus;4</b></div>
+      <div class="r" style="--i:1"><span>Long</span><b>&minus;2</b></div>
+      <div class="r" style="--i:2"><span>Ledbetter</span><b>E</b></div>
+      <div class="r" style="--i:3"><span>Wilkerson</span><b>+3</b></div>
+    </div>
+    <button style="margin-top:8px" onclick="var n=document.getElementById('rows');n.classList.remove('run');void n.offsetWidth;n.classList.add('run')">Replay</button>
+  </div>
+
+  <div class="panel">
+    <h5>Collapse</h5>
+    <p class="src">Radix Accordion's behaviour without its JS height measurement — <i>grid-template-rows 0fr&rarr;1fr</i>.</p>
+    <button onclick="var c=document.getElementById('c');c.classList.toggle('open');this.textContent=c.classList.contains('open')?'Hide bettors':'Show bettors'">Show bettors</button>
+    <div id="c" class="coll"><div><p>Andrew &middot; $12<br />Pat &middot; $8<br />Jake &middot; $15</p></div></div>
+  </div>
+
+  <div class="panel">
+    <h5>Toast</h5>
+    <p class="src">Sonner's <i>data-state</i> mechanics. Exit is shorter than enter so it clears out rather than lingering.</p>
+    <div id="t" class="toast" data-state="open">
+      <span style="flex:none;font-weight:700">!</span>
+      <span>That would put you over your $40 entry.</span>
+    </div>
+    <button style="margin-top:8px" onclick="var t=document.getElementById('t');var o=t.dataset.state==='open';t.dataset.state=o?'closed':'open'">Toggle</button>
+  </div>
+
+  <div class="panel">
+    <h5>Press</h5>
+    <p class="src">1px downward nudge, shadow removed. Hover is behind <i>@media (hover: hover)</i> so a phone tap can't leave it stuck.</p>
+    <button class="btn">Place bet</button>
+  </div>
+
+  <div class="panel">
+    <h5>Confirmation</h5>
+    <p class="src">The one sanctioned glow — <i>--shadow-gold</i>, one shot, on a placed stake. Never a loop.</p>
+    <span id="s" class="stake">$&thinsp;12</span>
+    <button style="margin-top:8px;display:block" onclick="var s=document.getElementById('s');s.classList.remove('flash');void s.offsetWidth;s.classList.add('flash')">Place</button>
+  </div>
+
+  <div class="panel">
+    <h5>Route change</h5>
+    <p class="src">React's <i>&lt;ViewTransition&gt;</i>. The active nav pill carries a <i>view-transition-name</i>, so the browser morphs it between routes — Framer Motion's <i>layoutId</i> effect, natively.</p>
+    <p class="src" style="margin:0"><b>Never</b> let a data refresh trigger one: tag navigations explicitly and leave <i>default="none"</i>.</p>
+  </div>
+
+  <div class="panel rules">
+    <h5>Hard rules</h5>
+    <ul>
+      <li><b>Transform and opacity only.</b> Never top, margin, or an unbounded height. One exception: a progress bar's <code>width</code> — width <i>is</i> the meaning there, and scaleX squashes the pill cap.</li>
+      <li><b>Overshoot on transform only</b> — on colour or opacity it overshoots past the token and can break contrast.</li>
+      <li><b>Never animate a <code>display: contents</code> element</b> — it generates no box, so it silently does nothing.</li>
+      <li><b>Never gate an unmount behind <code>motion-safe:</code></b>. Anything that unmounts on <code>animationend</code> must still animate under reduced motion — which is why the floor is <code>0.01ms</code>, never <code>none</code>.</li>
+      <li><b>Don't animate constantly-changing values</b> — a 1Hz countdown or a field that recomputes per keystroke.</li>
+      <li><b>No infinite loops, no confetti, no gradient washes, no frosted glass.</b> Sunlight readability wins.</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>

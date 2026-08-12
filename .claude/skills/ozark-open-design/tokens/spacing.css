@@ -48,10 +48,7 @@
   --content-max: 640px; /* mobile-first single column */
   --header-h: 56px;
 
-  /* Motion — subtle; confirmation moments only */
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* @kind other */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* @kind other */
-  --dur-fast: 120ms; /* @kind other */
-  --dur-base: 180ms; /* @kind other */
-  --dur-slow: 260ms; /* @kind other */
+  /* Motion moved to tokens/motion.css when it became a first-class part of
+     the system rather than a footnote. Defined in one place only — do not
+     re-declare --ease-* / --dur-* here. */
 }

@@ -12,6 +12,7 @@ If the user invokes this skill without any other guidance, ask them what they wa
 - **Brand:** Ozark Open Sportsbook — private, invite-only fantasy-golf betting pool. Clubhouse × sportsbook; clubby, trustworthy, sharp, a little cocky. Never casino-neon, never urgency dark patterns.
 - **Colors:** primary indigo `#312F8C`, clubhouse gold `#FDDA00` (AA text via `--gold-600`), fairway green for wins/open, flag red for losses, warm cream neutrals. Single light theme (sunlight-readable, WCAG AA).
 - **Type:** Azalea (display/headings ONLY), Montserrat (body + UI). All odds/money use tabular figures.
+- **Motion:** two tiers (IBM Carbon's productive/expressive split). Productive — `--dur-fast/base/slow` (120/180/260ms) — is the whole betting path and never exceeds `--dur-slow`. Expressive — `--dur-enter` 320ms with `--ease-entrance`, plus `--ease-overshoot` — is arrival and confirmation only, rationed like gold. Exits are faster than entrances. Every curve is a named Material 3 or Penner value; see `readme.md` § Motion. Transform/opacity only. Reduced motion floors durations at `0.01ms`, never `none`.
 - **Tokens:** link `styles.css`. Components via `window.DesignSystem_d43214`.
 - **Assets:** `assets/logos/` (lockup, mark, wordmark), `assets/fonts/` (Azalea).
 - **Key files:** `readme.md` (full guide), `components/` (17 primitives), `ui_kits/sportsbook/` (full app recreation).

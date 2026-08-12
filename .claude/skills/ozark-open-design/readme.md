@@ -56,11 +56,88 @@ The codebase ships generic grayscale shadcn tokens; **this design system replace
 
 **Shadows & borders.** Soft, low, neutral-tinted (`--shadow-sm` on cards, `--shadow-md` when lifted). 1px warm hairline borders (`--ink-200`). Focus is a 3px indigo ring (`--shadow-focus`); the one exception glow is `--shadow-gold`, used **only** on the "bet placed" confirmation flash.
 
-**Motion.** Subtle, confirmation-only. `--dur-fast/base/slow` (120/180/260ms) with `--ease-standard`/`--ease-out`. Buttons nudge down 1px on press; the progress bar eases its width; the stake input flashes gold once on placement. No infinite loops, no bounces, no attention-grabbing animation.
+**Motion.** Two tiers, borrowed from IBM Carbon's productive/expressive split. **Productive** — efficient, subtle, out of the way — is the entire betting path: `--dur-fast/base/slow` (120/180/260ms) with `--ease-standard`/`--ease-out`. Someone tapping stakes into 13 bets in a golf cart must never wait on a flourish, so nothing on that path exceeds `--dur-slow`. **Expressive** is arrival and confirmation only — `--dur-enter` (320ms) with `--ease-entrance`, and `--ease-overshoot` for the moment a bet lands — and it is rationed the way brand gold is: roughly one per screen. Exits are deliberately faster than entrances (`--dur-exit`, 160ms) so old content clears rather than competing. Buttons nudge down 1px on press; the stake input flashes gold once on placement; lists cascade in at 40ms a row, capped at 240ms. Still no infinite loops, no bounces that oscillate, no attention-grabbing animation. **Full spec: [§ Motion](#motion) below, plus the two `guidelines/motion-*.card.html` specimens.**
 
 **Hover / press.** Hover darkens the fill one step (primary → `--primary-hover`); secondary/ghost pick up a faint indigo/cream wash. Press = 1px downward nudge, shadow removed. Disabled = 50% opacity, no pointer.
 
 **Transparency & blur.** Essentially none — sunlight readability favors opaque, high-contrast surfaces. No frosted glass.
+
+---
+
+## Motion
+
+Motion is a first-class part of this system, not a footnote — tokens in
+`tokens/motion.css`, two specimen cards in `guidelines/`. A page built from this
+system should inherit its motion the same way it inherits its colours.
+
+**Every curve is a named industry value, not an eyeballed one.** Two of them were
+already here before the motion pass and turned out to be standards, so the three
+added extend the same lineage rather than introducing a second dialect.
+
+| Token | Value | Source | Use for |
+|---|---|---|---|
+| `--ease-standard` | `cubic-bezier(0.2, 0, 0, 1)` | Material 3 `standard` / `emphasized` | On-screen movement, state change |
+| `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Penner `easeOutExpo` | Overlays, reveals |
+| `--ease-entrance` | `cubic-bezier(0.05, 0.7, 0.1, 1)` | Material 3 `emphasized-decelerate` | Content **arriving** |
+| `--ease-exit` | `cubic-bezier(0.3, 0, 0.8, 0.15)` | Material 3 `emphasized-accelerate` | Content **leaving** |
+| `--ease-overshoot` | `cubic-bezier(0.34, 1.35, 0.64, 1)` | Penner `easeOutBack`, damped `1.56 → 1.35` | Confirmation. **Transform only** |
+
+| Token | Value | Tier | Use for |
+|---|---|---|---|
+| `--dur-fast` | `120ms` | productive | Hover, colour, press — the state echo |
+| `--dur-base` | `180ms` | productive | The default: reveals, swaps, collapses |
+| `--dur-slow` | `260ms` | productive | Overlays: dialog, backdrop, toast enter |
+| `--dur-enter` | `320ms` | **expressive** | Route and list arrival |
+| `--dur-exit` | `160ms` | — | Exits, always faster than the matching enter |
+| `--stagger-step` / `--stagger-max` | `40ms` / `240ms` | — | Per-item cascade, and its ceiling |
+
+**Productive vs expressive.** Productive motion is efficient and out of the way,
+for moments when someone is completing a task — that is the whole betting path,
+and nothing on it exceeds `--dur-slow`. Expressive motion is for arrival and
+confirmation, and is rationed the way brand gold is: about one per screen. If you
+are unsure which a moment is, it is productive.
+
+**Pattern vocabulary.** Each of these is modelled on a named production library
+and reimplemented in plain CSS — no animation dependency:
+
+| Surface | Modelled on | Built as |
+|---|---|---|
+| Toast | **Sonner** — `data-state="open"/"closed"` | CSS animations keyed off the attribute; exit shorter than enter |
+| Dialog / popover | **Radix / Base UI** | `data-starting-style` / `data-ending-style`; fade + `scale-95 → 1`, never from `scale(0)` |
+| Accordion, collapsible | **Radix Accordion** | `grid-template-rows: 0fr → 1fr` — no JS height measurement |
+| List entrance | **Motion's `stagger()`** | `--index` custom property + `animation-delay: min(calc(...), --stagger-max)` |
+| Active tab / pill indicator | **Framer Motion `layoutId`** | `view-transition-name` on the active pill; the browser morphs it |
+| Route change | **React `<ViewTransition>`** | Explicitly tagged navigations; `default="none"` so data refreshes never animate |
+| Press | 1px nudge, shadow removed | Hover behind `@media (hover: hover)` so a tap can't leave it stuck |
+| Rolling numbers | **NumberFlow** | **Deliberately not adopted** — see below |
+
+**Hard rules.**
+
+- **Transform and opacity only.** Never `top`, `margin`, or an unbounded `height`
+  — those run on the layout thread and drop frames on a mid-tier phone.
+  **One named exception:** a progress bar's `width`, where width *is* the meaning
+  and `scaleX` would squash the pill's rounded cap. It is a 10px-tall solid block
+  with no children, so the layout cost is nil. Don't generalise the exception.
+  For collapsing panels the answer is `grid-template-rows`, not `height`.
+- **`--ease-overshoot` on transform only.** Applied to colour or opacity it
+  overshoots past the token value, which is off-brand and can break contrast.
+- **Never animate a `display: contents` element** — it generates no box, so
+  transform and opacity are silent no-ops. This bites on responsive tables that
+  use `sm:contents` to stack on mobile: animate the row, never the wrapper.
+- **Never gate an unmount behind `motion-safe:`.** Anything that removes itself on
+  `animationend` must still animate under reduced motion.
+- **Reduced motion is a floor, not an off switch.** Zero durations to `0.01ms` —
+  never `0s`, never `animation: none`. Components that keep an element mounted
+  until its animation finishes (Base UI popups) or that unmount on `animationend`
+  (toasts) rely on a real animation existing; with `none` there is no event and
+  they strand on screen.
+- **Don't animate constantly-changing values** — a 1Hz countdown, or a figure that
+  recomputes on every keystroke. Motion there reads as lag.
+- **No rolling/counting numbers.** They are self-running attention loops, and every
+  numeric surface here already uses tabular figures, so digits swap without
+  reflow. The problem the technique solves does not exist in this system.
+- **Still banned:** infinite loops, confetti, gradient washes, frosted glass,
+  urgency and countdown-anxiety patterns.
 
 ---
 
@@ -81,11 +158,11 @@ The codebase ships generic grayscale shadcn tokens; **this design system replace
 - `readme.md` — this guide.
 - `SKILL.md` — Agent-Skills-compatible front matter for use in Claude Code.
 
-**`tokens/`** — `fonts.css` (Azalea @font-face), `colors.css`, `typography.css`, `spacing.css` (spacing, radii, shadows, layout, motion).
+**`tokens/`** — `fonts.css` (Azalea @font-face), `colors.css`, `typography.css`, `spacing.css` (spacing, radii, shadows, layout), `motion.css` (easings, durations, stagger).
 
 **`assets/`** — `logos/` (lockup PNG, mark + wordmark SVG), `fonts/` (Azalea OTF/TTF).
 
-**`guidelines/`** — foundation specimen cards (Colors, Type, Spacing, Brand groups).
+**`guidelines/`** — foundation specimen cards (Colors, Type, Spacing, Brand, Motion groups). The two Motion cards are playable: `motion-timing` plots the five easings and runs the five durations side by side; `motion-patterns` demos the stagger, collapse, toast, press and confirmation patterns with the hard rules alongside.
 
 **`components/`** — reusable primitives (React). Grouped:
 - **core/** — `Button`, `Badge`, `Input`, `Card` (+ `CardHeader`)
