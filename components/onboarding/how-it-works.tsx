@@ -103,7 +103,7 @@ export function HowItWorks({
                 sizes="(max-width: 640px) 85vw, 336px"
                 aria-hidden={i !== index}
                 className={
-                  "object-contain object-bottom transition-opacity duration-200 " +
+                  "object-contain object-bottom transition-opacity duration-slow ease-standard " +
                   (i === index ? "opacity-100" : "opacity-0")
                 }
               />

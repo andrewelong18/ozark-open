@@ -231,7 +231,7 @@ function ClosedBetCard({
                 // The one control on a closed bet, and the weekend's social
                 // moment is behind it — 19px of it was not enough on the page
                 // people refresh one-handed all weekend.
-                className="-mt-1 -ml-2 inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="-mt-1 -ml-2 inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold text-indigo-700 transition-colors duration-fast ease-standard hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 <span>
                   {expanded ? "Hide" : "Show"} {reveal.bettorCount}{" "}
@@ -270,6 +270,19 @@ function ClosedBetCard({
                   playerUserId={pick.player_user_id}
                   playerAvatarUrl={pick.player_avatar_url}
                 />
+                {/* Deliberately a mount/unmount swap, NOT a <Collapse>.
+                    Sprint 12 tried the twin-collapse version — one panel
+                    closing as the other opens, so the card's height moves
+                    monotonically — and reverted it after measuring. Keeping
+                    both halves mounted means every bettor's name sits in the
+                    DOM while collapsed, and `overflow: hidden` at 0fr clips it
+                    visually without emptying its bounding box, so it still
+                    answers to a text query. That would have forced
+                    e2e/bets-menu.spec.ts (#103) to stop asserting the name is
+                    absent while collapsed — weakening a real guard on the
+                    reveal-at-close contract to buy a 24px height animation.
+                    Bad trade. If this reveal is worth animating later, mount on
+                    first expand rather than always: see the follow-up issue. */}
                 {group &&
                   (expanded ? (
                     <PickPlacementList group={group} />
@@ -296,7 +309,7 @@ function ChevronGlyph({ open }: { open: boolean }) {
     <span
       aria-hidden
       className={cn(
-        "inline-block text-[9px] leading-none text-text-muted transition-transform duration-150",
+        "inline-block text-[9px] leading-none text-text-muted transition-transform duration-fast ease-standard",
         open && "rotate-180"
       )}
     >
@@ -375,6 +388,24 @@ export function BetsMenu({
     [phases, status, activeFacet]
   )
 
+  // Replays the list's entrance whenever the filter changes, by alternating
+  // between two identical keyframes (a CSS animation restarts only when its
+  // name changes). See the [data-swap] rules in app/globals.css for why this
+  // is a flip-flop and not a `key` on the container — a key would remount every
+  // BetPlacementCard and discard typed stakes and pending confirms.
+  //
+  // Adjusting state during render is React's sanctioned escape hatch for
+  // derived state: it discards this render and re-runs immediately, before
+  // paint. In an effect it would be a cascading render, and
+  // react-hooks/set-state-in-effect rejects it.
+  const facetKey = `${status}|${activeFacet.kind}|${
+    activeFacet.kind === "all" ? "" : activeFacet.value
+  }`
+  const [swap, setSwap] = useState({ key: facetKey, phase: "a" as "a" | "b" })
+  if (swap.key !== facetKey) {
+    setSwap({ key: facetKey, phase: swap.phase === "a" ? "b" : "a" })
+  }
+
   const hasFilters = showStatus || showRoundTabs || showCategoryChips
 
   // Selecting either dimension clears the other — they never combine.
@@ -401,7 +432,7 @@ export function BetsMenu({
                     onClick={() => setStatus(opt.value)}
                     aria-pressed={active}
                     className={cn(
-                      "min-h-11 cursor-pointer rounded-full px-4 py-1.5 text-sm font-semibold transition-colors",
+                      "min-h-11 cursor-pointer rounded-full px-4 py-1.5 text-sm font-semibold transition-colors duration-fast ease-standard",
                       active
                         ? "bg-surface-card text-text-strong shadow-xs"
                         : "text-text-muted hover:text-text-strong"
@@ -432,8 +463,8 @@ export function BetsMenu({
                     onClick={() => selectRound(r)}
                     aria-current={active ? "true" : undefined}
                     className={cn(
-                      "relative min-h-11 shrink-0 cursor-pointer px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors",
-                      "after:absolute after:inset-x-3 after:-bottom-px after:h-0.5 after:rounded-full after:transition-colors",
+                      "relative min-h-11 shrink-0 cursor-pointer px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors duration-fast ease-standard",
+                      "after:absolute after:inset-x-3 after:-bottom-px after:h-0.5 after:rounded-full after:transition-colors duration-fast ease-standard",
                       active
                         ? "text-indigo-700 after:bg-indigo-700"
                         : "text-text-muted after:bg-transparent hover:text-text-strong"
@@ -484,7 +515,7 @@ export function BetsMenu({
           />
         </div>
       ) : (
-        <div className="flex flex-col gap-8">
+        <div data-swap={swap.phase} className="flex flex-col gap-8">
           {filteredPhases.map(({ phase, rounds }) => (
             <section key={phase} className="flex flex-col gap-5">
               {rounds.map(({ round: roundKey, categories: cats }) => (
@@ -574,7 +605,7 @@ function FilterChip({
         // min-h-11 rather than an expanded pseudo hit area: chips sit shoulder
         // to shoulder in a scrolling row, so overlapping targets would just
         // move the mis-tap somewhere else.
-        "inline-flex min-h-11 shrink-0 items-center rounded-full border px-3.5 text-xs font-semibold whitespace-nowrap transition-colors",
+        "inline-flex min-h-11 shrink-0 items-center rounded-full border px-3.5 text-xs font-semibold whitespace-nowrap transition-colors duration-fast ease-standard",
         active
           ? "border-indigo-200 bg-indigo-50 text-indigo-700"
           : "border-border bg-surface-card text-text-muted hover:border-border-strong hover:text-text-strong"

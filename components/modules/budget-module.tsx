@@ -46,7 +46,14 @@ export function BudgetModule({
 
       <div className="h-2.5 overflow-hidden rounded-full border border-border bg-surface-sunken">
         <div
-          className={cn("h-full rounded-full transition-[width]", barColor)}
+          // Width, not scaleX — the one place the transform-only rule is
+          // deliberately broken (design system § Motion). This is a 10px solid
+          // block with a pill cap and no children: scaleX would squash the
+          // radius, and the layout cost of animating it is nil.
+          className={cn(
+            "h-full rounded-full transition-[width] duration-slow ease-out",
+            barColor
+          )}
           style={{ width: `${pct}%` }}
         />
       </div>

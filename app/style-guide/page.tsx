@@ -486,6 +486,167 @@ export default function StyleGuidePage() {
           />
         </div>
       </Section>
+
+      <MotionSection />
     </div>
+  )
+}
+
+/* --------------------------------- motion --------------------------------- */
+
+const EASINGS: [string, string, string][] = [
+  ["--ease-standard", "cubic-bezier(0.2, 0, 0, 1)", "Material 3 standard / emphasized · on-screen movement"],
+  ["--ease-out", "cubic-bezier(0.16, 1, 0.3, 1)", "Penner easeOutExpo · overlays, reveals"],
+  ["--ease-entrance", "cubic-bezier(0.05, 0.7, 0.1, 1)", "Material 3 emphasized-decelerate · content arriving"],
+  ["--ease-exit", "cubic-bezier(0.3, 0, 0.8, 0.15)", "Material 3 emphasized-accelerate · content leaving"],
+  ["--ease-overshoot", "cubic-bezier(0.34, 1.35, 0.64, 1)", "Penner easeOutBack, damped 1.56→1.35 · confirmation. Transform only"],
+]
+
+const DURATIONS: [string, string, string, string][] = [
+  ["duration-fast", "--dur-fast", "120ms", "productive · hover, colour, press"],
+  ["duration-base", "--dur-base", "180ms", "productive · the default"],
+  ["duration-slow", "--dur-slow", "260ms", "productive · dialog, backdrop, toast in"],
+  ["duration-enter", "--dur-enter", "320ms", "expressive · route + list arrival"],
+  ["duration-exit", "--dur-exit", "160ms", "exits leave fast"],
+]
+
+/**
+ * The living half of the motion spec — the counterpart to the skill's two
+ * guidelines/motion-*.card.html specimens. Replay buttons rather than looping
+ * demos: the system bans infinite animation, and a reference page should not be
+ * the one place that breaks its own rule.
+ */
+function MotionSection() {
+  const [run, setRun] = React.useState(0)
+
+  return (
+    <Section
+      title="Motion"
+      subtitle="Two tiers, borrowed from IBM Carbon's productive/expressive split. Productive is the whole betting path and never exceeds --dur-slow; expressive is arrival and confirmation, rationed like brand gold. Every curve is a named Material 3 or Penner value — nothing here was eyeballed."
+    >
+      <div className="flex flex-col gap-6">
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-text-strong">Durations</h3>
+            <Button size="sm" variant="secondary" onClick={() => setRun((n) => n + 1)}>
+              Replay
+            </Button>
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {DURATIONS.map(([util, token, ms, role]) => (
+              <div key={util}>
+                <div className="flex items-baseline justify-between gap-3 text-xs">
+                  <code className="font-mono font-semibold text-text-strong">{util}</code>
+                  <span className="tabular text-text-muted">
+                    {token} · {ms} · {role}
+                  </span>
+                </div>
+                <div className="mt-1 h-5 overflow-hidden rounded-full border border-border bg-surface-card">
+                  <div
+                    key={`${util}-${run}`}
+                    className="h-full w-1/3 rounded-full bg-indigo-700"
+                    style={{
+                      animation: `style-guide-sweep var(${token}) var(--ease-standard) both`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-text-strong">Easings</h3>
+          <div className="flex flex-col gap-1.5">
+            {EASINGS.map(([token, value, role]) => (
+              <div
+                key={token}
+                className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b border-border pb-1.5 last:border-b-0"
+              >
+                <code className="font-mono text-xs font-semibold text-text-strong">
+                  {token}
+                </code>
+                <code className="tabular font-mono text-[11px] text-text-muted">
+                  {value}
+                </code>
+                <span className="w-full text-[11px] text-text-muted">{role}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-text-strong">
+            Stagger — 40ms a row, capped at 240ms
+          </h3>
+          <div key={`stagger-${run}`} className="flex flex-col gap-1">
+            {["Boemer", "Long", "Ledbetter", "Wilkerson", "Sanders", "Pruitt"].map(
+              (name, i) => (
+                <div
+                  key={name}
+                  style={{ "--index": i } as React.CSSProperties}
+                  className="motion-safe:animate-rise-in motion-safe:stagger flex justify-between rounded-md bg-surface-sunken px-3 py-1.5 text-xs"
+                >
+                  <span>{name}</span>
+                  <span className="tabular text-text-muted">−{i}</span>
+                </div>
+              )
+            )}
+          </div>
+          <p className="mt-2 text-[11px] text-text-muted">
+            The cap is what makes this safe on a table that grows: item 0 starts
+            immediately and everything from the sixth on starts together, so a
+            25-row leaderboard is fully in at 560ms however long it gets.
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+          <h3 className="mb-2 text-xs font-bold tracking-wider text-indigo-700 uppercase">
+            Hard rules
+          </h3>
+          <ul className="flex list-disc flex-col gap-1.5 pl-5 text-xs leading-relaxed text-text-body">
+            <li>
+              <b>Transform and opacity only.</b> Never <code>top</code>,{" "}
+              <code>margin</code>, or an unbounded <code>height</code>. One named
+              exception: <code>BudgetModule</code>&rsquo;s progress bar, where
+              width <i>is</i> the meaning and <code>scaleX</code> squashes the
+              pill cap.
+            </li>
+            <li>
+              <b>
+                <code>--ease-overshoot</code> on transform only
+              </b>{" "}
+              — on colour or opacity it overshoots past the token value and can
+              break contrast.
+            </li>
+            <li>
+              <b>
+                Never animate a <code>display: contents</code> element.
+              </b>{" "}
+              Leaderboard, Results and the admin view stack their grids with{" "}
+              <code>sm:contents</code>; animate the row, never the wrapper, or it
+              silently does nothing at sm+ while working on a phone.
+            </li>
+            <li>
+              <b>
+                Never gate an unmount behind <code>motion-safe:</code>.
+              </b>{" "}
+              Reduced motion floors durations at <code>0.01ms</code> — never{" "}
+              <code>0s</code>, never <code>animation: none</code> — so anything
+              that leaves on <code>animationend</code> still fires.
+            </li>
+            <li>
+              <b>Don&rsquo;t animate constantly-changing values.</b> The
+              countdown (1Hz) and the <code>/admin/rules</code> preview table
+              (per keystroke) are explicit opt-outs.
+            </li>
+            <li>
+              <b>No rolling numbers</b>, no infinite loops, no confetti, no
+              gradient washes, no frosted glass.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </Section>
   )
 }

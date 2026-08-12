@@ -104,7 +104,12 @@ export default async function LeaderboardPage() {
             {rows.map((row, i) => (
               <div
                 key={`${row.position}-${row.player}-${i}`}
-                className={`${GRID} border-t border-border py-3 first:border-t-0 sm:items-center${
+                // The cascade is on the ROW, never on the sm:contents wrapper
+                // below it — that element generates no box, so transform and
+                // opacity there are silent no-ops at sm+ while still working on
+                // a phone. --index drives the stagger utility's delay.
+                style={{ "--index": i } as React.CSSProperties}
+                className={`${GRID} border-t border-border py-3 first:border-t-0 sm:items-center motion-safe:animate-rise-in motion-safe:stagger${
                   i === 0 ? " bg-gold-100" : ""
                 }`}
               >

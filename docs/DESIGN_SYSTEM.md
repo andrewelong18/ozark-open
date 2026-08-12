@@ -56,7 +56,8 @@ Reference the raw scale. This is what components consume.
 - **Structural:** `--surface-card/-sunken/-inverse/-inverse-2`,
   `--text-strong/-body/-muted/-on-dark`, `--border-strong`, shadows
   (`--shadow-xs/sm/md/lg`, plus `--shadow-focus` and the confirmation-only
-  `--shadow-gold`), and motion (`--ease-*`, `--dur-*`).
+  `--shadow-gold`), and motion (`--ease-*`, `--dur-*`, `--stagger-*` — see
+  [§4 Motion](#4-motion)).
 
 ### Collisions with shadcn defaults — the mapping
 
@@ -142,7 +143,115 @@ nav with gold active pill, active via `usePathname`).
 
 ---
 
-## 4. Using it
+## 4. Motion
+
+The design skill is the source of truth here too — `tokens/motion.css` plus the
+two `guidelines/motion-*.card.html` specimens. This section is the app-side port:
+where the tokens live in code, and which Tailwind utilities they generate.
+
+**Two tiers**, borrowed from IBM Carbon's productive/expressive split.
+**Productive** is the whole betting path — efficient, out of the way, never above
+`--dur-slow`. **Expressive** is arrival and confirmation, rationed like brand
+gold at about one per screen. When unsure, a moment is productive.
+
+**Every curve is a named industry value.** The two the system already had turned
+out to be standards, so the three added extend the same lineage:
+
+| Token | Value | Source |
+|---|---|---|
+| `--ease-standard` | `cubic-bezier(0.2, 0, 0, 1)` | Material 3 `standard` / `emphasized` |
+| `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Penner `easeOutExpo` |
+| `--ease-entrance` | `cubic-bezier(0.05, 0.7, 0.1, 1)` | Material 3 `emphasized-decelerate` |
+| `--ease-exit` | `cubic-bezier(0.3, 0, 0.8, 0.15)` | Material 3 `emphasized-accelerate` |
+| `--ease-overshoot` | `cubic-bezier(0.34, 1.35, 0.64, 1)` | Penner `easeOutBack`, damped `1.56 → 1.35`. Transform only |
+
+Durations: `--dur-fast` 120 · `--dur-base` 180 · `--dur-slow` 260 (productive) ·
+`--dur-enter` 320 (expressive) · `--dur-exit` 160 (exits always beat their
+enter). Stagger: `--stagger-step` 40ms, `--stagger-max` 240ms.
+
+### How it's wired (Tailwind v4 specifics)
+
+`--ease-*` and `--animate-*` **are** theme namespaces, so `@theme static` in
+`app/globals.css` generates real `ease-entrance` / `animate-rise-in` utilities.
+**`--duration-*` is not a namespace** — the named tiers (`duration-fast`,
+`duration-base`, `duration-slow`, `duration-enter`, `duration-exit`) and
+`stagger` are hand-rolled with `@utility`. Each duration utility sets Tailwind's
+internal `--tw-duration` as well as the longhand, which is what lets
+`duration-slow` retime a `tw-animate-css` enter/exit animation rather than only a
+plain transition.
+
+`--ease-out` deliberately **overrides** Tailwind's built-in `ease-out`. One
+vocabulary; no second set of curves smuggled in via framework defaults.
+
+> Watch for the Tailwind v3 shorthand `duration-[--dur-slow]`. v4 removed it in
+> favour of `duration-(--dur-slow)`, and the v3 form compiles to an invalid
+> `transition-duration: --dur-slow` that silently resolves to `0s`. It shipped in
+> `components/ui/dialog.tsx` for two sprints. Prefer the named utilities.
+
+### Pattern vocabulary
+
+Each surface is modelled on a named production library and reimplemented in CSS —
+there is **no animation dependency** in this app.
+
+| Surface | Modelled on | Built as |
+|---|---|---|
+| `BetErrorToast` | **Sonner** | `data-state="open"/"closed"` + `tw-animate-css`; message latched locally so the exit outlives the prop |
+| `Dialog` | **Radix / Base UI** | `data-starting-style` / `data-ending-style`; fade + `scale-95 → 1` |
+| Accordions, admin collapsibles | **Radix Accordion** | `grid-template-rows: 0fr → 1fr`, no JS measurement. **Tried and reverted in Sprint 12 — see below** |
+| Server-rendered list rows | **Motion's `stagger()`** | `--index` inline + the `stagger` utility |
+| Active nav pill | **Framer Motion `layoutId`** | `view-transition-name` — the browser morphs it between routes |
+| Route change | **React `<ViewTransition>`** | Tagged navigations only; `default="none"` so `router.refresh()` never animates |
+| Rolling numbers | **NumberFlow** | **Not adopted.** `MoneyDisplay` is a server component, so there is no client-side "before" value; a counting number is a self-running attention loop; and every money surface already uses tabular figures, so digits swap without reflow |
+
+### The collapse caveat
+
+A `0fr → 1fr` collapse must keep its content **mounted** to have a height to
+animate to, which trades "absent" for "present but clipped". That difference is
+load-bearing here:
+
+- `overflow: hidden` at `0fr` hides content visually but does **not** empty its
+  bounding box — it still answers a text query and still reports visible to
+  Playwright, so neither `toHaveCount(0)` nor `not.toBeVisible()` holds.
+- Form controls inside stay in the document, so a label lookup that used to
+  match one element can now match two. `inert` fixes tab order and the
+  accessibility tree, not this.
+
+Sprint 12 applied it to `ClosedBetCard`'s reveal and to `people-console.tsx`'s
+`InviteBox`/`AddMemberBox`, measured, and reverted all three. The reveal version
+would have forced `e2e/bets-menu.spec.ts` (#103) to stop asserting bettor names
+are absent while collapsed — weakening a real guard on the reveal-at-close
+contract to buy a 24px height animation. The admin version made "Playing golfer"
+resolve to two checkboxes and broke `e2e/admin-approval.spec.ts`.
+
+**Use it only where content presence is harmless.** Where absence is part of the
+contract, keep the mount/unmount swap, or latch the unmount behind the exit
+animation the way `BetErrorToast` does.
+
+### Hard rules
+
+- **Transform and opacity only** — never `top`, `margin`, or an unbounded
+  `height`. One named exception: a progress bar's `width` (`BudgetModule`), where
+  width *is* the meaning and `scaleX` squashes the pill cap. Don't generalise it.
+- **`--ease-overshoot` on transform only** — on colour or opacity it overshoots
+  past the token value and can break contrast.
+- **Never animate a `display: contents` element.** `/leaderboard`, `/results` and
+  `/admin/view` stack their grids with `sm:contents`; animate the row, never the
+  wrapper, or it silently does nothing at `sm+` while working on mobile.
+- **Never gate an unmount behind `motion-safe:`.**
+- **Reduced motion is a floor, not an off switch.** `app/globals.css` zeroes
+  durations to `0.01ms` — never `0s`, never `animation: none`. Base UI keeps
+  `Dialog.Popup` mounted until `getAnimations()` settles and `BetErrorToast`
+  unmounts on `animationend`; with `none` no animation exists, no event fires, and
+  the toast strands on screen. `::view-transition-*` gets its own block because
+  the `*` selector cannot reach pseudo-elements outside the document tree.
+- **Don't animate constantly-changing values** — `Countdown` (1Hz) and the
+  `/admin/rules` preview table (per keystroke) are explicit opt-outs.
+- **Still banned:** infinite loops, confetti, gradient washes, frosted glass,
+  urgency patterns.
+
+---
+
+## 5. Using it
 
 - **Reference gallery:** [`/style-guide`](../app/style-guide/page.tsx) renders every
   token and component variant — the living equivalent of the DS card gallery.

@@ -44,7 +44,7 @@ export function PlayerChip({
       type="button"
       onClick={() => open(userId, { displayName, nickname, avatarUrl })}
       className={cn(
-        "group/chip inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-md text-left transition-colors",
+        "group/chip inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-md text-left transition-colors duration-fast ease-standard",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         className
       )}

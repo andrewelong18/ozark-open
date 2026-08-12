@@ -180,8 +180,14 @@ export default async function AdminViewPage() {
           message="Add participants in Supabase Studio and their placements will show here."
         />
       ) : (
-        view.bettors.map((bettor) => (
-          <section key={bettor.user_id} className="flex flex-col gap-2">
+        view.bettors.map((bettor, i) => (
+          // One cascade step per bettor section. The stagger cap means a full
+          // 32-person field still settles in well under a second.
+          <section
+            key={bettor.user_id}
+            style={{ "--index": i } as React.CSSProperties}
+            className="flex flex-col gap-2 motion-safe:animate-rise-in motion-safe:stagger"
+          >
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               {/* min-w-0 + wrap: an avatar, a long display name and a
                   self-pick badge on one 24px line pushed the row past the

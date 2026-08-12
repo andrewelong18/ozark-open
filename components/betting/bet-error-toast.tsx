@@ -18,9 +18,40 @@ import { BET_FOOTER_TOAST_SLOT } from "@/components/betting/bet-footer"
 // and the toast portals into it, stacked directly above whatever height the bar
 // actually is. No slot (no bar) → pinned to the bottom edge, safe-area padded.
 
+// MOTION (Sprint 12), modelled on Sonner's data-state mechanics: the card
+// carries data-state="open" | "closed" and tw-animate-css drives enter and
+// exit off it. The exit is shorter than the enter on the principle that old
+// content should leave quickly rather than compete for attention.
+//
+// The hard part is that there IS no exit to play by default. `message` is a
+// controlled prop from BetsMenu's toastError, and `if (!message) return null`
+// means React removes the node the instant the parent clears it — a node
+// React has already unmounted cannot animate. @starting-style doesn't help
+// either; that animates an element which STAYS in the DOM while display
+// changes. So the card latches its own copy of the message and outlives the
+// prop, unmounting itself on animationend.
+//
+// Two things keep that from stranding a card on screen, and they are
+// independent on purpose: the reduced-motion block in globals.css zeroes
+// durations to 0.01ms rather than `animation: none`, so animationend still
+// fires; and EXIT_FALLBACK_MS below is this card's own belt. e2e/motion.spec.ts
+// was run against sabotaged builds to check — removing either one alone is
+// survivable, removing both strands the toast. Don't take that as licence to
+// drop one.
+//
+// For the same reason none of the animation classes below are motion-safe:
+// gated — the unmount depends on them existing.
+
 /** The slot never moves once the page is up, so there is nothing to subscribe
  * to; each toast render re-reads the snapshot anyway. */
 const subscribeNever = () => () => {}
+
+/** Ceiling on the exit. If the animation is suppressed by something outside
+ * our control (a print stylesheet, an extension, a browser that skips
+ * animations on a backgrounded tab), animationend never arrives — this makes
+ * sure the card still leaves rather than stranding. Comfortably longer than
+ * --dur-exit so it never races the real thing. */
+const EXIT_FALLBACK_MS = 600
 
 export function BetErrorToast({
   message,
@@ -54,12 +85,42 @@ export function BetErrorToast({
     () => null
   )
 
-  if (!message) return null
+  // The latched copy is what gets rendered, so the card survives the prop
+  // being cleared long enough to animate out.
+  // Adjusted during render rather than in an effect: this is derived state
+  // reacting to a prop, which React sanctions doing inline (it discards the
+  // render and re-runs immediately, before paint). In an effect it would be a
+  // cascading render, and react-hooks/set-state-in-effect rejects it.
+  const [latched, setLatched] = React.useState(message)
+  if (message != null && message !== latched) setLatched(message)
+  const leaving = message == null && latched != null
+
+  React.useEffect(() => {
+    if (!leaving) return
+    const id = setTimeout(() => setLatched(null), EXIT_FALLBACK_MS)
+    return () => clearTimeout(id)
+  }, [leaving])
+
+  if (latched == null) return null
 
   const card = (
     <div
       role="alert"
-      className="pointer-events-auto mx-auto flex max-w-[var(--container-max,1120px)] items-start gap-3 rounded-lg border border-loss-border bg-loss-surface px-3.5 py-3 shadow-[0_8px_24px_rgba(31,29,60,0.16)]"
+      data-state={leaving ? "closed" : "open"}
+      onAnimationEnd={(e) => {
+        // The dismiss button is inside this element and has its own
+        // transitions; only the card's own exit should unmount it.
+        if (e.target !== e.currentTarget) return
+        if (leaving) setLatched(null)
+      }}
+      className={[
+        "pointer-events-auto mx-auto flex max-w-[var(--container-max,1120px)] items-start gap-3 rounded-lg border border-loss-border bg-loss-surface px-3.5 py-3 shadow-[0_8px_24px_rgba(31,29,60,0.16)]",
+        "data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:slide-in-from-bottom-2 data-[state=open]:duration-slow data-[state=open]:ease-out",
+        // fill-mode-forwards matters: tw-animate-css defaults fill-mode to
+        // none, so without it the card snaps back to full opacity for the one
+        // frame between animationend and React removing the node.
+        "data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:slide-out-to-bottom-1 data-[state=closed]:duration-exit data-[state=closed]:ease-exit data-[state=closed]:fill-mode-forwards",
+      ].join(" ")}
     >
       <span
         aria-hidden
@@ -67,14 +128,16 @@ export function BetErrorToast({
       >
         !
       </span>
+      {/* `latched`, not `message` — during the exit the prop is already null
+          and rendering it would blank the text mid-animation. */}
       <p className="min-w-0 flex-1 text-sm leading-normal text-loss-strong">
-        {message}
+        {latched}
       </p>
       <button
         type="button"
         onClick={onDismiss}
         aria-label="Dismiss"
-        className="-mt-1 -mr-2 inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-loss-strong/60 transition-colors hover:text-loss-strong"
+        className="-mt-1 -mr-2 inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-loss-strong/60 transition-colors duration-fast ease-standard hover:text-loss-strong"
       >
         ✕
       </button>

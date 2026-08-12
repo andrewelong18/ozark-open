@@ -33,7 +33,7 @@ function Input({
         leading || trailing
           ? "h-full"
           : cn(
-              "rounded-lg border border-input px-3 transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:bg-input/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20",
+              "rounded-lg border border-input px-3 transition-colors duration-fast ease-standard focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:bg-input/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20",
               sizeClasses[inputSize]
             ),
         leading || trailing ? "" : className
@@ -48,7 +48,7 @@ function Input({
     <div
       data-slot="input-wrapper"
       className={cn(
-        "flex items-center gap-2 rounded-lg border border-input bg-surface-card px-3 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 has-[input:disabled]:opacity-60 has-[input[aria-invalid=true]]:border-destructive has-[input[aria-invalid=true]]:ring-3 has-[input[aria-invalid=true]]:ring-destructive/20",
+        "flex items-center gap-2 rounded-lg border border-input bg-surface-card px-3 transition-colors duration-fast ease-standard focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 has-[input:disabled]:opacity-60 has-[input[aria-invalid=true]]:border-destructive has-[input[aria-invalid=true]]:ring-3 has-[input[aria-invalid=true]]:ring-destructive/20",
         sizeClasses[inputSize],
         className
       )}
