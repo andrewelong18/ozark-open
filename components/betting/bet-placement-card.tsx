@@ -81,10 +81,17 @@ type RowState = {
 
 /**
  * An open bet the viewer can wager on: BetRow anatomy from the design system
- * — label + odds cluster left, stake action zone right. Multi-pick categories
- * get a StakeInput per pick; Match / Group Match switch to a pick-one
- * affordance (radio + a single input on the chosen pick). All checks here are
- * UX — the API re-validates and its messages render verbatim under the input.
+ * — label + odds cluster left, stake action zone right. Every pick gets its own
+ * StakeInput, in every category.
+ *
+ * Match / Group Match take one pick only (§7 rule 7). That used to be a radio
+ * you tapped before the stake box appeared; Pat asked for the step to go
+ * (#162), so the pick-one rule is expressed by DISABLING the other rows once a
+ * wager exists instead. A second pick is still impossible — you just find that
+ * out by looking rather than by being refused after typing.
+ *
+ * All checks here are UX. validateSinglePickCategory is the enforcement, and
+ * the API's messages render verbatim in the menu's toast.
  */
 export function BetPlacementCard({
   title,
@@ -132,7 +139,6 @@ export function BetPlacementCard({
     scopePlacements(pickIds, placements)
   )
   const placedPickId = placedPickIdIn(pickIds, live)
-  const [selected, setSelected] = React.useState<string | null>(placedPickId)
   const [busy, setBusy] = React.useState<string | null>(null)
 
   const patchRow = (pickId: string, patch: Partial<RowState>) =>
@@ -248,25 +254,20 @@ export function BetPlacementCard({
     }
   }
 
-  // Pick-one affordance: selecting is free until a placement exists; after
-  // that the placed pick holds the selection until it's removed.
-  const select = (pick: PlacementPick) => {
-    if (allowsMultiplePicks) return
-    if (placedPickId && placedPickId !== pick.id) {
-      const placedLabel = picks.find((p) => p.id === placedPickId)?.label ?? "your pick"
-      onError?.(`Remove your $${live[placedPickId]} on ${placedLabel} to switch picks.`)
-      return
-    }
-    setSelected(pick.id)
-  }
+  // The pick-one rule, as the rows express it: once a wager sits on one pick,
+  // every other pick's stake box goes disabled until it's removed. Null on
+  // multi-pick categories, which never lock a row.
+  const lockedOutBy =
+    !allowsMultiplePicks && placedPickId
+      ? (picks.find((pick) => pick.id === placedPickId) ?? null)
+      : null
+  const lockedOutNote = lockedOutBy
+    ? `Remove your $${live[lockedOutBy.id]} on ${lockedOutBy.label} to switch picks`
+    : null
 
   return (
     <Card className="gap-0 p-0">
-      <div
-        className="flex items-start justify-between gap-3 border-b border-border px-4 py-3"
-        role={allowsMultiplePicks ? undefined : "radiogroup"}
-        aria-label={allowsMultiplePicks ? undefined : `${title} — pick one`}
-      >
+      <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
         <div className="min-w-0 flex-1">
           <div className="text-base leading-snug font-semibold text-pretty text-text-strong">
             {title}
@@ -276,9 +277,11 @@ export function BetPlacementCard({
               {totalProbability}
             </div>
           )}
+          {/* With the radio gone, this line is what explains the greyed-out
+              rows below — so it says why they're grey, not just "pick one". */}
           {!allowsMultiplePicks && (
             <div className="mt-0.5 text-[11px] text-text-muted">
-              Pick one
+              {lockedOutNote ? `Pick one · ${lockedOutNote}` : "Pick one"}
             </div>
           )}
         </div>
@@ -287,7 +290,7 @@ export function BetPlacementCard({
       {picks.map((pick) => {
         const state = rows[pick.id]
         const hasPlacement = live[pick.id] != null
-        const showInput = allowsMultiplePicks || selected === pick.id
+        const lockedOut = lockedOutBy != null && lockedOutBy.id !== pick.id
 
         return (
           <div
@@ -298,101 +301,62 @@ export function BetPlacementCard({
             )}
           >
             <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-              <div className="flex items-start gap-2.5">
-                {!allowsMultiplePicks && (
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={selected === pick.id}
-                    aria-label={`Pick ${pick.label}`}
-                    onClick={() => select(pick)}
-                    className={cn(
-                      "relative mt-0.5 inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full border-[1.5px] transition-colors",
-                      // 20px of dot, 44px of target. On a pick-one bet this
-                      // control IS the selector — the golfer's name beside it
-                      // is a profile link, not a second way to choose — so
-                      // missing it is missing the bet. The hit area grows by a
-                      // pseudo-element rather than by padding so the dot stays
-                      // the size the design system draws it and nothing in the
-                      // row reflows.
-                      "before:absolute before:-inset-3.5 before:content-['']",
-                      selected === pick.id
-                        ? "border-indigo-700"
-                        : "border-border-strong"
-                    )}
-                  >
-                    {selected === pick.id && (
-                      <span className="size-2.5 rounded-full bg-indigo-700" />
-                    )}
-                  </button>
-                )}
-                {/* A named golfer's name links to their profile; selection
-                    (pick-one bets) stays on the radio to its left. An unnamed
-                    pick ("Field", "Yes") keeps the tap-to-select label. The
-                    stroke handicap is a badge beside the name either way, and
-                    never inside the link (#102). */}
-                <PickLabel
-                  label={pick.label}
-                  playerUserId={pick.player_user_id}
-                  playerAvatarUrl={pick.player_avatar_url}
-                  className="min-w-0"
-                  nameClassName="text-base leading-snug font-medium text-text-strong"
-                  onNameClick={
-                    pick.player_user_id ? undefined : () => select(pick)
-                  }
-                />
-              </div>
-              <div className={cn(!allowsMultiplePicks && "pl-[30px]")}>
-                <OddsChip
-                  odds={pick.american_odds}
-                  size="sm"
-                  fractional={pick.fractional_odds}
-                  probability={pick.probability}
-                />
-              </div>
+            <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+              {/* A named golfer's name links to their profile; an unnamed pick
+                  ("Field", "Yes") is plain text. Choosing is the stake box to
+                  the right in every category now — the label was only ever a
+                  selection target because the radio needed a partner for
+                  unlinked picks (#162). The stroke handicap is a badge beside
+                  the name either way, never inside the link (#102). */}
+              <PickLabel
+                label={pick.label}
+                playerUserId={pick.player_user_id}
+                playerAvatarUrl={pick.player_avatar_url}
+                className="min-w-0"
+                nameClassName="text-base leading-snug font-medium text-text-strong"
+              />
+              <OddsChip
+                odds={pick.american_odds}
+                size="sm"
+                fractional={pick.fractional_odds}
+                probability={pick.probability}
+              />
             </div>
 
-            {showInput && (
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <StakeInput
-                  value={state.value}
-                  placed={state.placed}
-                  error={state.error}
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <StakeInput
+                value={state.value}
+                placed={state.placed}
+                error={state.error}
+                disabled={busy === pick.id || lockedOut}
+                disabledReason={lockedOut ? lockedOutNote : null}
+                onChange={(digits) =>
+                  patchRow(pick.id, {
+                    value: digits,
+                    placed: false,
+                    error: null,
+                    confirming: null,
+                  })
+                }
+                onPlace={() => requestPlace(pick)}
+              />
+              {hasPlacement && state.confirming !== "remove" && (
+                <button
+                  type="button"
+                  onClick={() => requestRemove(pick)}
                   disabled={busy === pick.id}
-                  onChange={(digits) =>
-                    patchRow(pick.id, {
-                      value: digits,
-                      placed: false,
-                      error: null,
-                      confirming: null,
-                    })
-                  }
-                  onPlace={() => requestPlace(pick)}
-                />
-                {hasPlacement && state.confirming !== "remove" && (
-                  <button
-                    type="button"
-                    onClick={() => requestRemove(pick)}
-                    disabled={busy === pick.id}
-                    className="-mr-2 inline-flex min-h-11 cursor-pointer items-center px-2 text-[11px] font-medium text-loss transition-colors hover:text-loss-strong"
-                  >
-                    ✕ Remove bet
-                  </button>
-                )}
-              </div>
-            )}
+                  className="-mr-2 inline-flex min-h-11 cursor-pointer items-center px-2 text-[11px] font-medium text-loss transition-colors hover:text-loss-strong"
+                >
+                  ✕ Remove bet
+                </button>
+              )}
+            </div>
             </div>
 
             {/* Explicit place-confirm: locking in a wager takes a second,
                 deliberate tap — never a stray Enter. */}
             {state.confirming === "place" && (
-              <div
-                className={cn(
-                  "mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2.5",
-                  !allowsMultiplePicks && "ml-[30px]"
-                )}
-              >
+              <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2.5">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-strong">
                   <span className="font-semibold">
                     {hasPlacement ? "Update to" : "Lock in"}
@@ -425,12 +389,7 @@ export function BetPlacementCard({
             {/* Explicit remove-confirm: removal is destructive (soft-deletes
                 the wager), so it takes a deliberate second tap. */}
             {state.confirming === "remove" && (
-              <div
-                className={cn(
-                  "mt-2 rounded-lg border border-loss-border bg-loss-surface px-3 py-2.5",
-                  !allowsMultiplePicks && "ml-[30px]"
-                )}
-              >
+              <div className="mt-2 rounded-lg border border-loss-border bg-loss-surface px-3 py-2.5">
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-text-strong">
                   <span className="font-semibold">Remove your</span>
                   {state.receipt && (
@@ -469,12 +428,7 @@ export function BetPlacementCard({
                 this placement — the confirmation that odds lock at write.
                 Hidden while a confirm strip owns the row. */}
             {hasPlacement && state.receipt && state.confirming === null && (
-              <div
-                className={cn(
-                  "mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs",
-                  !allowsMultiplePicks && "pl-[30px]"
-                )}
-              >
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                 <span className="font-semibold text-win-strong">✓ Locked in</span>
                 <OddsChip odds={state.receipt.odds} size="sm" />
                 <MoneyDisplay value={state.receipt.amount} size="xs" weight="bold" />
