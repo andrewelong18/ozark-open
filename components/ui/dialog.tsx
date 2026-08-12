@@ -15,6 +15,18 @@ import { cn } from "@/lib/utils"
 // design system's --dur-slow / --ease-out. Driven by Base UI's transition data
 // attributes (data-starting-style / data-ending-style) — no keyframes, fully
 // symmetric in and out. Kept subtle per the DS ("confirmation-only" motion).
+//
+// These used to read `duration-[--dur-slow] ease-[--ease-out]`, which is
+// Tailwind v3 syntax for an implicit var(). v4 removed that shorthand in
+// favour of `duration-(--dur-slow)`, so what actually shipped was
+// `transition-duration: --dur-slow` — invalid, resolving to 0s. The dialog
+// did not animate for two sprints. Now on the named `duration-slow` /
+// `ease-out` utilities, which are backed by the tokens in globals.css and
+// cannot silently degrade the same way.
+//
+// The exit is why the reduced-motion block in globals.css zeroes durations to
+// 0.01ms rather than `none`: Base UI keeps this popup mounted until
+// element.getAnimations() settles, and `none` means there is nothing to settle.
 
 export const Dialog = BaseDialog.Root
 export const DialogTrigger = BaseDialog.Trigger
@@ -64,7 +76,7 @@ export function DialogPopup({
         data-slot="dialog-backdrop"
         className={cn(
           "fixed inset-0 z-50 bg-ink-950/45",
-          "transition-opacity duration-[--dur-slow] ease-[--ease-out]",
+          "transition-opacity duration-slow ease-out",
           "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0"
         )}
       />
@@ -74,7 +86,7 @@ export function DialogPopup({
           "fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
           "flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md flex-col overflow-hidden",
           "rounded-2xl border border-border bg-surface-card shadow-[var(--shadow-lg)]",
-          "transition-[opacity,transform] duration-[--dur-slow] ease-[--ease-out]",
+          "transition-[opacity,transform] duration-slow ease-out",
           "data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
           "data-[ending-style]:scale-95 data-[ending-style]:opacity-0",
           className

@@ -185,12 +185,111 @@
   --shadow-focus: 0 0 0 3px rgba(82, 79, 192, 0.35);
   --shadow-gold: 0 0 0 3px rgba(253, 218, 0, 0.4);
 
-  /* Motion — subtle; confirmation moments only */
+  /* ---------- Motion: durations ----------
+     Two tiers, per the design system's productive/expressive split (borrowed
+     from IBM Carbon). PRODUCTIVE is the betting path — efficient, subtle, out
+     of the way; someone tapping stakes into 13 bets in a golf cart must never
+     wait on a flourish. EXPRESSIVE is arrival and confirmation, and is rationed
+     the same way brand gold is.
+
+     Durations live here rather than in @theme because Tailwind v4 has no
+     --duration-* theme namespace (--ease-* and --animate-* do exist, and are
+     declared in the @theme block below). The named duration utilities that
+     consume these are hand-rolled with @utility at the bottom of this file. */
+  --dur-fast: 120ms; /* productive: hover, colour, press — the state echo */
+  --dur-base: 180ms; /* productive: the default — reveals, swaps, collapses */
+  --dur-slow: 260ms; /* productive: overlays — dialog, backdrop, toast enter */
+  --dur-enter: 320ms; /* expressive: route + list entrance */
+  --dur-exit: 160ms; /* exits leave fast so they don't compete for attention */
+
+  /* Stagger budget. --stagger-max caps the cascade so a 25-row leaderboard
+     finishes in 240ms rather than a full second (see the `stagger` utility). */
+  --stagger-step: 40ms;
+  --stagger-max: 240ms;
+}
+
+/* ===================================================================
+   Motion vocabulary.
+
+   Every curve below is lifted from a named specification rather than
+   eyeballed — the design system's existing two curves turned out to already
+   be industry-standard values, so the new ones extend the same lineage:
+
+     --ease-standard  Material 3 `standard` / `emphasized`      (was already ours)
+     --ease-out       Penner `easeOutExpo`                      (was already ours)
+     --ease-entrance  Material 3 `emphasized-decelerate`  — M3's designated
+                      curve for content ENTERING the screen
+     --ease-exit      Material 3 `emphasized-accelerate`  — …and for content
+                      LEAVING it
+     --ease-overshoot Penner `easeOutBack` (…1.56…), DAMPED to 1.35. The
+                      damping is the deliberate reconciliation with the DS's
+                      "no bounces" rule: it reads as confident rather than
+                      springy, and settles once instead of oscillating.
+
+   --ease-* and --animate-* ARE Tailwind v4 theme namespaces, so these
+   generate real `ease-entrance` / `animate-rise-in` utilities. Duration is
+   NOT a namespace — see the @utility block at the bottom of this file.
+
+   NOTE: --ease-out deliberately OVERRIDES Tailwind's built-in `ease-out`
+   (cubic-bezier(0,0,.2,1)) with the DS curve. That is the point — one
+   vocabulary, no second set of curves smuggled in via defaults.
+   =================================================================== */
+/* `static` forces every variable below into :root even when no utility
+   references it yet. Without it Tailwind tree-shakes the unused ones, and
+   --ease-exit / --ease-overshoot are consumed from raw CSS (the reduced-motion
+   and keyframe blocks) rather than from a class, where the scanner can't see
+   them. The design system promises these tokens exist; this is what makes
+   that true. */
+@theme static {
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --dur-fast: 120ms;
-  --dur-base: 180ms;
-  --dur-slow: 260ms;
+  --ease-entrance: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
+  /* Transform only. An overshoot on colour or opacity overshoots past the
+     token value, which is off-brand and can break contrast. */
+  --ease-overshoot: cubic-bezier(0.34, 1.35, 0.64, 1);
+
+  /* The delay slot is a var so the `stagger` utility can fill it WITHOUT
+     depending on utility cascade order — a bare `animation-delay` utility
+     would be reset by this shorthand. In the `animation` shorthand the first
+     <time> is duration and the second is delay, so the order is load-bearing. */
+  --animate-rise-in: rise-in var(--dur-enter) var(--ease-entrance)
+    var(--stagger-delay, 0ms) both;
+  --animate-fade-in-soft: fade-in-soft var(--dur-base) var(--ease-standard)
+    var(--stagger-delay, 0ms) both;
+  --animate-stake-flash: stake-flash var(--dur-slow) var(--ease-out);
+}
+
+/* Keyframes live OUTSIDE @theme deliberately: Tailwind only emits keyframes
+   declared inside @theme when the matching --animate-* utility is used, and
+   `animate-stake-flash` is applied through cn() where the scanner can miss
+   it. Declared here they are always in the stylesheet. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in-soft {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* One-shot gold confirmation flash on stake placement (see StakeInput). */
+@keyframes stake-flash {
+  from {
+    box-shadow: var(--shadow-gold);
+  }
+  to {
+    box-shadow: 0 0 0 3px rgba(253, 218, 0, 0);
+  }
 }
 
 /* ===================================================================
@@ -355,20 +454,103 @@
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1, "lnum" 1;
   }
+
+  /* ---------- Reduced motion: the floor ----------
+     Deliberately a blanket override rather than per-component motion-safe:
+     variants, because it also has to reach CSS this file does not own —
+     tw-animate-css's enter/exit keyframes, Base UI's transitions, and anything
+     a later sprint adds without remembering the rule. A per-component policy
+     is one you have to remember; this is one you cannot escape.
+
+     The values are load-bearing, and this is the riskiest block in the motion
+     system:
+
+       0.01ms, NEVER 0s and NEVER `animation: none`.
+
+     Two things in this app unmount only once an animation reports finished —
+     Base UI keeps Dialog.Popup mounted until element.getAnimations() settles,
+     and BetErrorToast unmounts on animationend. With `none` or `0s` the
+     browser creates no animation and fires no event: the dialog survives (it
+     resolves on the next frame) but the toast would sit on screen forever. At
+     0.01ms a real animation exists, `finished` resolves, animationend fires,
+     and every consumer stays on its normal code path.
+
+     animation-delay is !important and negative because the stagger utility
+     carries its delay INSIDE the `animation` shorthand, and an !important
+     longhand is the only thing that beats a shorthand. Without it a
+     reduced-motion user stares at an invisible row for up to 240ms. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-delay: -1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      transition-delay: 0s !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-/* One-shot gold confirmation flash on stake placement (see StakeInput). */
-@keyframes stake-flash {
-  from {
-    box-shadow: var(--shadow-gold);
-  }
-  to {
-    box-shadow: 0 0 0 3px rgba(253, 218, 0, 0);
+/* View-transition pseudo-elements sit outside the document tree, so the `*`
+   rule above never reaches them and they need their own block. `none` IS safe
+   here — unlike the toast and the dialog, nothing in this app awaits a view
+   transition's completion. Kept outside @layer base so it wins against the
+   UA's default crossfade without a specificity fight. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }
 
-.animate-stake-flash {
-  animation: stake-flash var(--dur-slow) var(--ease-out);
+/* Named duration utilities. Duration is not a Tailwind v4 theme namespace
+   (only --ease-* and --animate-* are), so the tiers are hand-rolled.
+
+   Each sets BOTH the longhand and Tailwind's internal --tw-duration, on
+   purpose: `transition-colors` compiles to
+     transition-duration: var(--tw-duration, var(--default-transition-duration))
+   and tw-animate-css's `animate-in` compiles to
+     animation-duration: var(--tw-duration, .15s)
+   Setting the custom property means both pick up the token, which is what
+   lets `duration-slow` retime a tw-animate-css enter/exit animation. The
+   longhand is the belt: if Tailwind ever renames the internal, plain
+   transitions still carry the token. */
+@utility duration-fast {
+  --tw-duration: var(--dur-fast);
+  transition-duration: var(--dur-fast);
+}
+@utility duration-base {
+  --tw-duration: var(--dur-base);
+  transition-duration: var(--dur-base);
+}
+@utility duration-slow {
+  --tw-duration: var(--dur-slow);
+  transition-duration: var(--dur-slow);
+}
+@utility duration-enter {
+  --tw-duration: var(--dur-enter);
+  transition-duration: var(--dur-enter);
+}
+@utility duration-exit {
+  --tw-duration: var(--dur-exit);
+  transition-duration: var(--dur-exit);
+}
+
+/* Per-item entrance delay, the CSS equivalent of Motion's stagger(). Sets
+   only a custom property, never animation-delay directly, so it is immune to
+   cascade order against `animate-rise-in` (whose shorthand would otherwise
+   reset the delay to 0). min() caps the cascade: at 40ms a step with a 240ms
+   ceiling, item 0 starts immediately and everything from the 6th on starts
+   together, so a 25-row leaderboard is fully in at 240 + 320 = 560ms no
+   matter how long it gets. Set --index inline from the map index. */
+@utility stagger {
+  --stagger-delay: min(
+    calc(var(--index, 0) * var(--stagger-step)),
+    var(--stagger-max)
+  );
 }
 
 /* Pill-nav scroll affordance (see SiteNav / ProfileTabs): hide the scrollbar
