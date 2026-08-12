@@ -39,7 +39,7 @@ test("the final table fits a phone, and reads without a header row", async ({ pa
   const row = page
     .getByTestId("bet-3")
     .locator("div")
-    .filter({ has: page.getByRole("button", { name: "Dan Mercer", exact: true }) })
+    .filter({ has: page.getByText("Dan Mercer", { exact: true }) })
     .filter({ has: page.getByRole("button", { name: "Place stake" }) })
     .last()
   await row.getByRole("textbox").fill("10")

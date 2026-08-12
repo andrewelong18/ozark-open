@@ -9,6 +9,11 @@ export type StakeInputProps = {
   placed?: boolean
   error?: string | null
   disabled?: boolean
+  /** Why this box is disabled, when it is disabled for a reason the bettor can
+   * act on — the pick-one lock-out (#162). Becomes the tooltip and the input's
+   * accessible name, so a grey box is never mute to a screen reader or to
+   * someone who long-presses it wondering what happened. */
+  disabledReason?: string | null
   onChange?: (digits: string) => void
   onPlace?: () => void
   className?: string
@@ -16,14 +21,17 @@ export type StakeInputProps = {
 
 /**
  * Inline whole-dollar stake input for an open bet row. States: unplaced
- * (empty), placed (confirmed — gold flash), error (over max / invalid).
- * Whole dollars only. `onPlace` fires on Enter or the check button.
+ * (empty), placed (confirmed — gold flash), error (over max / invalid),
+ * disabled (a write in flight, or another pick of a pick-one bet already
+ * carries the wager). Whole dollars only. `onPlace` fires on Enter or the
+ * check button.
  */
 export function StakeInput({
   value = "",
   placed = false,
   error = null,
   disabled = false,
+  disabledReason = null,
   onChange,
   onPlace,
   className,
@@ -45,6 +53,7 @@ export function StakeInput({
   return (
     <div className={cn("inline-flex flex-col gap-1", className)}>
       <div
+        title={disabled && disabledReason ? disabledReason : undefined}
         className={cn(
           // 44px tall and wider on a phone so the ↵ below can be a real target
           // without squeezing the digits; back to the compact desktop control
@@ -74,6 +83,9 @@ export function StakeInput({
           value={value}
           placeholder="0"
           disabled={disabled}
+          aria-label={
+            disabled && disabledReason ? disabledReason : "Stake, in dollars"
+          }
           onChange={handle}
           onFocus={() => setFocus(true)}
           onBlur={() => setFocus(false)}

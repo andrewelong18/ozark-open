@@ -12,8 +12,10 @@ import {
   parseAdminPlacementBody,
   parseDeleteBody,
   parsePlacementBody,
+  placedPickIdIn,
   placementTarget,
   planWrite,
+  scopePlacements,
   stakeEntryError,
   toTournamentRules,
   type PickQueryRow,
@@ -688,4 +690,60 @@ test("the two targets never collide — a dropped flag changes the endpoint", ()
   // And the member route must carry no identity at all — it reads the session,
   // so a stray userId in the body must not be able to redirect the write.
   assert.deepEqual(Object.keys(own.bettorField), [])
+})
+
+// ---------------------------------------------------------------------------
+// scopePlacements / placedPickIdIn — the map a card is allowed to believe (#161)
+// ---------------------------------------------------------------------------
+
+// Pat's exact case, Aug 12. He had $7 on a Group Match pick and wagers on four
+// other bets; the Match card next to it adopted whichever wager sat first in
+// the map and refused every pick it owned.
+const MATCH_PICKS = ["pick-nulsen", "pick-davis"]
+const GROUP_PICKS = ["pick-kipping", "pick-arand", "pick-kohne"]
+const TOURNAMENT_WIDE = {
+  "pick-kohne": 7,
+  "pick-mercer": 5,
+  "pick-yenzer": 4,
+  "pick-jones": 3,
+}
+
+test("a card only sees the wagers on its own picks", () => {
+  assert.deepEqual(scopePlacements(GROUP_PICKS, TOURNAMENT_WIDE), {
+    "pick-kohne": 7,
+  })
+})
+
+test("a card with no wager on it sees an empty map, not someone else's", () => {
+  // THE BUG. The Match card used to read `Object.keys(map)[0]` — "pick-kohne",
+  // a pick it does not own — and every row then failed `placedPickId !== id`.
+  assert.deepEqual(scopePlacements(MATCH_PICKS, TOURNAMENT_WIDE), {})
+  assert.equal(placedPickIdIn(MATCH_PICKS, TOURNAMENT_WIDE), null)
+})
+
+test("the placed pick of a pick-one bet is found by id, not by map order", () => {
+  assert.equal(placedPickIdIn(GROUP_PICKS, TOURNAMENT_WIDE), "pick-kohne")
+})
+
+test("an empty placements map places nothing anywhere", () => {
+  assert.deepEqual(scopePlacements(GROUP_PICKS, {}), {})
+  assert.equal(placedPickIdIn(GROUP_PICKS, {}), null)
+})
+
+test("a $0 amount is a wager, not an absent one", () => {
+  // validateAmount refuses $0 at the door, so this can't come from the API —
+  // but `if (amount)` instead of `!= null` would drop a real row silently, and
+  // a dropped row is a wager with no remove control. Same class as the bug.
+  assert.deepEqual(scopePlacements(GROUP_PICKS, { "pick-arand": 0 }), {
+    "pick-arand": 0,
+  })
+  assert.equal(placedPickIdIn(GROUP_PICKS, { "pick-arand": 0 }), "pick-arand")
+})
+
+test("a multi-pick bet keeps every wager, and answers in pick order", () => {
+  // Top Finisher allows several. Scoping must not thin them, and the "placed"
+  // answer must follow the card's own order so it can't flip between renders.
+  const multi = { "pick-arand": 2, "pick-kipping": 6 }
+  assert.deepEqual(scopePlacements(GROUP_PICKS, multi), multi)
+  assert.equal(placedPickIdIn(GROUP_PICKS, multi), "pick-kipping")
 })

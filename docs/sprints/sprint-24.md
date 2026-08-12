@@ -41,6 +41,32 @@ Deliberately not done, and why:
 - **The placement confirm strips keep the full label.** There the label is prose in a one-line sentence ("Lock in $20 on Jake Kohne (E)"), and the two-tap flow was verified with Pat on Jul 31 — out of scope per this file.
 - **`/admin/view` keeps verbatim labels and sheet order.** It is a View-sheet replica; both changes would make it stop replicating the sheet.
 
+---
+
+## Follow-up — Aug 12, 2026
+
+Pat took the shipped menu for a pass on his phone (this sprint's browser check,
+[#127](https://github.com/andrewelong18/ozark-open/issues/127)) and found two things. Both
+land in the placement flow this file put out of scope, so the note lives here rather than
+leaving the section below reading as still-true.
+
+- **[#161](https://github.com/andrewelong18/ozark-open/issues/161) — a real defect, and not a
+  presentation one.** `/bets` builds one placements map for the bettor's whole tournament and
+  hands the same object to every card; `BetPlacementCard` read `Object.keys(live)[0]` as if it
+  were bet-scoped. So one wager anywhere made *every other* pick-one bet refuse selection with a
+  message naming a pick it couldn't find — and, because the remove button lived inside the
+  reveal-on-select block, stripped the controls off the wager itself. A wager that looked placed,
+  couldn't be edited, and couldn't be removed, with the phase wide open. Multi-pick bets were
+  untouched, which is why nothing before this caught it.
+- **[#162](https://github.com/andrewelong18/ozark-open/issues/162) — the pick-one affordance
+  changed.** *"You shouldn't have to click the radio button bubble and type in your figure."* The
+  radio is gone; every pick row carries its own stake box in every category, and §7 rule 7 is
+  expressed by **disabling** the other rows once a wager exists, with the "Pick one" subline
+  saying why. The two-tap confirm strips stay exactly as Jul 31 verified them.
+
+The out-of-scope note below stands as written for the sprint itself — the placement flow was
+right not to be touched *then*. It was Pat's own pass that reopened it.
+
 ### Out of scope (don't build)
 
 - **Changing what the reveal shows.** Names and amounts on every pick after close is settled (Q11). This is about disclosure, not content.

@@ -12,9 +12,9 @@
 //      sideways is the symptom of a fixed-width table, an unwrappable heading
 //      or a min-w- floor, and it hides content off the right edge.
 //   2. Every control on /bets is reachable by a thumb — measured by probing
-//      where taps actually land, not by reading the border box, because the
-//      pick-one radio's 44px comes from a pseudo-element that
-//      getBoundingClientRect cannot see.
+//      where taps actually land, not by reading the border box, because a
+//      control's real hit area can come from padding, a negative margin or a
+//      pseudo-element that getBoundingClientRect cannot see.
 //   3. The fixed footer doesn't cover the thing under it.
 //
 // What this still can't tell you: how any of it LOOKS. That's docs/mobile/,
@@ -135,9 +135,7 @@ test.describe("the bet menu under a thumb", () => {
   // lives outside it, and inline text links inside table rows are a different
   // kind of target that a 44px rule would only make worse.
   test("every control in the menu is at least 44px", async ({ page }) => {
-    const controls = page.locator(
-      'main button:visible, main input:visible, main [role="radio"]:visible'
-    )
+    const controls = page.locator("main button:visible, main input:visible")
     const n = await controls.count()
     expect(n, "the menu should have controls to check").toBeGreaterThan(20)
 
@@ -167,11 +165,16 @@ test.describe("the bet menu under a thumb", () => {
       "place-stake ↵"
     )
 
-    // The pick-one radio: 20px of dot, 44px of target, and on a Match bet it is
-    // the ONLY way to choose — the golfer's name beside it is a profile link.
+    // The pick-one bet's stake field. It replaced the radio as the way to
+    // choose (#162), so on a Match bet a miss here is a bet that never
+    // happened — same stake as the radio's 44px used to carry.
+    const pickOne = page
+      .locator('[data-testid^="bet-"]')
+      .filter({ hasText: "Pick one" })
+      .first()
     await expectTappable(
-      page.getByRole("radio").first(),
-      "pick-one radio (hit area is a ::before — a border-box check misses this)"
+      pickOne.getByRole("textbox").first(),
+      "pick-one stake field (the selector, since #162)"
     )
 
     await expectTappable(

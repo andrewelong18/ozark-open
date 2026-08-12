@@ -35,39 +35,37 @@ import {
 /** approved@'s seeded entry fee, restored after each test that moves it. */
 const SEEDED_ENTRY = 30
 
+/** A pick's row, found by its name as TEXT. The gauntlet unlinks every pick in
+ * beforeEach, and an unlinked label stopped being a button with the radio it
+ * used to stand in for (#162). */
 function stakeRow(page: Page, betTestId: string, pickName: string) {
   return page
     .getByTestId(betTestId)
     .locator("div")
-    .filter({ has: page.getByRole("button", { name: pickName, exact: true }) })
+    .filter({ has: page.getByText(pickName, { exact: true }) })
     .filter({ has: page.getByRole("button", { name: "Place stake" }) })
     .last()
 }
 
 /**
- * Match and Group Match are pick-one bets: the radio IS the selector, and the
- * stake box only appears once a pick is chosen (bet-placement-card.tsx). The
- * multi-pick categories put a stake box on every row instead. `radioLabel` is
- * the full sheet label including the stroke suffix, which is what the radio's
- * aria-label carries even though the row renders the name and the badge apart.
+ * Every pick carries its own stake box, in every category — since #162 there is
+ * no radio to select first, and a pick-one bet expresses its rule by disabling
+ * the OTHER rows once a wager exists. So staging is the same three steps
+ * everywhere: type, ↵, confirm.
  */
 async function stage(
   page: Page,
   betTestId: string,
   pickName: string,
-  amount: string,
-  radioLabel?: string
+  amount: string
 ) {
-  if (radioLabel) {
-    const radio = page.getByTestId(betTestId).getByRole("radio", { name: `Pick ${radioLabel}` })
-    await radio.click()
-    // Selecting is refused outright when a wager already sits on another pick
-    // in the same bet ("Remove your $5 on X to switch picks") — the stake box
-    // then never appears and the fill below would time out with nothing to say.
-    // Assert the selection landed so a failure names the real cause.
-    await expect(radio).toHaveAttribute("aria-checked", "true")
-  }
   const row = stakeRow(page, betTestId, pickName)
+  // A disabled box means a wager already sits on another pick of a pick-one
+  // bet. fill() would time out on it; say why instead.
+  await expect(
+    row.getByRole("textbox"),
+    `${pickName}'s stake box is disabled — another pick of this bet holds the wager`
+  ).toBeEnabled()
   await row.getByRole("textbox").fill(amount)
   await row.getByRole("button", { name: "Place stake" }).click()
 }
@@ -77,10 +75,9 @@ async function placeAndConfirm(
   page: Page,
   betTestId: string,
   pickName: string,
-  amount: string,
-  radioLabel?: string
+  amount: string
 ) {
-  await stage(page, betTestId, pickName, amount, radioLabel)
+  await stage(page, betTestId, pickName, amount)
   const confirm = page.getByRole("button", { name: /^Confirm (bet|change)$/ })
   await confirm.click()
 }
@@ -208,7 +205,7 @@ test("a player can't back his opponent in a match he's in, stroke suffix and all
   await signInAs(page, ACCOUNTS.approved)
   await page.goto("/bets")
 
-  await placeAndConfirm(page, "bet-7", "Steve Jones", "5", "Steve Jones (-5)")
+  await placeAndConfirm(page, "bet-7", "Steve Jones", "5")
 
   const alert = refusal(page, "opponent")
   await expect(alert).toBeVisible()
@@ -220,7 +217,7 @@ test("a player can't back his opponent in a match he's in, stroke suffix and all
   // Backing HIMSELF in the same match is fine — the rule blocks opponents, not
   // participation. $5 is under the $7 self cap on a $30 entry.
   await page.goto("/bets")
-  await placeAndConfirm(page, "bet-7", "Jake Kohne", "5", "Jake Kohne (E)")
+  await placeAndConfirm(page, "bet-7", "Jake Kohne", "5")
   await expect(page.getByText("Locked in")).toBeVisible()
 })
 
@@ -264,4 +261,51 @@ test("removing then re-placing revives the one row instead of making a second", 
   expect(rows[0].id).toBe(original.id)
   expect(rows[0].deleted).toBe(false)
   expect(rows[0].amount).toBe(7)
+})
+
+// ---------------------------------------------------------------------------
+// 4.14 — §7.7 one pick per Match / Group Match, as the rows now show it (#162)
+// ---------------------------------------------------------------------------
+
+test("a wager on a pick-one bet disables its siblings until it's removed", async ({
+  page,
+}) => {
+  // Bet 7 is a Group Match. Nothing is linked to anyone here, so the opponent
+  // block is out of the way and the only rule in play is one-pick-per-bet.
+  await signInAs(page, ACCOUNTS.approved)
+  await page.goto("/bets")
+
+  const card = page.getByTestId("bet-7")
+  const jake = stakeRow(page, "bet-7", "Jake Kohne").getByRole("textbox")
+  const steve = stakeRow(page, "bet-7", "Steve Jones").getByRole("textbox")
+
+  // Every pick is offerable to start with — no selection step (#162), and no
+  // card-wide dead zone (#161, which killed all three at once).
+  await expect(jake).toBeEnabled()
+  await expect(steve).toBeEnabled()
+
+  await placeAndConfirm(page, "bet-7", "Jake Kohne", "5")
+  await expect(card.getByText("✓ Locked in")).toBeVisible()
+
+  // The wager holds the bet. Its own row stays editable — an edit is a change
+  // of amount, not a second pick — and the siblings go grey with the reason
+  // stated, rather than refusing a tap after the fact.
+  await expect(jake).toBeEnabled()
+  await expect(steve).toBeDisabled()
+  await expect(
+    card.getByText("Pick one · Remove your $5 on Jake Kohne (E) to switch picks")
+  ).toBeVisible()
+
+  // Removing hands the bet back.
+  await card.getByRole("button", { name: /Remove bet/ }).click()
+  await page.getByRole("button", { name: "Remove bet", exact: true }).click()
+  await expect(card.getByText("✓ Locked in")).toHaveCount(0)
+  await expect(steve).toBeEnabled()
+
+  // And the switch the disabling was protecting now goes through.
+  await placeAndConfirm(page, "bet-7", "Steve Jones", "5")
+  await expect(card.getByText("✓ Locked in")).toBeVisible()
+  await page.goto("/my-bets")
+  await expect(page.getByText("Steve Jones")).toBeVisible()
+  await expect(page.getByText("Jake Kohne")).toHaveCount(0)
 })

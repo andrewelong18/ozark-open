@@ -558,8 +558,12 @@ Switch to **Casey Sideline**, who is flagged as a non-player.
 
 ### 4.9 One pick per match · P0
 - [ ] As **Casey** (not in any match), open a *Match - Round 1* bet and place on one side
-- [ ] Try the other side → *"This bet allows only one pick per participant."*
-- [ ] The UI should present a match as a pick-one control, not free-form inputs
+- [ ] Try the other side → its stake box is **disabled**, and the bet's subline says
+      *"Pick one · remove your $X on <pick> to switch picks"*. The rule is a control you
+      can't use, not a message after you type (#162 — it was a radio until Aug 12, 2026).
+      The server's *"This bet allows only one pick per participant."* is still the
+      enforcement behind it, and is what a hand-made request would hit
+- [ ] Remove the first wager → the other side becomes enterable again
 - [ ] Same test on a **Group Match** (3+ players)
 - [ ] Contrast: *Win Tournament* allows as many picks as you like
 

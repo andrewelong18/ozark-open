@@ -18,6 +18,10 @@ import { splitPickLabel } from "@/lib/pick-label"
  *
  * Labels with no handicap ("Field", "Yes", "No") render as plain text with no
  * badge, exactly as before.
+ *
+ * An unlinked label used to double as a tap target, standing in for the radio
+ * on pick-one bets. The radio is gone (#162) and every row carries its own
+ * stake box, so the label is only ever a name here — a link, or text.
  */
 export function PickLabel({
   label,
@@ -25,7 +29,6 @@ export function PickLabel({
   playerAvatarUrl = null,
   className,
   nameClassName,
-  onNameClick,
 }: {
   /** The sheet's pick label, verbatim — split for display, never mutated. */
   label: string
@@ -33,8 +36,6 @@ export function PickLabel({
   playerAvatarUrl?: string | null
   className?: string
   nameClassName?: string
-  /** Pick-one bets make the whole unlinked label a selection target. */
-  onNameClick?: () => void
 }) {
   const { name, stroke } = splitPickLabel(label)
 
@@ -48,24 +49,6 @@ export function PickLabel({
           className="min-w-0"
           nameClassName={nameClassName}
         />
-      ) : onNameClick ? (
-        <button
-          type="button"
-          onClick={onNameClick}
-          className={cn(
-            // When there's no profile link, the label IS the way to choose
-            // this pick — so it has to be a real target, not a line of text.
-            // The labels that end up here are "Field", "Yes", "No" — short
-            // enough that the text alone is a ~40px target — plus any golfer
-            // name the importer couldn't match. So: padding for width, pulled
-            // back by an equal negative margin so nothing moves, and min-w-0
-            // stays so a long unmatched name can still shrink.
-            "-mx-2 inline-flex min-h-11 min-w-0 cursor-pointer items-center px-2 text-left text-pretty",
-            nameClassName
-          )}
-        >
-          {name}
-        </button>
       ) : (
         <span className={cn("min-w-0 text-pretty", nameClassName)}>{name}</span>
       )}

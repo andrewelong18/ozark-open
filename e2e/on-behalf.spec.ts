@@ -35,7 +35,7 @@ test("an admin's wager for a member lands on the member, not the admin", async (
   const row = page
     .getByTestId("bet-1")
     .locator("div")
-    .filter({ has: page.getByRole("button", { name: "Dan Mercer", exact: true }) })
+    .filter({ has: page.getByText("Dan Mercer", { exact: true }) })
     .filter({ has: page.getByRole("button", { name: "Place stake" }) })
     .last()
   await row.getByRole("textbox").fill("7")

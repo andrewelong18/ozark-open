@@ -413,3 +413,46 @@ export function placementTarget(onBehalfOf: OnBehalfOf): PlacementTarget {
       }
     : { endpoint: "/api/placements", bettorField: {} }
 }
+
+/**
+ * The bettor's wagers on THIS bet's picks, out of a map that covers the whole
+ * tournament.
+ *
+ * WHY THIS EXISTS (#161, found by Pat Aug 12). `/bets` builds one placements
+ * map for the bettor's entire tournament and hands the same object to every
+ * card. A card that reads it unscoped adopts another bet's wager as its own:
+ * every pick in a pick-one card then looks like "not the one you placed", the
+ * card refuses selection with a message naming a pick it can't even find, and
+ * the wager it thinks is placed loses its remove control. Two symptoms, one
+ * missing filter — so the filter lives here, tested, rather than in a `.filter`
+ * a refactor can drop.
+ *
+ * Scoping happens where the map is READ, not where it's passed, so the card is
+ * correct no matter what a caller hands it.
+ */
+export function scopePlacements(
+  pickIds: string[],
+  placements: Record<string, number>
+): Record<string, number> {
+  const scoped: Record<string, number> = {}
+  for (const id of pickIds) {
+    const amount = placements[id]
+    if (amount != null) scoped[id] = amount
+  }
+  return scoped
+}
+
+/**
+ * The one pick of this bet carrying a live wager, or null.
+ *
+ * Pick-one categories (Match / Group Match) can only ever have one — §7 rule 7,
+ * enforced by validateSinglePickCategory. Order follows `pickIds`, not the
+ * map's insertion order, so a multi-pick bet gets a stable answer too rather
+ * than "whichever wager was written first".
+ */
+export function placedPickIdIn(
+  pickIds: string[],
+  placements: Record<string, number>
+): string | null {
+  return pickIds.find((id) => placements[id] != null) ?? null
+}
