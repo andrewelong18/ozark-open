@@ -206,8 +206,15 @@ export default async function MyBetsPage() {
           }
         />
       ) : (
-        phases.map((group) => (
-          <section key={group.phase} className="flex flex-col gap-2">
+        phases.map((group, i) => (
+          // Cascades by phase section rather than by row: there are only two or
+          // three sections, and staggering every placement inside them would be
+          // noise on a page someone opens to check a number.
+          <section
+            key={group.phase}
+            style={{ "--index": i } as React.CSSProperties}
+            className="flex flex-col gap-2 motion-safe:animate-rise-in motion-safe:stagger"
+          >
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="font-heading text-2xl text-indigo-700">
                 Phase {group.phase}

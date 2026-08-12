@@ -470,10 +470,19 @@
      Two things in this app unmount only once an animation reports finished —
      Base UI keeps Dialog.Popup mounted until element.getAnimations() settles,
      and BetErrorToast unmounts on animationend. With `none` or `0s` the
-     browser creates no animation and fires no event: the dialog survives (it
-     resolves on the next frame) but the toast would sit on screen forever. At
-     0.01ms a real animation exists, `finished` resolves, animationend fires,
-     and every consumer stays on its normal code path.
+     browser creates no animation and fires no event at all. At 0.01ms a real
+     animation exists, `finished` resolves, animationend fires, and every
+     consumer stays on its normal code path.
+
+     Honest scope, measured rather than assumed (see e2e/motion.spec.ts, which
+     was run against sabotaged builds to find this out): today's two consumers
+     BOTH survive `animation: none` on their own — Base UI resolves on a
+     following frame, and the toast carries its own fallback timer. So this
+     line is not the only thing standing between us and a stranded node; it is
+     the half that does not require every future consumer to remember a
+     fallback. Keep it at 0.01ms anyway. The next component that unmounts on an
+     event will not come with a belt of its own, and this is what makes the
+     naive version correct by default.
 
      animation-delay is !important and negative because the stagger utility
      carries its delay INSIDE the `animation` shorthand, and an !important

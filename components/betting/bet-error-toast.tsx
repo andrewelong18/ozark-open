@@ -31,11 +31,16 @@ import { BET_FOOTER_TOAST_SLOT } from "@/components/betting/bet-footer"
 // changes. So the card latches its own copy of the message and outlives the
 // prop, unmounting itself on animationend.
 //
-// That is precisely why the reduced-motion block in globals.css zeroes
-// durations to 0.01ms instead of `animation: none`. With `none` the browser
-// creates no animation, animationend never fires, and this card would sit on
-// the screen forever. For the same reason none of the animation classes below
-// are motion-safe: gated — the unmount depends on them existing.
+// Two things keep that from stranding a card on screen, and they are
+// independent on purpose: the reduced-motion block in globals.css zeroes
+// durations to 0.01ms rather than `animation: none`, so animationend still
+// fires; and EXIT_FALLBACK_MS below is this card's own belt. e2e/motion.spec.ts
+// was run against sabotaged builds to check — removing either one alone is
+// survivable, removing both strands the toast. Don't take that as licence to
+// drop one.
+//
+// For the same reason none of the animation classes below are motion-safe:
+// gated — the unmount depends on them existing.
 
 /** The slot never moves once the page is up, so there is nothing to subscribe
  * to; each toast render re-reads the snapshot anyway. */

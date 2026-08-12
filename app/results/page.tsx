@@ -230,8 +230,11 @@ export default async function ResultsPage() {
               {table.rows.map((row, i) => (
                 <div
                   key={row.user_id}
+                  // Cascade on the row, not on the sm:contents wrapper inside
+                  // it — see the note in app/leaderboard/page.tsx.
+                  style={{ "--index": i } as React.CSSProperties}
                   className={
-                    `${GRID} border-t border-border py-3 first:border-t-0 sm:items-center` +
+                    `${GRID} border-t border-border py-3 first:border-t-0 sm:items-center motion-safe:animate-rise-in motion-safe:stagger` +
                     // Gold on the leader is a verdict too — hold it until the
                     // ordering is settled rather than provisional (#108).
                     (i === 0 && table.pending === 0 ? " bg-gold-100" : "")
