@@ -72,7 +72,7 @@ test("results publish, and the pari-mutuel split renders", async ({ page }) => {
   const row = page
     .getByTestId("bet-3")
     .locator("div")
-    .filter({ has: page.getByRole("button", { name: "Dan Mercer", exact: true }) })
+    .filter({ has: page.getByText("Dan Mercer", { exact: true }) })
     .filter({ has: page.getByRole("button", { name: "Place stake" }) })
     .last()
   await row.getByRole("textbox").fill("10")

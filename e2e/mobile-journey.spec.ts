@@ -5,9 +5,10 @@
 // rather than `click()` — a touch event, on the emulated touchscreen, on the
 // journey ~32 people will walk one-handed all weekend.
 //
-// It deliberately covers the pick-one path (radio → field → ↵ → confirm), which
-// is the one where a missed tap is not a mis-tap but a bet that never happened:
-// the golfer's name is a profile link, so the 20px radio is the only selector.
+// It deliberately covers the pick-one path (field → ↵ → confirm), which is the
+// one where a missed tap is not a mis-tap but a bet that never happened. Since
+// #162 the row's stake box IS the selector — there is no radio to find first —
+// so the field and the ↵ carry the whole journey.
 //
 // Everything it asserts is rendered DOM. The desktop suite already owns what
 // the writes do to the database.
@@ -36,21 +37,26 @@ test("place a bet with a thumb, end to end", async ({ page }) => {
   await expect(slip).toBeVisible()
   await expect(page.getByText("No picks placed yet")).toBeVisible()
 
-  // --- a pick-one bet: the radio is the only way in ---------------------------
-  const radio = page.getByRole("radio").first()
-  await radio.scrollIntoViewIfNeeded()
-  await radio.tap()
-  await expect(radio).toHaveAttribute("aria-checked", "true")
-
-  // Selecting reveals exactly one stake field on the chosen pick.
-  const card = radio.locator("xpath=ancestor::*[@data-testid][1]")
-  const field = card.getByRole("textbox")
-  await expect(field).toHaveCount(1)
+  // --- a pick-one bet: every pick offers its own stake box --------------------
+  // Found by the "Pick one" line rather than by sheet id, so the journey keeps
+  // testing the pick-one path whatever the seed publishes. Every field is live
+  // and typeable from the first render — nothing to select first (#162).
+  const card = page
+    .locator('[data-testid^="bet-"]')
+    .filter({ hasText: "Pick one" })
+    .first()
+  await card.scrollIntoViewIfNeeded()
+  const fields = card.getByRole("textbox")
+  expect(await fields.count(), "a pick-one bet should have picks").toBeGreaterThan(1)
+  for (const field of await fields.all()) {
+    await expect(field).toBeEnabled()
+  }
 
   // --- type a stake and commit it --------------------------------------------
+  const field = fields.first()
   await field.tap()
   await field.fill("4")
-  await card.getByRole("button", { name: "Place stake" }).tap()
+  await card.getByRole("button", { name: "Place stake" }).first().tap()
 
   // Two taps to lock in a wager, on a phone as on a laptop (the guard is the
   // point — a stray tap must not be able to place money).
@@ -63,6 +69,13 @@ test("place a bet with a thumb, end to end", async ({ page }) => {
   await expect(card.getByText("✓ Locked in")).toBeVisible()
   await expect(card.getByText("odds locked at placement")).toBeVisible()
 
+  // The pick-one rule, as the rows now express it: the wager holds the bet, so
+  // every other pick's box is disabled rather than refusing a tap (#162).
+  for (const sibling of (await fields.all()).slice(1)) {
+    await expect(sibling).toBeDisabled()
+  }
+  await expect(card.getByText(/Pick one · Remove your \$4 on/)).toBeVisible()
+
   // And the fixed bar caught up without moving off the bottom of the screen.
   await expect(page.getByText(/1 pick/)).toBeVisible()
   const barBox = await slip.boundingBox()
@@ -74,4 +87,9 @@ test("place a bet with a thumb, end to end", async ({ page }) => {
   await card.getByRole("button", { name: "Remove bet", exact: true }).tap()
   await expect(card.getByText("✓ Locked in")).toHaveCount(0)
   await expect(page.getByText("No picks placed yet")).toBeVisible()
+
+  // …and removing it hands the bet back: every pick is offerable again.
+  for (const field of await fields.all()) {
+    await expect(field).toBeEnabled()
+  }
 })

@@ -14,12 +14,14 @@ import { ACCOUNTS, deletePlacementsFor, signInAs } from "./fixtures/auth.ts"
 /** approved@ is seeded at a $30 entry (supabase/seed-dev-accounts.sql). */
 const ENTRY_FEE = 30
 
-/** The stake box on a given pick row, found via the pick's name. */
+/** The stake box on a given pick row, found via the pick's name — as TEXT: an
+ * unlinked label ("Dan Mercer" matches no member here) was a button only while
+ * it doubled as the radio's partner, and since #162 it is a plain name. */
 function stakeRow(page: Page, betTestId: string, pickName: string) {
   return page
     .getByTestId(betTestId)
     .locator("div")
-    .filter({ has: page.getByRole("button", { name: pickName, exact: true }) })
+    .filter({ has: page.getByText(pickName, { exact: true }) })
     .filter({ has: page.getByRole("button", { name: "Place stake" }) })
     .last()
 }
