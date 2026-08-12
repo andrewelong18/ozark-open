@@ -50,6 +50,24 @@ export default defineConfig({
     // cold start — budget for it rather than chasing phantom flakes.
     navigationTimeout: 60_000,
     actionTimeout: 20_000,
+
+    // Sprint 12's motion pass. Global rather than per-project, for two reasons.
+    //
+    // Removing flake is the obvious one: the mobile geometry specs measure real
+    // positions with elementFromPoint straight after scrollIntoView, and a list
+    // entrance that translates a row 6px means they can sample a control
+    // mid-flight and read a tap target as too small.
+    //
+    // The subtler reason is that it makes every run exercise the reduced-motion
+    // path, which is where the motion system can strand a node on screen —
+    // Base UI keeps popups mounted until getAnimations() settles, and
+    // BetErrorToast unmounts on animationend. e2e/motion.spec.ts asserts the
+    // outcome on both branches and documents exactly what that is worth.
+    //
+    // Nested under contextOptions, not top level: Playwright 1.56 exposes
+    // reducedMotion only as a browser-context option. The bare `use.reducedMotion`
+    // form found in most tutorials does not typecheck here.
+    contextOptions: { reducedMotion: "reduce" },
   },
 
   projects: [
