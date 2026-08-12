@@ -197,11 +197,35 @@ there is **no animation dependency** in this app.
 |---|---|---|
 | `BetErrorToast` | **Sonner** | `data-state="open"/"closed"` + `tw-animate-css`; message latched locally so the exit outlives the prop |
 | `Dialog` | **Radix / Base UI** | `data-starting-style` / `data-ending-style`; fade + `scale-95 → 1` |
-| Accordions, admin collapsibles | **Radix Accordion** | `grid-template-rows: 0fr → 1fr`, no JS measurement; `inert` when collapsed |
+| Accordions, admin collapsibles | **Radix Accordion** | `grid-template-rows: 0fr → 1fr`, no JS measurement. **Tried and reverted in Sprint 12 — see below** |
 | Server-rendered list rows | **Motion's `stagger()`** | `--index` inline + the `stagger` utility |
 | Active nav pill | **Framer Motion `layoutId`** | `view-transition-name` — the browser morphs it between routes |
 | Route change | **React `<ViewTransition>`** | Tagged navigations only; `default="none"` so `router.refresh()` never animates |
 | Rolling numbers | **NumberFlow** | **Not adopted.** `MoneyDisplay` is a server component, so there is no client-side "before" value; a counting number is a self-running attention loop; and every money surface already uses tabular figures, so digits swap without reflow |
+
+### The collapse caveat
+
+A `0fr → 1fr` collapse must keep its content **mounted** to have a height to
+animate to, which trades "absent" for "present but clipped". That difference is
+load-bearing here:
+
+- `overflow: hidden` at `0fr` hides content visually but does **not** empty its
+  bounding box — it still answers a text query and still reports visible to
+  Playwright, so neither `toHaveCount(0)` nor `not.toBeVisible()` holds.
+- Form controls inside stay in the document, so a label lookup that used to
+  match one element can now match two. `inert` fixes tab order and the
+  accessibility tree, not this.
+
+Sprint 12 applied it to `ClosedBetCard`'s reveal and to `people-console.tsx`'s
+`InviteBox`/`AddMemberBox`, measured, and reverted all three. The reveal version
+would have forced `e2e/bets-menu.spec.ts` (#103) to stop asserting bettor names
+are absent while collapsed — weakening a real guard on the reveal-at-close
+contract to buy a 24px height animation. The admin version made "Playing golfer"
+resolve to two checkboxes and broke `e2e/admin-approval.spec.ts`.
+
+**Use it only where content presence is harmless.** Where absence is part of the
+contract, keep the mount/unmount swap, or latch the unmount behind the exit
+animation the way `BetErrorToast` does.
 
 ### Hard rules
 

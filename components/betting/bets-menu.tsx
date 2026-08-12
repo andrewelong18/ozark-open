@@ -270,6 +270,19 @@ function ClosedBetCard({
                   playerUserId={pick.player_user_id}
                   playerAvatarUrl={pick.player_avatar_url}
                 />
+                {/* Deliberately a mount/unmount swap, NOT a <Collapse>.
+                    Sprint 12 tried the twin-collapse version — one panel
+                    closing as the other opens, so the card's height moves
+                    monotonically — and reverted it after measuring. Keeping
+                    both halves mounted means every bettor's name sits in the
+                    DOM while collapsed, and `overflow: hidden` at 0fr clips it
+                    visually without emptying its bounding box, so it still
+                    answers to a text query. That would have forced
+                    e2e/bets-menu.spec.ts (#103) to stop asserting the name is
+                    absent while collapsed — weakening a real guard on the
+                    reveal-at-close contract to buy a 24px height animation.
+                    Bad trade. If this reveal is worth animating later, mount on
+                    first expand rather than always: see the follow-up issue. */}
                 {group &&
                   (expanded ? (
                     <PickPlacementList group={group} />
@@ -296,7 +309,7 @@ function ChevronGlyph({ open }: { open: boolean }) {
     <span
       aria-hidden
       className={cn(
-        "inline-block text-[9px] leading-none text-text-muted transition-transform duration-150",
+        "inline-block text-[9px] leading-none text-text-muted transition-transform duration-fast ease-standard",
         open && "rotate-180"
       )}
     >

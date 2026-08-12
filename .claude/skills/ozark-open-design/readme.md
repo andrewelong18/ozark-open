@@ -104,12 +104,32 @@ and reimplemented in plain CSS — no animation dependency:
 |---|---|---|
 | Toast | **Sonner** — `data-state="open"/"closed"` | CSS animations keyed off the attribute; exit shorter than enter |
 | Dialog / popover | **Radix / Base UI** | `data-starting-style` / `data-ending-style`; fade + `scale-95 → 1`, never from `scale(0)` |
-| Accordion, collapsible | **Radix Accordion** | `grid-template-rows: 0fr → 1fr` — no JS height measurement |
+| Accordion, collapsible | **Radix Accordion** | `grid-template-rows: 0fr → 1fr` — no JS height measurement. **Read the caveat below before reaching for it** |
 | List entrance | **Motion's `stagger()`** | `--index` custom property + `animation-delay: min(calc(...), --stagger-max)` |
 | Active tab / pill indicator | **Framer Motion `layoutId`** | `view-transition-name` on the active pill; the browser morphs it |
 | Route change | **React `<ViewTransition>`** | Explicitly tagged navigations; `default="none"` so data refreshes never animate |
 | Press | 1px nudge, shadow removed | Hover behind `@media (hover: hover)` so a tap can't leave it stuck |
 | Rolling numbers | **NumberFlow** | **Deliberately not adopted** — see below |
+
+**The collapse caveat — learned the expensive way.** A `0fr → 1fr` collapse has
+to keep its content **mounted** to have a height to animate to. That trades
+"absent" for "present but clipped", and the difference is not cosmetic:
+
+- `overflow: hidden` at `0fr` hides the content visually but does **not** empty
+  its bounding box, so it still answers a text query and still reports as
+  visible to automation.
+- Any form controls inside are still in the document, so a label lookup can now
+  match two elements where it used to match one. `inert` fixes focus order and
+  the accessibility tree, but not this.
+
+Sprint 12 applied it to the closed-bet reveal and two admin panels, and reverted
+all three: it would have meant weakening a test that asserts bettor names are
+absent while collapsed, and it made "Playing golfer" ambiguous across a
+collapsed panel and an open one. **Use it only where content presence is
+harmless** — never where absence is part of the contract, and never where the
+panel holds form controls that also exist elsewhere on the page. Where absence
+matters, either keep the mount/unmount swap or latch the unmount behind the exit
+animation the way `BetErrorToast` does.
 
 **Hard rules.**
 

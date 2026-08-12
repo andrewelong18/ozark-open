@@ -72,7 +72,7 @@
 
   <div class="panel">
     <h5>Collapse</h5>
-    <p class="src">Radix Accordion's behaviour without its JS height measurement — <i>grid-template-rows 0fr&rarr;1fr</i>.</p>
+    <p class="src">Radix Accordion's behaviour without its JS height measurement — <i>grid-template-rows 0fr&rarr;1fr</i>. Content stays <b>mounted</b>, so use it only where presence is harmless — see the collapse caveat in readme.md.</p>
     <button onclick="var c=document.getElementById('c');c.classList.toggle('open');this.textContent=c.classList.contains('open')?'Hide bettors':'Show bettors'">Show bettors</button>
     <div id="c" class="coll"><div><p>Andrew &middot; $12<br />Pat &middot; $8<br />Jake &middot; $15</p></div></div>
   </div>
