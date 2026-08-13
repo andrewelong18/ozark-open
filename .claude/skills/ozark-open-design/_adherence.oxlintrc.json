@@ -252,6 +252,8 @@
       "--dur-slow",
       "--dur-enter",
       "--dur-exit",
+      "--dur-live-ping",
+      "--dur-live-sweep",
       "--stagger-step",
       "--stagger-max",
       "--ease-out",
@@ -581,7 +583,9 @@
       "--dur-enter": "other",
       "--dur-exit": "other",
       "--stagger-step": "other",
-      "--stagger-max": "other"
+      "--stagger-max": "other",
+      "--dur-live-ping": "other",
+      "--dur-live-sweep": "other"
     },
     "fontFamilies": [
       "Azalea",

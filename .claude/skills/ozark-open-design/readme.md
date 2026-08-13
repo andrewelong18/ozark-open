@@ -52,11 +52,11 @@ The codebase ships generic grayscale shadcn tokens; **this design system replace
 
 **Radii.** 10px is the default surface/input radius (from the codebase `--radius`), 14px for cards, 6px for chips, pills for badges. Not pill-happy — chips stay squared-ish for a tabular, sportsbook feel.
 
-**Backgrounds.** Flat warm cream — **no gradients, no imagery, no textures**. The brand color appears as solid fills (header, feature tile), never as a gradient wash. Depth comes from soft low shadows, not glow.
+**Backgrounds.** Flat warm cream — **no gradients, no imagery, no textures**. The brand color appears as solid fills (header, feature tile), never as a gradient wash. Depth comes from soft low shadows, not glow. *(The one gradient in the system is masked to a 1.5px border — the live countdown sweep. It never fills a surface, so the sunlight-readability rationale behind this rule is untouched. See § Motion.)*
 
 **Shadows & borders.** Soft, low, neutral-tinted (`--shadow-sm` on cards, `--shadow-md` when lifted). 1px warm hairline borders (`--ink-200`). Focus is a 3px indigo ring (`--shadow-focus`); the one exception glow is `--shadow-gold`, used **only** on the "bet placed" confirmation flash.
 
-**Motion.** Two tiers, borrowed from IBM Carbon's productive/expressive split. **Productive** — efficient, subtle, out of the way — is the entire betting path: `--dur-fast/base/slow` (120/180/260ms) with `--ease-standard`/`--ease-out`. Someone tapping stakes into 13 bets in a golf cart must never wait on a flourish, so nothing on that path exceeds `--dur-slow`. **Expressive** is arrival and confirmation only — `--dur-enter` (320ms) with `--ease-entrance`, and `--ease-overshoot` for the moment a bet lands — and it is rationed the way brand gold is: roughly one per screen. Exits are deliberately faster than entrances (`--dur-exit`, 160ms) so old content clears rather than competing. Buttons nudge down 1px on press; the stake input flashes gold once on placement; lists cascade in at 40ms a row, capped at 240ms. Still no infinite loops, no bounces that oscillate, no attention-grabbing animation. **Full spec: [§ Motion](#motion) below, plus the two `guidelines/motion-*.card.html` specimens.**
+**Motion.** Two tiers, borrowed from IBM Carbon's productive/expressive split. **Productive** — efficient, subtle, out of the way — is the entire betting path: `--dur-fast/base/slow` (120/180/260ms) with `--ease-standard`/`--ease-out`. Someone tapping stakes into 13 bets in a golf cart must never wait on a flourish, so nothing on that path exceeds `--dur-slow`. **Expressive** is arrival and confirmation only — `--dur-enter` (320ms) with `--ease-entrance`, and `--ease-overshoot` for the moment a bet lands — and it is rationed the way brand gold is: roughly one per screen. Exits are deliberately faster than entrances (`--dur-exit`, 160ms) so old content clears rather than competing. Buttons nudge down 1px on press; the stake input flashes gold once on placement; lists cascade in at 40ms a row, capped at 240ms. No bounces that oscillate, and no attention-grabbing animation. Ongoing animation is allowed **only** where it carries information that is true just while it runs — a loading skeleton, the ring on an **Open** badge, the border sweep on a **counting** countdown — and it stops when that stops being true. **Full spec: [§ Motion](#motion) below, plus the two `guidelines/motion-*.card.html` specimens.**
 
 **Hover / press.** Hover darkens the fill one step (primary → `--primary-hover`); secondary/ghost pick up a faint indigo/cream wash. Press = 1px downward nudge, shadow removed. Disabled = 50% opacity, no pointer.
 
@@ -104,32 +104,32 @@ and reimplemented in plain CSS — no animation dependency:
 |---|---|---|
 | Toast | **Sonner** — `data-state="open"/"closed"` | CSS animations keyed off the attribute; exit shorter than enter |
 | Dialog / popover | **Radix / Base UI** | `data-starting-style` / `data-ending-style`; fade + `scale-95 → 1`, never from `scale(0)` |
-| Accordion, collapsible | **Radix Accordion** | `grid-template-rows: 0fr → 1fr` — no JS height measurement. **Read the caveat below before reaching for it** |
+| Accordion, collapsible | **Radix Accordion** | `grid-template-rows: 0fr → 1fr` — no JS measurement — plus mount-on-open / unmount-after-close so closed still means absent. See the caveat below |
+| Live status indicator | **Vercel/Linear status dots**; the `animate-ping` idiom | A sibling ring scaling out of the dot, on the Open state only |
+| Live border sweep | **Conic-gradient border**, the technique behind most "glowing border" cards | `@property --angle` + a conic gradient masked to the border box |
 | List entrance | **Motion's `stagger()`** | `--index` custom property + `animation-delay: min(calc(...), --stagger-max)` |
 | Active tab / pill indicator | **Framer Motion `layoutId`** | `view-transition-name` on the active pill; the browser morphs it |
 | Route change | **React `<ViewTransition>`** | Explicitly tagged navigations; `default="none"` so data refreshes never animate |
 | Press | 1px nudge, shadow removed | Hover behind `@media (hover: hover)` so a tap can't leave it stuck |
 | Rolling numbers | **NumberFlow** | **Deliberately not adopted** — see below |
 
-**The collapse caveat — learned the expensive way.** A `0fr → 1fr` collapse has
-to keep its content **mounted** to have a height to animate to. That trades
-"absent" for "present but clipped", and the difference is not cosmetic:
+**The collapse caveat — and the shape that solves it.** A `0fr → 1fr` collapse
+needs its content **mounted** to have a height to animate to. Done naively that
+trades "absent" for "present but clipped", and the difference is not cosmetic:
 
-- `overflow: hidden` at `0fr` hides the content visually but does **not** empty
-  its bounding box, so it still answers a text query and still reports as
-  visible to automation.
-- Any form controls inside are still in the document, so a label lookup can now
-  match two elements where it used to match one. `inert` fixes focus order and
-  the accessibility tree, but not this.
+- `overflow: hidden` at `0fr` hides content visually but does **not** empty its
+  bounding box, so it still answers a text query and still reports visible.
+- Form controls inside stay in the document, so a label lookup can match two
+  elements where it used to match one. `inert` fixes focus order and the
+  accessibility tree, but not this.
 
-Sprint 12 applied it to the closed-bet reveal and two admin panels, and reverted
-all three: it would have meant weakening a test that asserts bettor names are
-absent while collapsed, and it made "Playing golfer" ambiguous across a
-collapsed panel and an open one. **Use it only where content presence is
-harmless** — never where absence is part of the contract, and never where the
-panel holds form controls that also exist elsewhere on the page. Where absence
-matters, either keep the mount/unmount swap or latch the unmount behind the exit
-animation the way `BetErrorToast` does.
+An early attempt shipped the naive version and was reverted after both problems
+showed up as failing tests. **The fix is not to avoid the technique — it is to
+mount on open and unmount once the CLOSE transition finishes**, so the steady
+closed state is genuinely empty and only the ~180ms of the closing transition
+has content present-but-hidden. That is what `Collapse` does, and it is the same
+latch shape the toast uses for its exit — including the same hazard, that a
+suppressed transition would strand the panel, hence its fallback timer.
 
 **Hard rules.**
 
@@ -156,8 +156,23 @@ animation the way `BetErrorToast` does.
 - **No rolling/counting numbers.** They are self-running attention loops, and every
   numeric surface here already uses tabular figures, so digits swap without
   reflow. The problem the technique solves does not exist in this system.
-- **Still banned:** infinite loops, confetti, gradient washes, frosted glass,
-  urgency and countdown-anxiety patterns.
+- **Ongoing animation is allowed in exactly one case: when it carries
+  information that is only true while it runs, and it stops when that stops
+  being true.** Three qualify, and nothing else does yet — a loading skeleton's
+  pulse, the ring on an **Open** status badge, and the border sweep on a
+  **counting** countdown. Closed and resolved badges are static; the countdown's
+  sweep is gone the moment it reaches zero. That "stops being true" clause is
+  the whole exception — an indicator that animates whatever the state is says
+  nothing, and is just decoration that never rests.
+- **Gradients remain banned as BACKGROUNDS.** The rationale is sunlight
+  readability: flat warm cream, depth from shadow, nothing that reads as glare.
+  A gradient confined to a border by a mask does not touch that rationale, and
+  is permitted for the live-border treatment only. If it fills a surface, it is
+  banned.
+- **Still banned:** confetti, attention loops that carry no information,
+  gradient washes on surfaces, frosted glass, urgency and countdown-anxiety
+  patterns. The countdown's border is not an urgency pattern: no red, no
+  acceleration as the clock runs down, no pulsing digits.
 
 ---
 

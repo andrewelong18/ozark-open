@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 import { PickLabel } from "./pick-label"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Collapse } from "@/components/ui/collapse"
 import { OddsChip } from "./odds-chip"
 import { MoneyDisplay } from "./money-display"
 import { StakeInput } from "./stake-input"
@@ -355,8 +356,11 @@ export function BetPlacementCard({
 
             {/* Explicit place-confirm: locking in a wager takes a second,
                 deliberate tap — never a stray Enter. */}
-            {state.confirming === "place" && (
-              <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2.5">
+            <Collapse
+              open={state.confirming === "place"}
+              className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2.5"
+            >
+              <div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-strong">
                   <span className="font-semibold">
                     {hasPlacement ? "Update to" : "Lock in"}
@@ -384,12 +388,15 @@ export function BetPlacementCard({
                   </Button>
                 </div>
               </div>
-            )}
+            </Collapse>
 
             {/* Explicit remove-confirm: removal is destructive (soft-deletes
                 the wager), so it takes a deliberate second tap. */}
-            {state.confirming === "remove" && (
-              <div className="mt-2 rounded-lg border border-loss-border bg-loss-surface px-3 py-2.5">
+            <Collapse
+              open={state.confirming === "remove"}
+              className="mt-2 rounded-lg border border-loss-border bg-loss-surface px-3 py-2.5"
+            >
+              <div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-text-strong">
                   <span className="font-semibold">Remove your</span>
                   {state.receipt && (
@@ -422,19 +429,24 @@ export function BetPlacementCard({
                   </Button>
                 </div>
               </div>
-            )}
+            </Collapse>
 
             {/* Locked-odds receipt (§1.5): the snapshotted odds + stake behind
                 this placement — the confirmation that odds lock at write.
                 Hidden while a confirm strip owns the row. */}
-            {hasPlacement && state.receipt && state.confirming === null && (
-              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                <span className="font-semibold text-win-strong">✓ Locked in</span>
-                <OddsChip odds={state.receipt.odds} size="sm" />
-                <MoneyDisplay value={state.receipt.amount} size="xs" weight="bold" />
-                <span className="text-text-muted">· odds locked at placement</span>
-              </div>
-            )}
+            <Collapse
+              open={hasPlacement && state.receipt != null && state.confirming === null}
+              className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+            >
+              {state.receipt && (
+                <>
+                  <span className="font-semibold text-win-strong">✓ Locked in</span>
+                  <OddsChip odds={state.receipt.odds} size="sm" />
+                  <MoneyDisplay value={state.receipt.amount} size="xs" weight="bold" />
+                  <span className="text-text-muted">· odds locked at placement</span>
+                </>
+              )}
+            </Collapse>
           </div>
         )
       })}

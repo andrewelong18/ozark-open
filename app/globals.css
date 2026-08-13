@@ -259,6 +259,34 @@
   --animate-fade-in-soft: fade-in-soft var(--dur-base) var(--ease-standard)
     var(--stagger-delay, 0ms) both;
   --animate-stake-flash: stake-flash var(--dur-slow) var(--ease-out);
+
+  /* --- The two ongoing animations, and the rules that keep them honest -----
+     Everything above is one-shot. These two repeat, which the brand otherwise
+     bans ("no infinite loops"). Both are exceptions on the same grounds: they
+     carry INFORMATION that is only true while they are running, and they stop
+     the moment it stops being true.
+
+     live-ping  — the ring on an Open status badge. "This bet is taking wagers
+                  right now" is the most time-sensitive fact on the page, and
+                  Open vs Closed is otherwise a colour and a word people scan
+                  past. Closed and resolved dots are static.
+     live-sweep — the border on the countdown, and only while it is counting.
+                  At zero the component swaps to a message and the sweep is
+                  gone with it.
+
+     Both are slow (2s / 6s) rather than attention-grabbing, and both are
+     motion-safe: gated at the call site. */
+  --animate-live-ping: live-ping 2s var(--ease-standard) infinite;
+  --animate-live-sweep: live-sweep 6s linear infinite;
+}
+
+/* Registering --angle as an actual angle is what makes the conic sweep
+   animate: an unregistered custom property is a string to the interpolator, so
+   the gradient would jump between keyframes instead of rotating. */
+@property --angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
 }
 
 /* Keyframes live OUTSIDE @theme deliberately: Tailwind only emits keyframes
@@ -316,6 +344,29 @@
   }
   to {
     transform: translateX(200%);
+  }
+}
+
+/* The live ring on an Open status badge. Expands out of the dot and fades —
+   it never moves the dot itself, because the ring is a sibling. */
+@keyframes live-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  70%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+/* The countdown's border sweep: one rotation of the conic gradient. Linear,
+   because constant motion should not accelerate — the one place in this system
+   where a non-eased curve is correct. */
+@keyframes live-sweep {
+  to {
+    --angle: 360deg;
   }
 }
 
@@ -599,6 +650,46 @@
   );
 }
 
+/* Section-level page entrance: the direct children of a [data-enter-stagger]
+   container rise and fade in sequence, so a page assembles itself rather than
+   appearing all at once.
+
+   Written as nth-child rules rather than an inline --index per element, because
+   these are page shells with a handful of hand-written sections — threading a
+   counter through JSX would be noise for no gain. Capped at the 6th child so a
+   long page still finishes inside the stagger budget (5 × 40ms = 200ms).
+
+   HAZARD, and the reason this is not simply put on every page wrapper: an
+   element running a TRANSFORM animation becomes the containing block for any
+   `position: fixed` descendant. The bet slip on /bets and the toast fallback
+   are fixed, so this must go on a container that does NOT contain them —
+   on /bets that means the inner column, never the outer grid. e2e/motion.spec.ts
+   measures the slip mid-entrance and fails if this rule ever reaches it. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-enter-stagger] > * {
+    animation: rise-in var(--dur-enter) var(--ease-entrance) both;
+    animation-delay: calc(var(--stagger-step) * var(--enter-i, 0));
+  }
+  [data-enter-stagger] > *:nth-child(1) {
+    --enter-i: 0;
+  }
+  [data-enter-stagger] > *:nth-child(2) {
+    --enter-i: 1;
+  }
+  [data-enter-stagger] > *:nth-child(3) {
+    --enter-i: 2;
+  }
+  [data-enter-stagger] > *:nth-child(4) {
+    --enter-i: 3;
+  }
+  [data-enter-stagger] > *:nth-child(5) {
+    --enter-i: 4;
+  }
+  [data-enter-stagger] > *:nth-child(n + 6) {
+    --enter-i: 5;
+  }
+}
+
 /* Replaying the bet menu's entrance when a filter changes, without remounting.
    Motion would express this as AnimatePresence mode="wait"; the CSS-only
    equivalent is to flip between two identical keyframes, because an animation
@@ -621,6 +712,48 @@
   }
   [data-swap="b"] > * {
     animation: list-swap-b var(--dur-base) var(--ease-standard) both;
+  }
+}
+
+/* A slowly rotating highlight travelling around an element's border.
+   Used on the countdown while it is genuinely counting down.
+
+   This is a gradient, which the brand otherwise bans — but that ban is about
+   BACKGROUND washes: flat warm cream, depth from shadow, nothing that reads as
+   glare in sunlight. This paints a 1.5px border and nothing else. The surface
+   behind it stays flat, so the readability rationale is untouched.
+
+   The mask is what confines it. Two `linear-gradient(#000 0 0)` layers, one
+   clipped to the content box and one to the border box, composited with
+   `xor` — the classic border-only mask. The element keeps a solid hairline
+   underneath so it degrades to a normal border wherever mask-composite or
+   @property is missing, rather than losing its outline entirely. */
+@utility live-border {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: conic-gradient(
+      from var(--angle),
+      transparent 0deg,
+      transparent 250deg,
+      var(--indigo-400) 300deg,
+      var(--gold-400) 340deg,
+      transparent 360deg
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
   }
 }
 
