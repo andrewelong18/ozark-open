@@ -339,7 +339,11 @@ export default async function BetsPage({
         slip && "pb-[calc(7rem+env(safe-area-inset-bottom))]"
       )}
     >
-      <div className="lg:col-span-2">
+      {/* data-enter-stagger goes on the INNER column, never the outer grid:
+          BetSlipSummary is a direct child of the grid and is position:
+          fixed, and a transform-animated ancestor would become its
+          containing block and peel it off the viewport. */}
+      <div data-enter-stagger className="lg:col-span-2">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h1 className="font-heading text-3xl text-text-strong">Bet Menu</h1>
         <StatusBadge status={menuStatus(bets)} />

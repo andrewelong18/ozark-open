@@ -9,6 +9,7 @@ import { UserName } from "@/components/user-name"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Collapse } from "@/components/ui/collapse"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { EmptyState } from "@/components/modules/empty-state"
@@ -427,8 +428,10 @@ function InviteBox() {
         </span>
       </button>
 
-      {open && (
-        <div className="flex flex-col gap-3 border-t border-border px-4 py-3">
+      <Collapse
+        open={open}
+        className="flex flex-col gap-3 border-t border-border px-4 py-3"
+      >
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -467,9 +470,8 @@ function InviteBox() {
             </div>
           )}
 
-          <ErrorList errors={errors} />
-        </div>
-      )}
+        <ErrorList errors={errors} />
+      </Collapse>
     </Card>
   )
 }
@@ -576,8 +578,10 @@ function AddMemberBox({
         </span>
       </button>
 
-      {open && (
-        <div className="flex flex-col gap-3 border-t border-border px-4 py-3">
+      <Collapse
+        open={open}
+        className="flex flex-col gap-3 border-t border-border px-4 py-3"
+      >
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="add-member-email">Email</Label>
             <Input
@@ -645,9 +649,8 @@ function AddMemberBox({
             </div>
           )}
 
-          <ErrorList errors={errors} />
-        </div>
-      )}
+        <ErrorList errors={errors} />
+      </Collapse>
     </Card>
   )
 }
@@ -780,22 +783,26 @@ export function PeopleConsole({
                 </div>
               </div>
 
-              {open && action === "approve" && (
+              {/* The row's panel grows the row rather than snapping it open,
+                  which matters here more than elsewhere: opening one pushes
+                  every row below it down, and an instant jump loses the
+                  admin's place in a worst-first list they are reading. */}
+              <Collapse open={open && action === "approve"}>
                 <ApprovePanel
                   person={person}
                   entryFeeMin={entryFeeMin}
                   entryFeeMax={entryFeeMax}
                   onClose={close}
                 />
-              )}
-              {open && action === "edit" && (
+              </Collapse>
+              <Collapse open={open && action === "edit"}>
                 <EditPanel
                   person={person}
                   entryFeeMin={entryFeeMin}
                   entryFeeMax={entryFeeMax}
                   onClose={close}
                 />
-              )}
+              </Collapse>
             </div>
           )
         })}

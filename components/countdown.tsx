@@ -58,20 +58,36 @@ export function Countdown({ target }: { target: Date }) {
   ]
 
   return (
-    <div className="grid grid-cols-4 gap-2" aria-live="off">
-      {cells.map((c) => (
-        <div
-          key={c.label}
-          className="flex flex-col items-center rounded-lg border border-border bg-surface-sunken px-1 py-2"
-        >
-          <span className="tabular font-heading text-2xl leading-none text-text-strong">
-            {String(c.value).padStart(2, "0")}
-          </span>
-          <span className="mt-1 text-[10px] font-medium tracking-wider text-text-muted uppercase">
-            {c.label}
-          </span>
-        </div>
-      ))}
+    // The sweep runs on the group, not on each cell: four independently
+    // rotating borders would read as a slot machine. One highlight travelling
+    // around the whole clock says "this is live" once, quietly.
+    //
+    // It exists only on this branch — once `reached` is true the component
+    // returns the message above and the animation is gone with it. That is the
+    // condition on the design system's ongoing-animation exception: it stops
+    // being animated the moment it stops being true.
+    //
+    // Still within "no countdown-timer anxiety": no red, no acceleration as the
+    // clock runs down, no pulsing on the digits. A 6-second linear rotation.
+    <div
+      className="motion-safe:live-border motion-safe:animate-live-sweep rounded-xl"
+      aria-live="off"
+    >
+      <div className="grid grid-cols-4 gap-2 rounded-xl p-1">
+        {cells.map((c) => (
+          <div
+            key={c.label}
+            className="flex flex-col items-center rounded-lg border border-border bg-surface-sunken px-1 py-2"
+          >
+            <span className="tabular font-heading text-2xl leading-none text-text-strong">
+              {String(c.value).padStart(2, "0")}
+            </span>
+            <span className="mt-1 text-[10px] font-medium tracking-wider text-text-muted uppercase">
+              {c.label}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

@@ -65,4 +65,22 @@
      is fully in at 240 + 320 = 560ms no matter how long it grows. */
   --stagger-step: 40ms; /* @kind other */
   --stagger-max: 240ms; /* @kind other */
+
+  /* ---------- The two ongoing animations ----------
+     Everything else in this system is one-shot. These repeat, which the brand
+     otherwise bans, and they are exceptions on one specific ground: each
+     carries information that is only true while it runs, and each stops the
+     moment it stops being true.
+
+       live-ping   the ring on an OPEN status badge. Closed and resolved dots
+                   are static — that contrast is what makes the motion mean
+                   "taking wagers right now" rather than "this is a badge".
+       live-sweep  the border on a COUNTING countdown. At zero the component
+                   swaps to a message and the sweep goes with it.
+
+     Both are slow rather than attention-grabbing, and both are gated behind
+     motion-safe at the call site. An indicator that animates in every state
+     says nothing; do not add a third without that stopping condition. */
+  --dur-live-ping: 2s; /* @kind other */
+  --dur-live-sweep: 6s; /* @kind other */
 }

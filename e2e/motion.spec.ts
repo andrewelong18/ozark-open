@@ -200,3 +200,104 @@ test.describe("route fade", () => {
     expect(Math.abs(bottomGap)).toBeLessThan(4)
   })
 })
+
+// ---------------------------------------------------------------------------
+// The disclosure animation, and the guard it has to keep.
+//
+// An earlier pass animated these with a permanently-mounted grid collapse and
+// had to revert the lot: content at `0fr` is clipped but not absent, so bettor
+// names stayed findable while collapsed and admin form controls resolved twice.
+// <Collapse> mounts on open and unmounts after the close transition, so the
+// steady closed state is genuinely empty.
+//
+// This test is the pair of claims that combination has to satisfy at once:
+// the panel ANIMATES, and closed still means gone.
+// ---------------------------------------------------------------------------
+test.describe("collapse", () => {
+  test.use({ contextOptions: { reducedMotion: "no-preference" } })
+
+  test("a closed-bet reveal grows open, and leaves nothing behind when shut", async ({
+    page,
+  }) => {
+    await signInAs(page, ACCOUNTS.approved)
+    await page.goto("/bets")
+    await page.getByRole("button", { name: "Closed", exact: true }).click()
+
+    // Seeded: nonplayer@ has one wager on closed bet 5.
+    const card = page.getByTestId("bet-5")
+    const name = card.getByText("Nina Nonplayer")
+    const toggle = card.getByRole("button", { name: /(Show|Hide) 1 bettor\b/ })
+
+    // Never opened: absent, not merely hidden. This is the #103 guard.
+    await expect(name).toHaveCount(0)
+
+    const before = (await card.boundingBox())!.height
+    await toggle.click()
+
+    // Sampled mid-flight. A snap would already be at its final height here.
+    await page.waitForTimeout(70)
+    const mid = (await card.boundingBox())!.height
+    await expect(name).toBeVisible()
+    await page.waitForTimeout(400)
+    const after = (await card.boundingBox())!.height
+
+    expect(mid).toBeGreaterThan(before)
+    expect(mid).toBeLessThan(after)
+
+    // Closed again → back out of the DOM once the transition finishes.
+    await toggle.click()
+    await expect(name).toHaveCount(0, { timeout: 5_000 })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The two ongoing animations. Both are exceptions to the brand's "no infinite
+// loops" rule, granted because they carry information that is only true while
+// they run — so the test that matters is that they STOP when it stops being
+// true, not merely that they start.
+// ---------------------------------------------------------------------------
+test.describe("live indicators", () => {
+  test.use({ contextOptions: { reducedMotion: "no-preference" } })
+
+  test("only Open badges pulse, and the countdown border actually rotates", async ({
+    page,
+  }) => {
+    await signInAs(page, ACCOUNTS.approved)
+    await page.goto("/bets")
+
+    // The menu header badge reflects the menu's own status. Whichever it is,
+    // the ring must exist for exactly the open case and never otherwise.
+    const openBadges = page.locator("span").filter({ hasText: /^Open$/ })
+    const closedBadges = page.locator("span").filter({ hasText: /^Closed$/ })
+    const ringsInOpen = await openBadges.locator("[class*='live-ping']").count()
+    const ringsInClosed = await closedBadges.locator("[class*='live-ping']").count()
+    expect(ringsInClosed).toBe(0)
+    if ((await openBadges.count()) > 0) expect(ringsInOpen).toBeGreaterThan(0)
+
+    // The countdown's conic border is driven by an @property-registered
+    // --angle. Unregistered it would be a string to the interpolator and the
+    // gradient would jump between keyframes instead of rotating, so sampling
+    // the angle twice is the assertion that it is genuinely animating.
+    await page.goto("/dashboard")
+    const sweep = page.locator("[class*='live-sweep']").first()
+    if ((await sweep.count()) === 0) test.skip(true, "countdown not on this dashboard")
+
+    // Assert the animation is RUNNING rather than sampling --angle twice and
+    // hoping the two reads differ: a 6s cycle can return the same value at two
+    // arbitrary moments, which is exactly how the first version of this test
+    // failed. getAnimations() is the direct question.
+    const running = await sweep.evaluate((el) =>
+      el.getAnimations().map((a) => (a as CSSAnimation).animationName ?? "")
+    )
+    expect(running).toContain("live-sweep")
+
+    // And that --angle is a REGISTERED angle. Unregistered, a custom property
+    // is an unanimatable string and the gradient would jump between keyframes
+    // instead of rotating — the animation would still be "running" and the
+    // border would still look wrong, so this half is not redundant.
+    const angle = await sweep.evaluate((el) =>
+      getComputedStyle(el).getPropertyValue("--angle").trim()
+    )
+    expect(angle).toMatch(/^-?[\d.]+deg$/)
+  })
+})

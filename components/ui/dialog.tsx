@@ -11,10 +11,15 @@ import { cn } from "@/lib/utils"
 // dismiss, and keeps the element mounted through the exit animation so the
 // close is as smooth as the open.
 //
-// Motion: a soft backdrop fade plus a fade + zoom-95 on the panel, both on the
-// design system's --dur-slow / --ease-out. Driven by Base UI's transition data
-// attributes (data-starting-style / data-ending-style) — no keyframes, fully
-// symmetric in and out. Kept subtle per the DS ("confirmation-only" motion).
+// Motion: a backdrop fade plus a fade + rise + scale on the panel, driven by
+// Base UI's transition data attributes (data-starting-style /
+// data-ending-style) — no keyframes. Deliberately ASYMMETRIC: it arrives on
+// --dur-enter/--ease-entrance (Material 3's curve for content coming on
+// screen) and leaves faster on --dur-exit/--ease-exit, so the close doesn't
+// compete with whatever is underneath it.
+//
+// It used to fade and scale only, at --dur-slow, and read as a cross-fade
+// rather than something arriving. The rise is what changes that.
 //
 // These used to read `duration-[--dur-slow] ease-[--ease-out]`, which is
 // Tailwind v3 syntax for an implicit var(). v4 removed that shorthand in
@@ -76,7 +81,10 @@ export function DialogPopup({
         data-slot="dialog-backdrop"
         className={cn(
           "fixed inset-0 z-50 bg-ink-950/45",
-          "transition-opacity duration-slow ease-out",
+          // The backdrop leads on the way in and trails on the way out, so the
+          // panel never arrives over bare page or leaves against a hard cut.
+          "transition-opacity duration-enter ease-entrance",
+          "data-[ending-style]:duration-exit data-[ending-style]:ease-exit",
           "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0"
         )}
       />
@@ -86,9 +94,24 @@ export function DialogPopup({
           "fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
           "flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md flex-col overflow-hidden",
           "rounded-2xl border border-border bg-surface-card shadow-[var(--shadow-lg)]",
-          "transition-[opacity,transform] duration-slow ease-out",
-          "data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
-          "data-[ending-style]:scale-95 data-[ending-style]:opacity-0",
+          // Rises as it scales up, which is what makes it read as motion IN
+          // rather than a cross-fade. --ease-entrance is Material 3's curve for
+          // content arriving on screen; the exit is faster and accelerates away
+          // so it doesn't compete with whatever is underneath.
+          //
+          // Scales from 96%, never from a small value — animating up from
+          // scale(0) or even 0.8 reads as a cartoon zoom rather than a panel
+          // settling into place.
+          // The rise is written as an explicit `translate` rather than
+          // `translate-y-2`, because this element is centred with
+          // `-translate-x-1/2 -translate-y-1/2` and Tailwind's translate
+          // utilities all write the same `translate` property — a y-only
+          // utility would overwrite the centring and drop the panel half its
+          // own height down the screen. calc() keeps the -50% and adds to it.
+          "transition-[opacity,scale,translate] duration-enter ease-entrance",
+          "data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0 data-[starting-style]:[translate:-50%_calc(-50%_+_10px)]",
+          "data-[ending-style]:duration-exit data-[ending-style]:ease-exit",
+          "data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0 data-[ending-style]:[translate:-50%_calc(-50%_+_4px)]",
           className
         )}
         {...props}

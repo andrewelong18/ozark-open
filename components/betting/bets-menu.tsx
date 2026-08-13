@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useMemo, useState } from "react"
 
 import { Card } from "@/components/ui/card"
+import { Collapse } from "@/components/ui/collapse"
 import { PlayerChip } from "@/components/player/player-chip"
 import { StatusBadge } from "@/components/betting/status-badge"
 import { PickRow } from "@/components/betting/pick-row"
@@ -270,25 +271,27 @@ function ClosedBetCard({
                   playerUserId={pick.player_user_id}
                   playerAvatarUrl={pick.player_avatar_url}
                 />
-                {/* Deliberately a mount/unmount swap, NOT a <Collapse>.
-                    Sprint 12 tried the twin-collapse version — one panel
-                    closing as the other opens, so the card's height moves
-                    monotonically — and reverted it after measuring. Keeping
-                    both halves mounted means every bettor's name sits in the
-                    DOM while collapsed, and `overflow: hidden` at 0fr clips it
-                    visually without emptying its bounding box, so it still
-                    answers to a text query. That would have forced
-                    e2e/bets-menu.spec.ts (#103) to stop asserting the name is
-                    absent while collapsed — weakening a real guard on the
-                    reveal-at-close contract to buy a 24px height animation.
-                    Bad trade. If this reveal is worth animating later, mount on
-                    first expand rather than always: see the follow-up issue. */}
-                {group &&
-                  (expanded ? (
-                    <PickPlacementList group={group} />
-                  ) : (
-                    <PickPlacementTotal group={group} />
-                  ))}
+                {/* Two opposed collapses: the totals line closes as the bettor
+                    list opens, so the card's height moves monotonically instead
+                    of jumping between two different-sized blocks.
+
+                    An earlier pass shipped this with both halves permanently
+                    mounted and had to revert — the collapsed names stayed
+                    findable in the DOM, which would have gutted the
+                    reveal-at-close assertion in e2e/bets-menu.spec.ts (#103).
+                    <Collapse> mounts on open and unmounts after the close
+                    transition, so the steady closed state is genuinely empty
+                    and that guard still holds. */}
+                {group && (
+                  <>
+                    <Collapse open={!expanded}>
+                      <PickPlacementTotal group={group} />
+                    </Collapse>
+                    <Collapse open={expanded}>
+                      <PickPlacementList group={group} />
+                    </Collapse>
+                  </>
+                )}
               </Fragment>
             )
           })}

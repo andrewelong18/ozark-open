@@ -194,7 +194,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto grid max-w-[var(--container-max,1120px)] grid-cols-1 gap-4 px-4 py-6 lg:grid-cols-3 lg:gap-6">
-      <div className="flex flex-col gap-4 lg:col-span-2">
+      <div data-enter-stagger className="flex flex-col gap-4 lg:col-span-2">
       <div className="flex items-end justify-between gap-3">
         <div>
           <h1 className="font-heading text-3xl leading-tight text-text-strong">
