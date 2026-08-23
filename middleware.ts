@@ -1,7 +1,26 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
+import { CANONICAL_ORIGIN, needsCanonicalRedirect } from "@/lib/site-url"
+
 export async function middleware(request: NextRequest) {
+  // One domain, before anything else touches the request. Every other
+  // production alias — the .vercel.app URLs, www. — is 308'd to ozark-open.com
+  // with the path and query intact, so a magic link sent to an old host still
+  // signs you in: the token_hash flow is stateless, so it survives the hop, and
+  // the session cookie is then set on the origin the member actually browses.
+  //
+  // 308 (not 307) because it's permanent and preserves the method, which server
+  // action POSTs to a stale host depend on. Preview deploys are exempt — see
+  // needsCanonicalRedirect.
+  if (needsCanonicalRedirect(request.headers.get("host"), process.env.VERCEL_ENV)) {
+    const target = new URL(
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+      CANONICAL_ORIGIN
+    )
+    return NextResponse.redirect(target, 308)
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
