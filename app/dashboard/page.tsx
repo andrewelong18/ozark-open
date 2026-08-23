@@ -6,6 +6,8 @@ import { StatCard } from "@/components/modules/stat-card"
 import { BudgetModule } from "@/components/modules/budget-module"
 import { RulesCard } from "@/components/modules/rules-card"
 import { EmptyState } from "@/components/modules/empty-state"
+import { AdCarousel } from "@/components/ads/ad-carousel"
+import { ads } from "@/lib/ads"
 import { LoadError } from "@/components/modules/load-error"
 import { HowItWorksLauncher } from "@/components/onboarding/how-it-works-launcher"
 import { Countdown } from "@/components/countdown"
@@ -287,8 +289,8 @@ export default async function DashboardPage() {
 
       {/* Activity feed — the right rail on desktop, stacked below on mobile.
           Placeholder until there's a feed to show. */}
-      <aside className="lg:col-span-1">
-        <section className="flex h-full flex-col gap-3">
+      <aside className="flex flex-col gap-4 lg:col-span-1">
+        <section className="flex flex-col gap-3">
           <h2 className="font-heading text-lg text-text-strong">Activity</h2>
           {/* The next betting deadline when there is one and admins have the
               countdown switched on (#106); otherwise the opening ceremony, as
@@ -328,6 +330,9 @@ export default async function DashboardPage() {
             message="Bets, line moves, and pool news will show up here."
           />
         </section>
+
+        {/* Fake-sponsor slot — sits below the feed, rotates on its own. */}
+        <AdCarousel ads={ads} className="mx-auto" />
       </aside>
     </div>
   )
