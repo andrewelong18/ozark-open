@@ -62,11 +62,14 @@ export function HowItWorks({
   maxPicks,
   onDone,
   doneLabel = "Got it",
+  bare = false,
 }: {
   minPicks: number
   maxPicks: number
   onDone: () => void
   doneLabel?: string
+  /** Drop the card chrome — for when something else already supplies a frame. */
+  bare?: boolean
 }) {
   const specs = howItWorksCards(minPicks, maxPicks)
   const [index, setIndex] = useState(0)
@@ -80,8 +83,8 @@ export function HowItWorks({
   // are keyed to the same breakpoint as the photo so neither one leaves a band
   // where copy can still push the card taller. Slack lands between the copy and
   // the controls, identically on all four steps.
-  return (
-    <Card accent elevated className="min-h-[33.5rem] sm:min-h-[30.5rem]">
+  const body = (
+    <>
       {/* The hero: Jake for this step, inset from the card edges with the brand
           rail flush under him — 4/5 width from sm up, where a full-width photo
           reads too big. All four are mounted and cross-fade on Next, so the
@@ -162,6 +165,22 @@ export function HowItWorks({
           )}
         </div>
       </CardContent>
+    </>
+  )
+
+  // Inside the dashboard accordion the card chrome would be a second frame
+  // within the accordion's own — one border, one shadow and one radius too
+  // many. Same content, same measured heights, no double box.
+  if (bare)
+    return (
+      <div className="flex min-h-[33.5rem] flex-col gap-4 py-4 sm:min-h-[30.5rem]">
+        {body}
+      </div>
+    )
+
+  return (
+    <Card accent elevated className="min-h-[33.5rem] sm:min-h-[30.5rem]">
+      {body}
     </Card>
   )
 }
