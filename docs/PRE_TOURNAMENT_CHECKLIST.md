@@ -112,14 +112,24 @@ so the project can pause and the automatic save states can stop.
       take a minute or fail outright. Wake it, and expect no automatic snapshots to have been taken
       while it slept.)*
 
-- [ ] **Send people `https://ozark-open.com` — not a `.vercel.app` link.** Both
-      `ozark-open.com` and `ozark-open-sportsbook.vercel.app` are open to the public and work
-      fine (checked Aug 9, 2026). But the project has Vercel SSO on *"all except custom
-      domains"*, and two of its other URLs — the `-nerdyandyproject` and `-git-main` aliases —
-      bounce anyone who isn't on Andrew's Vercel team to a Vercel login wall. Those are the URLs
-      you get by copying from the Vercel dashboard, so it is an easy link to paste into a group
-      text by mistake. A member who hits it will report "the app is asking me to log into
-      something called Vercel", which reads like a broken invite.
+- [ ] **Send people `https://ozark-open.com` — not a `.vercel.app` link.** Since Aug 23, 2026
+      the app forces this itself: every other production alias 308s to `ozark-open.com`, and the
+      magic-link email is built from it. Paste the wrong URL and a member is bounced to the right
+      one rather than stranded on a second domain — but keep sending the real one anyway, because
+      the project has Vercel SSO on *"all except custom domains"*, and two of its other URLs —
+      the `-nerdyandyproject` and `-git-main` aliases — hit that wall **before** the redirect can
+      run, bouncing anyone who isn't on Andrew's Vercel team to a Vercel login page. Those are the
+      URLs you get by copying from the Vercel dashboard, so they're easy to paste into a group text
+      by mistake. A member who hits one will report "the app is asking me to log into something
+      called Vercel", which reads like a broken invite.
+
+- [ ] **Confirm the magic link points at `ozark-open.com`** — one read-only command:
+      ```bash
+      SUPABASE_ACCESS_TOKEN=sbp_... bash scripts/auth-url-check.sh
+      ```
+      It reads the Supabase Site URL the email template builds its link from. This is a dashboard
+      setting no test or build can see: it sat on the old `.vercel.app` address for weeks while the
+      app served `ozark-open.com`, mailing every member a link to a domain they were never given.
 
 - [ ] **Verify magic-link email works end to end.** Not "the login page loads" — an actual email,
       to an actual inbox, clicked:

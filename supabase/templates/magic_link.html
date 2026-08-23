@@ -11,6 +11,18 @@
   {{ .SiteURL }} must be the app's base URL (Auth → URL Configuration → Site URL
   on hosted; site_url in config.toml locally). The resulting
   /auth/callback path must be covered by the redirect allow-list.
+
+  IT MUST BE https://ozark-open.com — the canonical domain, not the .vercel.app
+  alias (Aug 23, 2026). This is a server-side setting, so it decides the link on
+  its own: the host the member signed in from and the emailRedirectTo the app
+  passes have no say. It sat on the .vercel.app URL for weeks and mailed every
+  member a link to a domain they were never given. scripts/auth-url-check.sh
+  asserts it; lib/site-url.ts is the app-side half of the same rule.
+
+  Deliberately NOT {{ .RedirectTo }}, which would honour the app's per-request
+  host: nothing but production ever sends this email (previews and local dev
+  mint links via scripts/magic-link.ts), and a template edit can't be tested
+  before it reaches ~32 real inboxes.
 -->
 <h2>Sign in to the Ozark Open Sportsbook</h2>
 <p>Click the button below to sign in. This link works once and expires soon.</p>

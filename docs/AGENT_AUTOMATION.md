@@ -75,8 +75,19 @@ SESSION_TIMEBOX_HOURS=0 bash scripts/prod-auth-config.sh --apply
 
 # #70 — switch the hosted magic-link template to the token_hash flow
 MAGIC_LINK_HTML_PATH=supabase/templates/magic_link.html \
-SITE_URL=https://ozark-open-sportsbook.vercel.app \
+SITE_URL=https://ozark-open.com \
 bash scripts/prod-auth-config.sh --apply
+
+# The canonical domain (Aug 23, 2026). SITE_URL is what the email template builds
+# its link from, so it decides where members land — it must be ozark-open.com, and
+# the allow-list must cover it or the app's emailRedirectTo is rejected.
+SITE_URL=https://ozark-open.com \
+URI_ALLOW_LIST='https://ozark-open.com/**,https://www.ozark-open.com/**,https://ozark-open-sportsbook.vercel.app/**,http://localhost:3000/**' \
+bash scripts/prod-auth-config.sh --apply
+
+# Read it back — read-only, and the thing to run if a magic link ever lands on the
+# wrong domain again.
+bash scripts/auth-url-check.sh
 
 # #16 — custom SMTP via Resend (create a free Resend key first)
 SMTP_HOST=smtp.resend.com SMTP_PASS=re_yourkey \
