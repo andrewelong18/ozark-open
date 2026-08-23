@@ -220,7 +220,7 @@ service-role key and **sends no email at all**.
   ```bash
   SUPABASE_URL=https://rbjqqzjqhsbcotqfrwhb.supabase.co \
   SUPABASE_SERVICE_ROLE_KEY=<service_role key> \
-  SITE_URL=https://ozark-open-sportsbook.vercel.app \
+  SITE_URL=https://ozark-open.com \
   node --experimental-strip-types scripts/dev-magiclink.ts dan.mercer@dryrun.ozark.test
   ```
 - [ ] Paste each link into its **own Chrome profile** (not incognito windows — those share a
@@ -241,7 +241,7 @@ service-role key and **sends no email at all**.
 
 ### 0.6 Stage everything · P0
 
-- [ ] Prod loads: <https://ozark-open-sportsbook.vercel.app>
+- [ ] Prod loads: <https://ozark-open.com>
 - [ ] The four lifecycle spreadsheets are on the desktop, in order. **Pat's own workbook if he
       brought it**, otherwise the fallbacks in `docs/dry-run/sheets/`:
       `1-phase1-open` · `1b-phase1-repriced` · `2-phase1-closed-r1-results` ·
@@ -268,7 +268,7 @@ stamp to `/onboarding`, and `/api/placements` refuses anyone without a row in
 the permission.
 
 ### 1.1 The logged-out front door · P0
-- [ ] In a private window, open <https://ozark-open-sportsbook.vercel.app>
+- [ ] In a private window, open <https://ozark-open.com>
 - [ ] **Pat reads the landing page cold.** Does he know what this is and what to do next?
 - [ ] Try `/dashboard` directly while logged out → bounces to `/login`
 
