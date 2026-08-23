@@ -180,6 +180,24 @@ internal `--tw-duration` as well as the longhand, which is what lets
 `duration-slow` retime a `tw-animate-css` enter/exit animation rather than only a
 plain transition.
 
+> That retiming reaches `tw-animate-css` **only** because its keyframes read
+> `animation-duration: var(--tw-duration, …)`. A `duration-*` class next to an
+> `animate-*` utility does **nothing**: `--animate-rise-in` and friends are
+> `animation` shorthands that already carry their own duration, and
+> `duration-enter` sets `transition-duration`, never `animation-duration`.
+> `RouteFade` carried a `motion-safe:duration-enter` that was inert for exactly
+> this reason, and the route fade ran at 180ms while every comment said 320ms.
+> Put the duration in the `--animate-*` token, not in a class beside it.
+
+> **Never put a `var()` in an `--animate-*` token expecting a call site to fill
+> it.** `@theme` declares those on `:root`, and a custom property is substituted
+> in the scope where it is *declared* — so the var resolves against `:root`, and
+> the element inherits an already-resolved value. `--animate-rise-in` ended
+> `var(--stagger-delay, 0ms)` on the theory that the `stagger` utility would
+> fill the slot; it never could, and every staggered row animated at 0ms delay.
+> The utility now writes a real `animation-delay` longhand, `!important` so it
+> beats the shorthand whichever order the utilities land in.
+
 `--ease-out` deliberately **overrides** Tailwind's built-in `ease-out`. One
 vocabulary; no second set of curves smuggled in via framework defaults.
 
@@ -263,10 +281,53 @@ and the how-it-works launcher.
   `live-border` utility confines one to a 1.5px border with a mask, which does
   not touch that rationale. It requires `@property --angle` — unregistered, a
   custom property is a string to the interpolator and the gradient jumps
-  between keyframes instead of rotating.
+  between keyframes instead of rotating. It also requires **`inherits: true`**:
+  the animation runs on the element and the gradient is painted by the `::after`,
+  and a pseudo-element does not inherit a non-inheriting registered property from
+  its originating element. At `inherits: false` the element swept 0→360deg while
+  `::after` sat at a flat `0deg` — registered, running, and completely still.
 - **Still banned:** confetti, attention loops that carry no information,
   gradient washes on surfaces, frosted glass, urgency patterns. The countdown
   border is not one: no red, no acceleration, no pulsing digits.
+
+### The placement celebration — the one named exception
+
+`BetCelebration` pops a card centre-screen on a confirmed wager, plays a 1.6s
+clip with sound, and leaves on its own. On its face that is the flourish the
+rule above bans, so the exception is argued rather than assumed:
+
+- It is **one-shot**, not a loop. The ban is on *attention loops*.
+- It is **user-initiated** — it exists only as the direct answer to a button
+  the bettor deliberately pressed twice.
+- It **carries information**: your money is on the books. The gold stake-flash
+  ring and the "Locked in" receipt say the same thing quietly; this is the
+  expressive tier's version of it, rationed the same way brand gold is — one
+  moment on the whole betting path.
+
+Three implementation rules come out of it, and all three generalise:
+
+- **`--ease-overshoot`'s first call site.** It was defined for exactly this
+  tier and sat unused until now. Transform only, per the token's own rule.
+- **A media element's autoplay unlock belongs to the ELEMENT, not the page.**
+  So the `<video>` never unmounts (hidden is `opacity-0` + `inert`, never
+  `display: none`, which is itself refused playback), and the entrance replays
+  through a forced reflow rather than a changing React `key` — a key would
+  remount the element and throw the unlock away.
+- **Arm inside the click, not after the await.** An audible `play()` is refused
+  on iOS Safari and unreliable on Chrome's MEI heuristic once the gesture has
+  expired, and a `fetch` outlives the gesture. A muted play/pause during the
+  click unlocks the element; the confirmed write then unmutes and replays. If
+  audible playback is still refused it retries muted — the animation is the
+  confirmation and the sound is the bonus, and it degrades in that order.
+
+**Reduced motion gets no branch, deliberately.** The blanket floor above
+flattens the pop and the rotation to 0.01ms, which leaves the plain
+appear/disappear the calm version calls for; the clip still plays, because it
+is content the user asked for by placing a bet rather than ambient motion.
+Measured under the floor, though: **`animationend` does not fire at all**, so
+the component's 600ms exit fallback — not the animation — is what returns it to
+rest. Same belt as `BetErrorToast`'s, and here it is the only one that works.
+Don't drop it on the theory that the 0.01ms floor keeps the event alive.
 
 ---
 
