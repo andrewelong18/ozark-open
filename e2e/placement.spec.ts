@@ -26,12 +26,11 @@ function stakeRow(page: Page, betTestId: string, pickName: string) {
     .last()
 }
 
-/** The "Total Wagered" stat card — a bare $10 matches four things on the page. */
+/** The running total in /my-bets' budget bar (the Total Wagered stat card
+ * until the bar moved here from the dashboard). Testid, not text: a bare $10
+ * matches four things on the page, and "$1" is inside "$10 of $40". */
 function totalWagered(page: Page) {
-  return page
-    .locator("div")
-    .filter({ hasText: /^Total Wagered/ })
-    .last()
+  return page.getByTestId("budget-wagered")
 }
 
 async function place(page: Page, betTestId: string, pickName: string, amount: string) {
@@ -57,8 +56,11 @@ test("place, edit and remove a wager, with My Bets following each step", async (
   await expect(page.getByText("Locked in")).toBeVisible()
 
   await page.goto("/my-bets")
-  await expect(totalWagered(page)).toContainText("$10")
-  await expect(page.getByText(`of your $${ENTRY_FEE} entry`)).toBeVisible()
+  // The budget bar carries both numbers the Total Wagered and Remaining
+  // Budget stat cards used to: what's wagered, and the entry it has to reach.
+  await expect(page.getByTestId("budget-summary")).toHaveText(
+    `$10 of $${ENTRY_FEE}`
+  )
   await expect(page.getByText("Dan Mercer")).toBeVisible()
 
   // --- edit ----------------------------------------------------------------
@@ -69,7 +71,7 @@ test("place, edit and remove a wager, with My Bets following each step", async (
   await expect(page.getByText("Locked in")).toBeVisible()
 
   await page.goto("/my-bets")
-  await expect(totalWagered(page)).toContainText("$12")
+  await expect(totalWagered(page)).toHaveText("$12")
 
   // --- remove --------------------------------------------------------------
   await page.goto("/bets")

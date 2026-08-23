@@ -63,7 +63,7 @@ test("an admin's wager for a member lands on the member, not the admin", async (
   await signInAs(page, ACCOUNTS.approved)
   await page.goto("/my-bets")
   await expect(page.getByText("Dan Mercer")).toBeVisible()
-  await expect(page.locator("div").filter({ hasText: /^Total Wagered/ }).last()).toContainText("$7")
+  await expect(page.getByTestId("budget-wagered")).toHaveText("$7")
 })
 
 test("a non-admin can't open someone else's slate", async ({ page }) => {

@@ -38,9 +38,14 @@ export function BudgetModule({
     <div className={cn("flex flex-col", compact ? "gap-2" : "gap-3", className)}>
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-sm font-semibold text-text-body">Wagered</span>
-        <span className="text-sm text-text-muted">
-          <MoneyDisplay value={wagered} size="sm" weight="semibold" /> of{" "}
-          <MoneyDisplay value={entryFee} size="sm" weight="semibold" />
+        <span data-testid="budget-summary" className="text-sm text-text-muted">
+          {/* Testid on the running total alone: it's the number /my-bets is
+              read for, and "$1" is a substring of "$10 of $40" — a text filter
+              over the whole line can pass on the wrong wager (e2e/placement). */}
+          <span data-testid="budget-wagered">
+            <MoneyDisplay value={wagered} size="sm" weight="semibold" />
+          </span>{" "}
+          of <MoneyDisplay value={entryFee} size="sm" weight="semibold" />
         </span>
       </div>
 

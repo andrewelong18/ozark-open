@@ -2,8 +2,8 @@ import { createClient } from "@/lib/supabase/server"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { AccordionSection } from "@/components/ui/accordion-section"
 import { StatCard } from "@/components/modules/stat-card"
-import { BudgetModule } from "@/components/modules/budget-module"
 import { RulesCard } from "@/components/modules/rules-card"
 import { EmptyState } from "@/components/modules/empty-state"
 import { AdCarousel } from "@/components/ads/ad-carousel"
@@ -12,10 +12,6 @@ import { LoadError } from "@/components/modules/load-error"
 import { HowItWorksLauncher } from "@/components/onboarding/how-it-works-launcher"
 import { Countdown } from "@/components/countdown"
 import Link from "next/link"
-import {
-  checkPickMinimum,
-  checkTournamentTotal,
-} from "@/lib/validation"
 import { bettingBadge, formatDeadline, nextDeadline } from "@/lib/phases"
 import {
   normalizeExistingPlacements,
@@ -26,11 +22,7 @@ import {
   type PlacementQueryRow,
 } from "@/lib/placements"
 import { ComplianceBanner } from "@/components/modules/compliance-banner"
-import {
-  buildComplianceSummary,
-  buildRulesModel,
-  picksLine,
-} from "@/lib/my-bets"
+import { buildComplianceSummary, buildRulesModel } from "@/lib/my-bets"
 
 // Dashboard (reworked in Sprint 5, closing #23): pool total, the
 // participant's budget, and their personalized rules — every number derived
@@ -158,12 +150,6 @@ export default async function DashboardPage() {
     (placementData ?? []) as unknown as PlacementQueryRow[],
     tournament.id
   )
-  const totals = checkTournamentTotal(
-    existing,
-    Number(participant?.entry_fee ?? 0)
-  )
-  const balanced =
-    totals.exact && checkPickMinimum(existing, rules).meets_minimum
   const betCount = existing.length
 
   // #107: this used to read tournaments.status, which has never gated betting
@@ -193,6 +179,14 @@ export default async function DashboardPage() {
   )
   const upcoming = clock.show_countdown ? nextDeadline(clock, now) : null
   const myRules = participant ? buildRulesModel(participant, rules) : null
+
+  // Compliance items behind one collapsed header. Only the warnings count —
+  // the "you're balanced" item is the summary's way of saying there are none,
+  // and counting it would put a "1" on a page with nothing wrong.
+  const alerts = myRules
+    ? buildComplianceSummary(existing, myRules.entry_fee, rules)
+    : []
+  const alertCount = alerts.filter((a) => a.tone === "warning").length
 
   return (
     <div className="mx-auto grid max-w-[var(--container-max,1120px)] grid-cols-1 gap-4 px-4 py-6 lg:grid-cols-3 lg:gap-6">
@@ -233,35 +227,42 @@ export default async function DashboardPage() {
 
       {participant && myRules ? (
         <>
-          {buildComplianceSummary(existing, myRules.entry_fee, rules).map(
-            (item) => (
-              <ComplianceBanner
-                key={item.title}
-                tone={item.tone}
-                title={item.title}
-              >
-                {item.message}
-              </ComplianceBanner>
-            )
+          {/* The budget bar moved to /my-bets (where the wagers it summarises
+              actually live), so this is the dashboard's route to the bet menu. */}
+          <Button
+            variant="gold"
+            size="lg"
+            className="w-full"
+            render={<Link href="/bets" />}
+          >
+            Place Bets →
+          </Button>
+
+          {/* Alerts, collapsed, with the count on the header. The banners
+              themselves are unchanged and still say the whole thing when
+              opened — what changed is that two standing warnings no longer
+              push the rest of the dashboard below the fold all weekend.
+              Tone follows the contents: nothing to fix reads as balanced, not
+              as "Alerts 0". */}
+          {alerts.length > 0 && (
+            <AccordionSection
+              title={alertCount > 0 ? "Alerts" : "You're balanced"}
+              glyph={alertCount > 0 ? "⚠️" : "✓"}
+              count={alertCount > 0 ? alertCount : undefined}
+              tone={alertCount > 0 ? "caution" : "win"}
+              bodyClassName="flex flex-col gap-2 p-3"
+            >
+              {alerts.map((item) => (
+                <ComplianceBanner
+                  key={item.title}
+                  tone={item.tone}
+                  title={item.title}
+                >
+                  {item.message}
+                </ComplianceBanner>
+              ))}
+            </AccordionSection>
           )}
-          <Card>
-            <CardContent className="flex flex-col gap-3.5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-heading text-lg text-text-strong">
-                  Your Budget
-                </div>
-                <Button variant="gold" size="sm" render={<Link href="/bets" />}>
-                  Place Bets →
-                </Button>
-              </div>
-              <BudgetModule
-                wagered={totals.total}
-                entryFee={myRules.entry_fee}
-                picksLine={picksLine(existing)}
-                balanced={balanced}
-              />
-            </CardContent>
-          </Card>
 
           <RulesCard
             entryFee={myRules.entry_fee}
@@ -279,12 +280,10 @@ export default async function DashboardPage() {
         />
       )}
 
-      <div className="flex justify-center">
-        <HowItWorksLauncher
-          minPicks={rules.min_picks_per_tournament}
-          maxPicks={rules.max_picks_per_phase}
-        />
-      </div>
+      <HowItWorksLauncher
+        minPicks={rules.min_picks_per_tournament}
+        maxPicks={rules.max_picks_per_phase}
+      />
       </div>
 
       {/* Activity feed — the right rail on desktop, stacked below on mobile.
