@@ -346,6 +346,50 @@ Don't drop it on the theory that the 0.01ms floor keeps the event alive.
 
 ---
 
+## 4b. Type on touch — the 16px floor
+
+**iOS Safari zooms the viewport when a focused text control computes to under
+16px, and it never zooms back out.** The user is left pinching to find the rest
+of the page. It is not a preference; 16px is Safari's threshold.
+
+This shipped broken on `/bets`. `Card` carries `text-sm` (14px), Tailwind's
+preflight gives form controls `font: inherit`, so every stake box inherited
+14px — and every tap to type a stake threw the bet menu off screen. The same
+14px sits in `ui/input.tsx`'s `sm` size, so login, onboarding, profile and the
+admin forms had it too.
+
+**The fix is a floor in `globals.css`, not a viewport meta.**
+
+```css
+@media (pointer: coarse), (max-width: 39.9375rem) {
+  input:not([type="checkbox"], …), textarea, select { font-size: max(16px, 1em); }
+}
+```
+
+Four things about that rule are deliberate:
+
+- **`maximum-scale=1` / `user-scalable=no` is NOT the fix.** It stops the zoom
+  by removing pinch-zoom from everyone permanently — a WCAG 1.4.4 failure, and
+  worse than the bug on a course in bright sun. The `viewport` export in
+  `app/layout.tsx` sets neither. Don't add them.
+- **`max(16px, 1em)` can only raise.** `em` in a `font-size` resolves against
+  the *parent*, so a control inside larger text keeps its size rather than
+  being shrunk to the floor.
+- **`(pointer: coarse)` unioned with a narrow viewport.** Coarse is the honest
+  condition, but an iPad with a keyboard reports a *fine* pointer and still
+  zooms; the width catches phones either way. A desktop mouse at ≥640px is
+  untouched, which is what keeps the compact 108px stake box on desktop.
+  Measured: 375px → 16px, 639px → 16px, 641px → 14px, 1280px → 14px.
+- **It is unlayered on purpose.** Tailwind utilities live in `@layer utilities`
+  and beat anything in `@layer base`, so a `text-sm` sitting directly on an
+  input would quietly re-break it. Unlayered CSS outranks every layer — this is
+  a floor nobody can undercut by accident.
+
+`e2e/mobile-layout.spec.ts` asserts it across every route: no visible text
+control computes under 16px on the phone project. Playwright can't observe the
+zoom itself (Chromium doesn't implement it), so the test asserts the condition
+iOS keys off, which is the part we control.
+
 ## 5. Using it
 
 - **Reference gallery:** [`/style-guide`](../app/style-guide/page.tsx) renders every

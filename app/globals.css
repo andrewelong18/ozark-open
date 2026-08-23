@@ -688,6 +688,43 @@
   }
 }
 
+/* ---------- The 16px floor on touch text entry ----------
+   iOS Safari zooms the viewport when a focused text control computes to LESS
+   THAN 16px, and it does not zoom back out afterwards — you are left pinching
+   to find the rest of the page. On /bets that hit every stake box: Card
+   carries `text-sm` (14px), Tailwind's preflight gives form controls
+   `font: inherit`, so the input inherited 14px and every tap to type a stake
+   threw the menu off screen. The same 14px is in `ui/input.tsx`'s `sm` size,
+   so login, onboarding, profile and the admin forms had it too.
+
+   THE FIX IS NOT `maximum-scale=1` / `user-scalable=no`. That does stop the
+   zoom, by taking pinch-zoom away from everyone permanently — a WCAG 1.4.4
+   failure, and worse than the bug on a course in bright sun. The viewport
+   export in app/layout.tsx deliberately sets neither; don't add them.
+
+   `max(16px, 1em)` rather than a flat 16px because it can only ever raise:
+   `em` in a font-size resolves against the PARENT, so a control inside larger
+   text keeps that size instead of being shrunk to the floor.
+
+   Scoped to `(pointer: coarse)` — the honest condition, "this is a touch
+   device" — unioned with a narrow viewport, because an iPad with a keyboard
+   reports a FINE pointer and still zooms. A desktop mouse at >=640px is
+   untouched, which is what keeps the compact 108px stake box on desktop.
+
+   Deliberately UNLAYERED, like the view-transition block above: Tailwind
+   utilities live in @layer utilities and would beat anything in @layer base,
+   so a `text-sm` sitting directly on an input would quietly re-break this.
+   Unlayered CSS outranks every layer, which is the point — this is a floor
+   nobody can undercut by accident. If you need smaller text on a touch
+   device, you almost certainly don't; take it up with this comment first. */
+@media (pointer: coarse), (max-width: 39.9375rem) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
 /* Named duration utilities. Duration is not a Tailwind v4 theme namespace
    (only --ease-* and --animate-* are), so the tiers are hand-rolled.
 
