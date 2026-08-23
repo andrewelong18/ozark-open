@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useCallback, useMemo, useState } from "react"
+import { Fragment, useCallback, useMemo, useRef, useState } from "react"
 
 import { Card } from "@/components/ui/card"
 import { Collapse } from "@/components/ui/collapse"
@@ -10,6 +10,10 @@ import { PickRow } from "@/components/betting/pick-row"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import { BetPlacementCard } from "@/components/betting/bet-placement-card"
 import { BetErrorToast } from "@/components/betting/bet-error-toast"
+import {
+  BetCelebration,
+  type BetCelebrationHandle,
+} from "@/components/betting/bet-celebration"
 import { EmptyState } from "@/components/modules/empty-state"
 import { formatProbability } from "@/lib/format"
 import {
@@ -363,6 +367,13 @@ export function BetsMenu({
   // instead of inline, so the stake input never reflows.
   const [toastError, setToastError] = useState<string | null>(null)
   const dismissToast = useCallback(() => setToastError(null), [])
+  // The celebration is driven imperatively rather than by a state prop,
+  // because arming it has to happen INSIDE the confirm click and a state
+  // round-trip would land a render too late — after the await, with the
+  // gesture already expired. See BetCelebration's header.
+  const celebration = useRef<BetCelebrationHandle>(null)
+  const armCelebration = useCallback(() => celebration.current?.arm(), [])
+  const celebrate = useCallback(() => celebration.current?.celebrate(), [])
 
   const showStatus = useMemo(() => showStatusToggle(phases), [phases])
 
@@ -566,6 +577,8 @@ export function BetsMenu({
                             placements={placements}
                             lockedOdds={lockedOdds}
                             onError={setToastError}
+                            onArm={armCelebration}
+                            onPlaced={celebrate}
                             onBehalfOf={onBehalfOf}
                           />
                         ) : (
@@ -586,6 +599,7 @@ export function BetsMenu({
         </div>
       )}
       <BetErrorToast message={toastError} onDismiss={dismissToast} />
+      <BetCelebration ref={celebration} />
     </>
   )
 }
