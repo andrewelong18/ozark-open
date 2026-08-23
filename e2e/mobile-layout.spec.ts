@@ -124,6 +124,55 @@ test.describe("nothing overflows a phone", () => {
   }
 })
 
+// iOS Safari zooms the viewport when a focused text control computes to under
+// 16px, and it does NOT zoom back out — you are left pinching to find the rest
+// of the page. Every stake box on /bets did this: Card carries `text-sm`
+// (14px), Tailwind gives form controls `font: inherit`, so the input inherited
+// 14px and every tap to type a stake threw the menu off screen.
+//
+// Asserted as a floor across every route rather than on the one input that was
+// reported, because the same 14px is in `ui/input.tsx`'s `sm` size and would
+// come back the next time someone adds a form. globals.css carries the fix as
+// an unlayered rule; this is what stops a `text-sm` on a new input undoing it.
+//
+// Computed font-size is the honest measurement here. There is no way to observe
+// the zoom itself from Playwright — Chromium doesn't implement the behaviour —
+// so the test asserts the CONDITION iOS keys off, which is the thing we control.
+test.describe("no text control triggers the iOS focus zoom", () => {
+  /** The threshold is Safari's, not a preference. Below it, iOS zooms. */
+  const MIN_FONT_PX = 16
+
+  for (const route of ROUTES) {
+    test(`${route.path} has no sub-16px text input`, async ({ page }) => {
+      await signOut(page)
+      if (route.as) await signInAs(page, route.as)
+      await page.goto(route.path)
+      await page.waitForLoadState("networkidle").catch(() => {})
+
+      const offenders = await page.evaluate(() => {
+        const sel =
+          'input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]),textarea,select'
+        return [...document.querySelectorAll(sel)]
+          .filter((el) => (el as HTMLElement).offsetParent !== null)
+          .map((el) => ({
+            size: parseFloat(getComputedStyle(el).fontSize),
+            what:
+              el.getAttribute("aria-label") ??
+              el.getAttribute("placeholder") ??
+              el.getAttribute("name") ??
+              el.tagName.toLowerCase(),
+          }))
+          .filter((r) => r.size < 16)
+      })
+
+      expect(
+        offenders,
+        `these would zoom iOS on focus (need >=${MIN_FONT_PX}px): ${JSON.stringify(offenders)}`
+      ).toEqual([])
+    })
+  }
+})
+
 test.describe("the bet menu under a thumb", () => {
   test.beforeEach(async ({ page }) => {
     await signInAs(page, ACCOUNTS.approved)
