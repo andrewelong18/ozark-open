@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 
 // The payoff for placing a wager (Sprint 12, #164). A small card is tossed onto
 // the screen, a 1.6s clip plays with sound, and it leaves on its own. Nothing to
@@ -10,8 +11,9 @@ import * as React from "react"
 // receipt are still the *informational* confirmation; this sits on top of them
 // and is purely the celebration.
 //
-// THREE things about this component are non-obvious, and all three are the
-// difference between working and half-working:
+// FOUR things about this component are non-obvious, and all four are the
+// difference between working and half-working. Number 4 is there because it
+// SHIPPED broken: the clip played and nothing appeared.
 //
 // 1. THE <video> NEVER UNMOUNTS. Every other transient surface in this app
 //    (BetErrorToast, Collapse) latches its content and unmounts on
@@ -37,6 +39,23 @@ import * as React from "react"
 //    could intercept a click, which is what would break placement.spec.ts,
 //    rules-gauntlet.spec.ts, on-behalf.spec.ts and mobile-journey.spec.ts.
 //
+// 4. IT PORTALS TO document.body, AND THAT IS A BUG FIX, NOT TIDINESS. This
+//    shipped rendering in place inside BetsMenu, which lives inside
+//    `<div data-enter-stagger>` on /bets — and that column runs `rise-in`,
+//    which animates a TRANSFORM. A transformed element becomes the containing
+//    block for its `position: fixed` descendants, so `fixed inset-0` sized
+//    itself to a 3000px-tall column instead of the viewport and centred the
+//    card somewhere far below the fold. The clip played; nobody saw it.
+//
+//    app/bets/page.tsx already carries a comment warning about exactly this —
+//    it is why BetSlipSummary is a child of the GRID and not of the staggered
+//    column. Rendering here in place walked straight into it.
+//
+//    A portal is the structural answer rather than a workaround: attached to
+//    document.body there is no ancestor left that can hijack the containing
+//    block, establish a stacking context, clip with overflow, or apply a
+//    filter. Do not "simplify" this back into the tree.
+//
 // Reduced motion needs no branch here, deliberately. The blanket floor in
 // globals.css flattens the pop and the rotation to 0.01ms, which leaves a plain
 // appear/disappear — the calm version sprint-12's "Done when" asks for. The
@@ -54,6 +73,10 @@ const HOLD_FALLBACK_MS = 3000
  * extension, a browser that skips animations in a background tab) animationend
  * never arrives and the card would strand mid-fade. */
 const EXIT_FALLBACK_MS = 600
+
+/** document.body never changes, so there is nothing to subscribe to; each
+ * render re-reads the snapshot anyway. Same helper BetErrorToast uses. */
+const subscribeNever = () => () => {}
 
 export type BetCelebrationHandle = {
   /** Call synchronously inside the user's click, before any await. */
@@ -152,7 +175,17 @@ export function BetCelebration({
 
   const hidden = state === "idle"
 
-  return (
+  // document.body on the client, null while rendering on the server. Same
+  // idiom BetErrorToast uses for its slot: useSyncExternalStore gives the two
+  // answers separately without a setState-in-effect, which the lint rules
+  // reject. document.body is referentially stable, so this never resubscribes.
+  const target = React.useSyncExternalStore(
+    subscribeNever,
+    () => document.body,
+    () => null
+  )
+
+  const overlay = (
     <div
       data-testid="bet-celebration"
       data-state={state}
@@ -180,27 +213,43 @@ export function BetCelebration({
           state === "closing" ? "animate-celebrate-out" : "",
         ].join(" ")}
       >
-        {/* Locked to the source's real aspect after de-letterboxing, so the
+        {/* The aspect box is a WRAPPER with the ratio, and the video fills it
+            absolutely — rather than `aspect-[676/720]` on the <video> itself.
+            `aspect-ratio` on a replaced element that also has its own
+            intrinsic ratio is the corner of the spec browsers have disagreed
+            about longest, and a video that resolves to zero height is
+            invisible while still playing its audio, which is precisely the
+            symptom this component already produced once for another reason.
+            A plain div with a ratio and an inset-0 child has no such corner.
+            676/720 is the source's real aspect after de-letterboxing, so the
             clip fills the card exactly and nothing is cropped twice. */}
-        <video
-          ref={videoRef}
-          src="/celebration/great-job.mp4"
-          poster="/celebration/great-job-poster.jpg"
-          preload="auto"
-          // WITHOUT playsInline iOS Safari takes the clip fullscreen, which is
-          // the single loudest way this feature could fail. Not optional.
-          playsInline
-          disablePictureInPicture
-          controlsList="nodownload noplaybackrate noremoteplayback"
-          onEnded={() => setState("closing")}
-          tabIndex={-1}
-          aria-hidden
-          // pointer-events-none on the element itself, not just the wrapper:
-          // it is what kills the media context menu and tap-to-pause. No
-          // `controls` anywhere — this is a UI flourish, not a player.
-          className="pointer-events-none block aspect-[676/720] w-full object-cover"
-        />
+        <div className="relative aspect-[676/720] w-full">
+          <video
+            ref={videoRef}
+            src="/celebration/great-job.mp4"
+            poster="/celebration/great-job-poster.jpg"
+            preload="auto"
+            // WITHOUT playsInline iOS Safari takes the clip fullscreen, which
+            // is the single loudest way this feature could fail. Not optional.
+            playsInline
+            // The pre-10 iOS spelling of the same thing. Harmless everywhere
+            // else, and the attribute is the only guard old WebKit reads.
+            webkit-playsinline="true"
+            disablePictureInPicture
+            controlsList="nodownload noplaybackrate noremoteplayback"
+            onEnded={() => setState("closing")}
+            tabIndex={-1}
+            aria-hidden
+            // pointer-events-none on the element itself, not just the wrapper:
+            // it is what kills the media context menu and tap-to-pause. No
+            // `controls` anywhere — this is a UI flourish, not a player.
+            className="pointer-events-none absolute inset-0 block size-full object-cover"
+          />
+        </div>
       </div>
     </div>
   )
+
+  // Server render has no document; the client attaches to body. See note 4.
+  return target ? createPortal(overlay, target) : null
 }

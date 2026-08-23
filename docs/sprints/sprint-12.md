@@ -152,6 +152,51 @@ button beneath the card centre still receives its click, and the card is 272px
 on desktop / 217px (58vw) on a 375px phone. The full run also completes under a
 reproduction of the reduced-motion floor.
 
+### The bug it shipped with, Aug 23 2026
+
+Merged, then tested on desktop Safari: **the sound played and nothing
+appeared.** A clean diagnostic — audio proves `celebrate()` ran and `play()`
+succeeded, so the state machine was fine and it was purely rendering.
+
+`BetsMenu` renders inside `<div data-enter-stagger>` (`app/bets/page.tsx`), and
+that column animates a transform via `rise-in`. **A transformed element becomes
+the containing block for its `position: fixed` descendants**, so the overlay's
+`fixed inset-0` sized itself to the whole scrollable bet menu rather than the
+viewport, centring the card about 1400px below the fold. Reproduced and
+measured: **3125px tall against a ~700px viewport**, card at `top: 1439`.
+
+Two things make this worth writing down rather than just fixing:
+
+- **The hazard was already documented, three lines above where it bit.**
+  `app/bets/page.tsx` carries a comment explaining that `data-enter-stagger`
+  goes on the inner column precisely so it can't become `BetSlipSummary`'s
+  containing block. The celebration rendered *inside* that column and walked
+  straight into it.
+- **The hijack survives the animation finishing.** With `fill-mode: both` the
+  element still counts as transformed after the transform resolves to `none`,
+  and engines disagree about that — which is why Chrome hid it and Safari
+  didn't. Verifying in one browser was not enough, and neither was verifying
+  the component in a harness that had no such ancestor. That was the real
+  process failure: the original check exercised the component in isolation
+  rather than in the page it ships in.
+
+Fixed by portalling to `document.body` — the structural answer, not a Safari
+workaround, and the pattern `BetErrorToast` already uses. Attached to `body`
+there is no ancestor left that can hijack the containing block, establish a
+stacking context, clip with `overflow`, or apply a `filter`.
+
+Hardened at the same time: the aspect ratio moved off the `<video>` onto a
+wrapper with an absolutely-filled child, because `aspect-ratio` on a replaced
+element that has its own intrinsic ratio is a long-standing browser
+disagreement and a zero-height video is invisible while still playing audio —
+the same symptom from a different cause. `webkit-playsinline` added alongside
+`playsInline` for pre-10 iOS.
+
+`e2e/celebration.spec.ts` gains the regression, written so it fails on the
+original bug three independent ways: the overlay's parent is `document.body`,
+its height equals `window.innerHeight`, and — the assertion that needs no
+theory — the video's rect actually intersects the viewport.
+
 **Not run locally: the Playwright suite.** `scripts/e2e-verify.sh` needs Docker
 for the local Supabase stack and Docker is not installed on this machine, so
 `e2e/celebration.spec.ts` is written but unexecuted — see

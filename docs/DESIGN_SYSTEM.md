@@ -308,6 +308,21 @@ Three implementation rules come out of it, and all three generalise:
 
 - **`--ease-overshoot`'s first call site.** It was defined for exactly this
   tier and sat unused until now. Transform only, per the token's own rule.
+- **A viewport overlay must be portalled to `document.body`.** This one shipped
+  rendering in place and was invisible in Safari — the clip played and nothing
+  appeared. `BetsMenu` lives inside `<div data-enter-stagger>`, that column
+  animates a transform, and **a transformed element becomes the containing
+  block for its `position: fixed` descendants**, so `fixed inset-0` sized
+  itself to the whole scrollable bet menu and centred the card ~1400px below
+  the fold. Measured in a reproduction: **3125px tall against a ~700px
+  viewport.** Worse, the hijack survives the animation *finishing* — with
+  `fill-mode: both` the element still counts as transformed — which is exactly
+  the corner engines disagree on, and why Chrome hid it and Safari didn't.
+  `app/bets/page.tsx` already carried a comment about this hazard; it is why
+  `BetSlipSummary` is a child of the grid rather than the staggered column.
+  **The rule that generalises: anything `position: fixed` that must be
+  viewport-relative gets portalled, or lives outside every staggered column.
+  Don't reason about whether an ancestor's transform has finished.**
 - **A media element's autoplay unlock belongs to the ELEMENT, not the page.**
   So the `<video>` never unmounts (hidden is `opacity-0` + `inert`, never
   `display: none`, which is itself refused playback), and the entrance replays
