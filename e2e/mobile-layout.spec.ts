@@ -296,29 +296,61 @@ test.describe("the bet menu under a thumb", () => {
   })
 })
 
-test.describe("the pill rails scroll to what's selected", () => {
-  // The rail overflows 412px — "Leaderboard", the fourth pill, is the one the
-  // fade cuts off. Landing there used to show a rail with nothing highlighted
-  // and no reason to think it scrolled at all.
-  test("the active nav pill is brought into view", async ({ page }) => {
-    await signInAs(page, ACCOUNTS.approved)
-    await page.goto("/leaderboard")
+// The rail used to scroll sideways under the brand bar and this described how
+// it found the active pill. Since Aug 23, 2026 there is no rail on a phone —
+// the same items live behind a Menu button — so what's asserted is that the
+// button is reachable, that the items are genuinely absent until it's tapped,
+// and that they're tap-sized when they arrive.
+test.describe("the nav lives behind Menu on a phone", () => {
+  // Scoped to the MENU PANEL, for two reasons: the dashboard's own gold
+  // "Place Bets →" is a link too and Playwright matches names by substring,
+  // and the desktop rail stays in the DOM at display:none on a phone — so a
+  // header-wide count would never be zero and "absent until tapped" would
+  // assert nothing.
+  const navLink = (page: Page, name: string) =>
+    page.locator("#mobile-nav-panel").getByRole("link", { name })
 
-    const active = page.locator('nav a[aria-current="page"]')
-    await expect(active).toHaveCount(1)
-
-    const box = await active.boundingBox()
-    expect(box).not.toBeNull()
-    expect(box!.x, "the active pill starts off the left edge").toBeGreaterThanOrEqual(-1)
-    expect(
-      box!.x + box!.width,
-      "the active pill runs off the right edge — the rail didn't scroll to it"
-    ).toBeLessThanOrEqual(413)
-  })
-
-  test("nav pills are 44px", async ({ page }) => {
+  test("the items are absent until Menu is tapped, and tap-sized when they arrive", async ({
+    page,
+  }) => {
     await signInAs(page, ACCOUNTS.approved)
     await page.goto("/dashboard")
-    await expectTappable(page.getByRole("link", { name: "Bet Menu" }), "nav pill")
+
+    const menu = page.getByRole("button", { name: "Menu" })
+    await expectTappable(menu, "Menu button")
+
+    // Absent, not merely hidden — <Collapse> unmounts a closed panel, and a
+    // nav that's only visually hidden is a nav a screen reader still reads.
+    await expect(navLink(page, "Place Bets")).toHaveCount(0)
+    await expect(menu).toHaveAttribute("aria-expanded", "false")
+
+    // And the desktop rail, which is in the DOM but display:none here, is not
+    // reachable either — two navs answering at once would be the bug.
+    await expect(page.locator("header nav").first()).toBeHidden()
+
+    await menu.click()
+    await expect(menu).toHaveAttribute("aria-expanded", "true")
+    for (const name of ["Dashboard", "Place Bets", "My Bets", "Profile"]) {
+      await expect(navLink(page, name)).toBeVisible()
+      await expectTappable(navLink(page, name), `${name} menu item`)
+    }
+  })
+
+  test("tapping an item navigates, and the menu closes behind it", async ({
+    page,
+  }) => {
+    await signInAs(page, ACCOUNTS.approved)
+    await page.goto("/dashboard")
+
+    await page.getByRole("button", { name: "Menu" }).click()
+    await navLink(page, "Place Bets").click()
+    await page.waitForURL("**/bets")
+
+    // Left open, the panel would cover the page it just took you to.
+    await expect(navLink(page, "Place Bets")).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    )
   })
 })

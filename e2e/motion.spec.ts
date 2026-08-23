@@ -181,7 +181,9 @@ test.describe("route fade", () => {
   }) => {
     await signInAs(page, ACCOUNTS.approved)
     await page.goto("/dashboard")
-    await page.getByRole("link", { name: "Bet Menu" }).click()
+    // Scoped to the header: the dashboard's own gold "Place Bets →" button is
+    // also a link, and name matching is by substring.
+    await page.locator("header").getByRole("link", { name: "Place Bets" }).click()
     await page.waitForURL("**/bets")
 
     // The fixed element is the <aside> that HOLDS the toast slot, not a div.
