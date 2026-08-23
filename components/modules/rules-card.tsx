@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils"
 import { MoneyDisplay } from "@/components/betting/money-display"
+import { AccordionSection } from "@/components/ui/accordion-section"
 
 export type RulesCardProps = {
   entryFee?: number
@@ -17,6 +18,11 @@ export type RulesCardProps = {
 /**
  * Personalized "house rules" reference card — entry fee, max single/self bet,
  * pick counts. Reference-card energy (clean rows), not legal-terms energy.
+ *
+ * Collapsed by default. These numbers are the same every time you look and the
+ * app enforces them anyway (lib/validation.ts), so on the two pages that carry
+ * this card they were six rows of settled fact between you and the thing you
+ * came for. The label stays visible; the table is one tap away.
  */
 export function RulesCard({
   entryFee = 40,
@@ -54,36 +60,28 @@ export function RulesCard({
   ]
 
   return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-xl border border-border bg-surface-card shadow-sm",
-        className
-      )}
+    <AccordionSection
+      title="House Rules"
+      glyph="⛳"
+      className={className}
+      // Flush: the rows carry their own dividers and full-bleed edges, which a
+      // padded panel would inset into a box-inside-a-box.
+      bodyClassName=""
     >
-      <div className="flex items-center gap-2 border-b border-indigo-100 bg-indigo-50 px-4 py-3">
-        <span aria-hidden className="text-[15px]">
-          ⛳
-        </span>
-        <span className="font-heading text-lg text-indigo-800">
-          Your House Rules
-        </span>
-      </div>
-      <div>
-        {rows.map((r, i) => (
-          <div
-            key={r.label}
-            className={cn(
-              "flex items-center justify-between px-4 py-2.5",
-              i > 0 && "border-t border-border"
-            )}
-          >
-            <span className="text-sm text-text-muted">{r.label}</span>
-            <span className="tabular text-sm font-semibold text-text-strong">
-              {r.node}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
+      {rows.map((r, i) => (
+        <div
+          key={r.label}
+          className={cn(
+            "flex items-center justify-between px-4 py-2.5",
+            i > 0 && "border-t border-border"
+          )}
+        >
+          <span className="text-sm text-text-muted">{r.label}</span>
+          <span className="tabular text-sm font-semibold text-text-strong">
+            {r.node}
+          </span>
+        </div>
+      ))}
+    </AccordionSection>
   )
 }

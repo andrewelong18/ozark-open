@@ -21,6 +21,7 @@ import { StakeInput } from "@/components/betting/stake-input"
 import { PickRow } from "@/components/betting/pick-row"
 import { StatCard } from "@/components/modules/stat-card"
 import { BudgetModule } from "@/components/modules/budget-module"
+import { AccordionSection } from "@/components/ui/accordion-section"
 import { ComplianceBanner } from "@/components/modules/compliance-banner"
 import { RulesCard } from "@/components/modules/rules-card"
 import { EmptyState } from "@/components/modules/empty-state"
@@ -473,6 +474,38 @@ export default function StyleGuidePage() {
           <ComplianceBanner tone="success" title="You're balanced">
             $40 of $40 across 6 bets. You&apos;re all set for Round 1.
           </ComplianceBanner>
+        </div>
+      </Section>
+
+      <Section
+        title="AccordionSection"
+        subtitle="Collapsed by default, count on the header. The dashboard stacks three so the page opens as headings, not reference material."
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <AccordionSection
+            title="Alerts"
+            glyph="⚠️"
+            count={2}
+            tone="caution"
+            bodyClassName="flex flex-col gap-2 p-3"
+          >
+            <ComplianceBanner tone="warning" title="Not enough picks yet">
+              You&apos;ve made 3 picks. The minimum is 5 across both phases.
+            </ComplianceBanner>
+            <ComplianceBanner tone="warning" title="Not balanced yet">
+              You&apos;ve wagered $23 of $40. Add $17 before Phase 2 closes.
+            </ComplianceBanner>
+          </AccordionSection>
+          <AccordionSection
+            title="You're balanced"
+            glyph="✓"
+            tone="win"
+            bodyClassName="flex flex-col gap-2 p-3"
+          >
+            <ComplianceBanner tone="success" title="You're balanced">
+              $40 of $40 across 6 bets. You&apos;re all set for Round 1.
+            </ComplianceBanner>
+          </AccordionSection>
         </div>
       </Section>
 
