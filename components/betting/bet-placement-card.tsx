@@ -51,6 +51,15 @@ export type BetPlacementCardProps = {
    * inline, so the stake input never reflows. The row still flags its own
    * `error` state to turn the input border red. */
   onError?: (message: string) => void
+  /** Called synchronously inside the confirm click, BEFORE the fetch. Gives
+   * BetCelebration its one chance to unlock playback while a user gesture is
+   * still in scope — by the time the API answers, the gesture has expired and
+   * an audible play() is refused on iOS Safari. Not "before the request" as a
+   * style choice; before the request is the whole point. */
+  onArm?: () => void
+  /** Called once the API has confirmed the write. Fires for both a new wager
+   * and an edited stake, never for a removal. */
+  onPlaced?: () => void
   /**
    * The member an admin is entering wagers for (Sprint 23 / #101), or null
    * when the viewer is betting for themselves. Switches the writes to the
@@ -102,6 +111,8 @@ export function BetPlacementCard({
   placements,
   lockedOdds = {},
   onError,
+  onArm,
+  onPlaced,
   onBehalfOf,
 }: BetPlacementCardProps) {
   const router = useRouter()
@@ -166,6 +177,9 @@ export function BetPlacementCard({
     const amount = Number(state.value)
     const entryError = stakeEntryError(state.value)
     if (entryError) return rejectStake(pick.id, entryError)
+    // Still inside the click that called this — the last moment a gesture is
+    // in scope. Everything below is async and the gesture is gone by then.
+    onArm?.()
     setBusy(pick.id)
     patchRow(pick.id, { error: null, confirming: null })
     try {
@@ -201,6 +215,10 @@ export function BetPlacementCard({
         },
       })
       setLive((m) => ({ ...m, [pick.id]: amount }))
+      // The API confirmed, not the button click — a rejected wager must never
+      // celebrate. Deliberately after the receipt is patched in, so the row
+      // behind the card already shows what was locked.
+      onPlaced?.()
       router.refresh()
     } catch {
       const message = "Couldn't reach the book — check your connection."

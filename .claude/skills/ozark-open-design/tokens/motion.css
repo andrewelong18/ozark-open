@@ -83,4 +83,34 @@
      says nothing; do not add a third without that stopping condition. */
   --dur-live-ping: 2s; /* @kind other */
   --dur-live-sweep: 6s; /* @kind other */
+
+  /* ---------- The one celebration ----------
+     A confirmed wager pops a card centre-screen, plays a 1.6s clip with sound,
+     and leaves on its own (BetCelebration, on /bets). It is the system's one
+     named exception to "no confetti, no attention loops", and the exception is
+     argued rather than assumed: it is ONE-SHOT rather than a loop,
+     USER-INITIATED — the direct answer to a button pressed deliberately twice
+     — and it CARRIES INFORMATION: your money is on the books. The gold
+     stake-flash ring says the same thing quietly; this is the expressive
+     tier's version, rationed like brand gold to one moment on the whole
+     betting path. Do not add a second without all three clauses.
+
+     This is --ease-overshoot's first and only call site. It was defined for
+     exactly this tier and sat unused until Aug 23, 2026 — which is the point
+     of the damping: it lands off-axis, rights itself, and settles ONCE.
+
+     Asymmetric on the house rule that old content leaves fast rather than
+     competing for attention: 320ms in, 160ms out.
+
+     The asset lives at public/celebration/great-job.mp4 (+ a poster frame) and
+     is deliberately NOT duplicated here. It is a 214KB binary with no design
+     decisions inside it, and two copies of a video is two things to drift.
+     What belongs in this file is the timing, which is above.
+
+     Whoever swaps the clip: de-letterbox with a measured `cropdetect` rather
+     than by eye, normalise to about -16 LUFS (the original was -10.9, which is
+     shouting), and keep it MP4/H.264+AAC — VP9 measured LARGER on a clip this
+     short. */
+  --dur-celebrate-in: 320ms; /* @kind other */
+  --dur-celebrate-out: 160ms; /* @kind other */
 }

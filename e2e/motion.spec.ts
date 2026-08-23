@@ -291,13 +291,80 @@ test.describe("live indicators", () => {
     )
     expect(running).toContain("live-sweep")
 
-    // And that --angle is a REGISTERED angle. Unregistered, a custom property
-    // is an unanimatable string and the gradient would jump between keyframes
-    // instead of rotating — the animation would still be "running" and the
-    // border would still look wrong, so this half is not redundant.
-    const angle = await sweep.evaluate((el) =>
-      getComputedStyle(el).getPropertyValue("--angle").trim()
+    // …and that the ::after ACTUALLY SEES the sweep. This is the assertion that
+    // matters, and the one this test used to get wrong: it sampled --angle on
+    // the ELEMENT, which is where the animation runs and which was therefore
+    // never the broken half. The gradient is painted by the `live-border`
+    // ::after, and a pseudo-element does not inherit a NON-inheriting registered
+    // property from its originating element — so with the old
+    // `@property --angle { inherits: false }` the element swept 0→360deg while
+    // ::after sat at a flat 0deg and the border never moved. Registered,
+    // running, and invisible. Only the pseudo-element can tell us apart.
+    //
+    // Sampling the PAINTED gradient rather than just the custom property,
+    // because `background-image` is the thing the user's eye is actually
+    // reading — it resolves to `conic-gradient(from <angle>, …)`.
+    const paint = () =>
+      sweep.evaluate((el) =>
+        getComputedStyle(el, "::after").backgroundImage
+      )
+    const readAngle = (bg: string) => {
+      const m = bg.match(/from\s+(-?[\d.]+)deg/)
+      return m ? Number(m[1]) : null
+    }
+
+    const first = readAngle(await paint())
+    expect(first, "::after must paint a conic-gradient driven by --angle").not.toBeNull()
+
+    // 6s for 360deg is 60deg/s, so a 1s gap moves it ~60deg. Poll instead of
+    // sampling once: under load a single pair could land a full cycle apart,
+    // and any movement at all is what is being claimed.
+    let moved = false
+    for (let i = 0; i < 12 && !moved; i++) {
+      await page.waitForTimeout(150)
+      moved = readAngle(await paint()) !== first
+    }
+    expect(moved, "the countdown's conic border must actually rotate").toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The row stagger. Same failure shape as the countdown sweep, and it shipped
+// broken for the same reason: an animation that runs, and a value that never
+// reaches the element that needed it.
+//
+// `--animate-rise-in` is declared by @theme on :root, so a `var(--stagger-delay)`
+// written INSIDE that shorthand is substituted at :root — where the `stagger`
+// utility never sets it — and every row inherited the already-resolved 0ms
+// fallback. Every row animated, so the page looked animated; they just all
+// arrived at once, which is the one thing a stagger is for.
+//
+// Asserting distinct delays is what catches that. A test that only asked
+// "is rise-in running?" passed throughout.
+// ---------------------------------------------------------------------------
+test.describe("row stagger", () => {
+  test.use({ contextOptions: { reducedMotion: "no-preference" } })
+
+  test("staggered rows get distinct, capped animation delays", async ({ page }) => {
+    await signInAs(page, ACCOUNTS.approved)
+    await page.goto("/leaderboard")
+
+    const rows = page.locator("[class*='stagger']")
+    const count = await rows.count()
+    if (count < 3) test.skip(true, "not enough seeded rows to show a cascade")
+
+    const delays = await rows.evaluateAll((els) =>
+      els.map((el) => getComputedStyle(el).animationDelay)
     )
-    expect(angle).toMatch(/^-?[\d.]+deg$/)
+    console.log(`stagger delays: ${delays.slice(0, 8).join(", ")}`)
+
+    // The cascade exists at all — the whole bug was every row reading 0s.
+    expect(new Set(delays).size).toBeGreaterThan(1)
+    expect(delays[0]).toBe("0s")
+    expect(delays[1]).toBe("0.04s")
+
+    // And it is capped, so a long table still finishes inside the budget.
+    const ms = delays.map((d) => Number(d.replace("s", "")) * 1000)
+    expect(Math.max(...ms)).toBeLessThanOrEqual(240)
   })
 })

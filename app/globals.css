@@ -250,15 +250,56 @@
      token value, which is off-brand and can break contrast. */
   --ease-overshoot: cubic-bezier(0.34, 1.35, 0.64, 1);
 
-  /* The delay slot is a var so the `stagger` utility can fill it WITHOUT
-     depending on utility cascade order — a bare `animation-delay` utility
-     would be reset by this shorthand. In the `animation` shorthand the first
-     <time> is duration and the second is delay, so the order is load-bearing. */
-  --animate-rise-in: rise-in var(--dur-enter) var(--ease-entrance)
-    var(--stagger-delay, 0ms) both;
-  --animate-fade-in-soft: fade-in-soft var(--dur-base) var(--ease-standard)
-    var(--stagger-delay, 0ms) both;
+  /* NO delay slot in these shorthands, and that is the fix rather than the
+     oversight. They used to end `var(--stagger-delay, 0ms) both`, on the theory
+     that a var slot lets the `stagger` utility fill the delay without depending
+     on utility cascade order.
+
+     It cannot. A custom property is substituted in the scope where it is
+     DECLARED, and @theme declares these on :root — so `var(--stagger-delay)`
+     was resolved against :root, where nothing ever sets it, and every element
+     inherited the already-substituted fallback. The row cascade on
+     /leaderboard, /results, /my-bets and /admin/view was 0ms for every row
+     since it shipped: the rows animated, they just all arrived at once.
+     Measured: setting --stagger-delay on :root moved a row's computed
+     animation-delay to that value, while the element's own --stagger-delay —
+     the one the utility sets — did nothing.
+
+     So the delay is now a real `animation-delay` longhand on the `stagger`
+     utility, which is !important for the reason the original comment gave: an
+     !important longhand is the only thing that beats this shorthand whichever
+     order they land in. See @utility stagger below. */
+  --animate-rise-in: rise-in var(--dur-enter) var(--ease-entrance) both;
+  /* --dur-enter, not --dur-base: this is the route entrance, which the duration
+     table calls expressive. RouteFade used to chase that with a
+     `motion-safe:duration-enter` class, but `duration-*` sets transition-
+     duration and --tw-duration, neither of which retimes an `animation`
+     shorthand that already carries its own — so the route fade ran at 180ms
+     while the code said 320ms. The token carries it now and the dead class is
+     gone. */
+  --animate-fade-in-soft: fade-in-soft var(--dur-enter) var(--ease-standard)
+    both;
   --animate-stake-flash: stake-flash var(--dur-slow) var(--ease-out);
+
+  /* The placement celebration (BetCelebration). The FIRST call site of
+     --ease-overshoot, which has existed unused since this vocabulary shipped —
+     it was added for the expressive tier's one payoff moment and this is that
+     moment. Transform and opacity only, which is also why the overshoot is
+     legal here: the DS restricts that curve to transforms, because overshooting
+     a colour or an opacity overshoots past the token value.
+
+     The rotation is the joke. It lands slightly off-axis and rights itself,
+     so the card reads as tossed onto the screen rather than faded onto it —
+     and it settles once rather than oscillating, which is the damped-1.35
+     reconciliation with "no bounces".
+
+     Durations live INSIDE the shorthand, never as a `duration-*` class beside
+     an `animate-*` one. That combination is inert (see DESIGN_SYSTEM.md § 4);
+     it is what made the route fade run at 180ms while every comment said 320. */
+  --animate-celebrate-in: celebrate-in var(--dur-enter) var(--ease-overshoot)
+    both;
+  --animate-celebrate-out: celebrate-out var(--dur-exit) var(--ease-exit)
+    forwards;
 
   /* --- The two ongoing animations, and the rules that keep them honest -----
      Everything above is one-shot. These two repeat, which the brand otherwise
@@ -282,11 +323,25 @@
 
 /* Registering --angle as an actual angle is what makes the conic sweep
    animate: an unregistered custom property is a string to the interpolator, so
-   the gradient would jump between keyframes instead of rotating. */
+   the gradient would jump between keyframes instead of rotating.
+
+   `inherits: true` is the second half of that, and it is the half that was
+   wrong. The animation runs on the ELEMENT (`animate-live-sweep`) while the
+   gradient that reads --angle is painted by the `live-border` ::after. A
+   pseudo-element does not inherit a NON-inheriting registered property from its
+   originating element — it resolves to initial-value — so with `inherits:
+   false` the element's --angle swept 0→360deg exactly as designed and ::after
+   sat at a flat 0deg forever. Registered, animating, running, and completely
+   invisible. Measured: getComputedStyle(el) reported 249deg → 339deg while
+   getComputedStyle(el, "::after") reported 0deg → 0deg.
+
+   Nothing else in the app reads --angle, so inheriting it into the countdown's
+   cells costs nothing. e2e/motion.spec.ts now samples the PSEUDO-element, which
+   is the only reading that could have caught this. */
 @property --angle {
   syntax: "<angle>";
   initial-value: 0deg;
-  inherits: false;
+  inherits: true;
 }
 
 /* Keyframes live OUTSIDE @theme deliberately: Tailwind only emits keyframes
@@ -377,6 +432,36 @@
   }
   to {
     box-shadow: 0 0 0 3px rgba(253, 218, 0, 0);
+  }
+}
+
+/* The placement celebration's entrance and exit (see BetCelebration).
+   Deliberately asymmetric: 320ms in, 160ms out, on the house rule that old
+   content leaves fast rather than competing for attention.
+
+   `both` on the enter and `forwards` on the exit are both load-bearing.
+   Without a forwards fill the card snaps back to full opacity for the one
+   frame between animationend and React removing the node — the same bug the
+   error toast documents. */
+@keyframes celebrate-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.6) rotate(-7deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes celebrate-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.92);
   }
 }
 
@@ -636,18 +721,28 @@
   transition-duration: var(--dur-exit);
 }
 
-/* Per-item entrance delay, the CSS equivalent of Motion's stagger(). Sets
-   only a custom property, never animation-delay directly, so it is immune to
-   cascade order against `animate-rise-in` (whose shorthand would otherwise
-   reset the delay to 0). min() caps the cascade: at 40ms a step with a 240ms
-   ceiling, item 0 starts immediately and everything from the 6th on starts
-   together, so a 25-row leaderboard is fully in at 240 + 320 = 560ms no
-   matter how long it gets. Set --index inline from the map index. */
+/* Per-item entrance delay, the CSS equivalent of Motion's stagger(). min() caps
+   the cascade: at 40ms a step with a 240ms ceiling, item 0 starts immediately
+   and everything from the 6th on starts together, so a 25-row leaderboard is
+   fully in at 240 + 320 = 560ms no matter how long it gets. Set --index inline
+   from the map index.
+
+   The earlier version set only `--stagger-delay` and let the `--animate-rise-in`
+   shorthand read it, to dodge the cascade fight with that shorthand. That never
+   worked — @theme declares the shorthand on :root, so the var resolved there,
+   not here (see the note on --animate-rise-in above). A real longhand is the
+   only thing that reaches the element, and !important is what makes it beat the
+   shorthand regardless of which utility the stylesheet emits first.
+
+   The !important cannot escape the reduced-motion floor, which is the usual
+   worry with one: every call site writes `motion-safe:stagger`, so under
+   `prefers-reduced-motion: reduce` this rule is not applied at all and the
+   floor's `animation-delay: -1ms !important` is uncontested. */
 @utility stagger {
-  --stagger-delay: min(
+  animation-delay: min(
     calc(var(--index, 0) * var(--stagger-step)),
     var(--stagger-max)
-  );
+  ) !important;
 }
 
 /* Section-level page entrance: the direct children of a [data-enter-stagger]
