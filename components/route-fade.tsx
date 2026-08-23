@@ -39,10 +39,12 @@ import { usePathname } from "next/navigation"
 export function RouteFade({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   return (
-    <div
-      key={pathname}
-      className="motion-safe:animate-fade-in-soft motion-safe:duration-enter"
-    >
+    // The duration lives in --animate-fade-in-soft, not in a `duration-enter`
+    // class alongside it: `duration-*` sets transition-duration and Tailwind's
+    // --tw-duration, and neither retimes an `animation` shorthand that already
+    // carries its own. The class that used to be here was inert, and the fade
+    // ran at --dur-base while every comment around it said --dur-enter.
+    <div key={pathname} className="motion-safe:animate-fade-in-soft">
       {children}
     </div>
   )
