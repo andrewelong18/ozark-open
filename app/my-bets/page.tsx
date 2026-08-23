@@ -1,13 +1,14 @@
 import { createClient } from "@/lib/supabase/server"
 import Link from "next/link"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { StatCard } from "@/components/modules/stat-card"
+import { BudgetModule } from "@/components/modules/budget-module"
 import { EmptyState } from "@/components/modules/empty-state"
 import { LoadError } from "@/components/modules/load-error"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import { OddsChip } from "@/components/betting/odds-chip"
-import { checkTournamentTotal } from "@/lib/validation"
+import { checkPickMinimum, checkTournamentTotal } from "@/lib/validation"
 import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
 import { RulesCard } from "@/components/modules/rules-card"
 import { ComplianceBanner } from "@/components/modules/compliance-banner"
@@ -21,6 +22,7 @@ import {
   groupByPhase,
   normalizeMyBets,
   payoutSummary,
+  picksLine,
   type MyBetsQueryRow,
 } from "@/lib/my-bets"
 
@@ -141,6 +143,9 @@ export default async function MyBetsPage() {
   const totals = checkTournamentTotal(entries, entryFee)
   const myRules = buildRulesModel(participant, rules)
   const compliance = buildComplianceSummary(entries, entryFee, rules)
+  // §8.1 balanced: the exact total AND the pick minimum, same pair the
+  // dashboard used to compute for this bar.
+  const balanced = totals.exact && checkPickMinimum(entries, rules).meets_minimum
 
   // Theoretical payout rollup — shown once any pick has a result. Pushes
   // count inside the total; voids contribute 0 and surface as refunded.
@@ -164,30 +169,39 @@ export default async function MyBetsPage() {
         <p className="mt-0.5 text-sm text-text-muted">{tournament.name}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard
-          label="Total Wagered"
-          value={totals.total}
-          money
-          caption={`of your $${entryFee} entry`}
-        />
-        <StatCard
-          label="Remaining Budget"
-          value={totals.remaining}
-          money
-          caption="Across both phases"
-        />
-        {anyResolved && (
-          <StatCard
-            label="Theoretical Payout"
-            value={payouts.theoretical}
-            money
-            cents
-            caption={payoutCaption}
-            className="col-span-2"
+      {/* The budget bar, moved here from the dashboard. It replaces the Total
+          Wagered and Remaining Budget stat cards, which said the same two
+          numbers with no sense of how close together they were — and said them
+          a page away from the wagers that produced them. One bar carries both,
+          plus the per-phase pick counts and the balanced state. */}
+      <Card>
+        <CardContent className="flex flex-col gap-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-heading text-lg text-text-strong">
+              Your Budget
+            </div>
+            <Button variant="gold" size="sm" render={<Link href="/bets" />}>
+              Place Bets →
+            </Button>
+          </div>
+          <BudgetModule
+            wagered={totals.total}
+            entryFee={entryFee}
+            picksLine={picksLine(entries)}
+            balanced={balanced}
           />
-        )}
-      </div>
+        </CardContent>
+      </Card>
+
+      {anyResolved && (
+        <StatCard
+          label="Theoretical Payout"
+          value={payouts.theoretical}
+          money
+          cents
+          caption={payoutCaption}
+        />
+      )}
 
       {compliance.map((item) => (
         <ComplianceBanner key={item.title} tone={item.tone} title={item.title}>

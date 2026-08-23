@@ -49,7 +49,7 @@ staying that way.
 | **Social & engagement** | Public leaderboards, share, consensus %, contests | **Partial** — everyone's bets reveal at close (built-in transparency); no consensus, feed, or share |
 | **Trust & transparency** | Bet receipts, transaction history, clear rules surfaced | **Partial → improving** — odds snapshotted at placement; personalized rules card; locked-odds receipt on place/edit (Sprint 17) |
 | **Delight & gamification** | Streaks, badges, celebration animations | **Planned** — Jake celebration + motion vocabulary (Sprint 12); nothing shipped |
-| **Home / dashboard** | Personalized, countdowns, quick actions, next-best-action | **Have** — pool total, budget module, compliance banners; no countdown or next-action prompt |
+| **Home / dashboard** | Personalized, countdowns, quick actions, next-best-action | **Have** — pool total, entry, bets placed, a Place Bets action, and alerts / house rules / how-it-works as collapsed accordions (Aug 23, 2026); the budget module now lives on /my-bets beside the wagers it summarises. Countdown when admins enable it (#106); no next-action prompt |
 
 The honest read: Ozark is **strong on the parts unique to a pari-mutuel friend pool**
 (transparency reveal, exact-entry budgeting, cent-accurate payouts) and **thin on the
