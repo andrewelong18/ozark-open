@@ -55,6 +55,59 @@ test.describe("placement celebration", () => {
     await expect(page.getByRole("heading", { name: "Bet Menu" })).toBeVisible()
   })
 
+  // THE REGRESSION. This shipped broken: the clip played and nothing appeared.
+  //
+  // BetsMenu renders inside `<div data-enter-stagger>` on /bets, and that
+  // column runs `rise-in`, which animates a transform. A transformed element
+  // becomes the containing block for its `position: fixed` descendants, so
+  // `fixed inset-0` sized itself to the full height of the bet menu instead of
+  // the viewport and centred the card roughly 1400px below the fold. Measured
+  // in a reproduction: the overlay came out 3125px tall against a ~700px
+  // viewport. Chrome happened to hide it; Safari did not.
+  //
+  // Every assertion below is written so it fails on the ORIGINAL bug, and none
+  // of them depends on knowing the mechanism — the last one is just "can a
+  // human see it", which is the part that actually went wrong.
+  test("the card is actually on screen — not centred inside the bet menu", async ({
+    page,
+  }) => {
+    await stage(page, "bet-1", "Dan Mercer", "10")
+    await page.getByRole("button", { name: "Confirm bet" }).click()
+    await expect(card(page)).toHaveAttribute("data-state", "open")
+
+    // 1. It is portalled out of the menu. Anything else and an ancestor's
+    //    transform, filter, overflow or stacking context can reach it.
+    const parentIsBody = await card(page).evaluate(
+      (el) => el.parentElement === document.body
+    )
+    expect(parentIsBody).toBe(true)
+
+    // 2. `fixed inset-0` means the VIEWPORT, and this is the measurement that
+    //    caught it: hijacked, the overlay is as tall as the scrollable menu.
+    const box = await card(page).evaluate((el) => {
+      const r = el.getBoundingClientRect()
+      return { h: Math.round(r.height), vh: window.innerHeight }
+    })
+    expect(box.h).toBe(box.vh)
+
+    // 3. The one that needs no theory: the card the bettor is supposed to see
+    //    intersects the viewport.
+    const visible = await card(page)
+      .locator("video")
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect()
+        return (
+          r.width > 0 &&
+          r.height > 0 &&
+          r.top < window.innerHeight &&
+          r.bottom > 0 &&
+          r.left < window.innerWidth &&
+          r.right > 0
+        )
+      })
+    expect(visible).toBe(true)
+  })
+
   test("opens on a confirmed wager and closes itself, with no click", async ({
     page,
   }) => {
