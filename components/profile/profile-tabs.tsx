@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { ChevronRight } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Avatar } from "@/components/avatar"
@@ -10,15 +11,26 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ProfileForm } from "@/components/profile/profile-form"
-import { howItWorksCards } from "@/components/onboarding/how-it-works"
 
 // Self-serve profile, reorganized into tabbed sub-navigation (Your status ·
-// Personalize · How it works · Admin). The server page fetches everything and
-// passes it in; this component owns the tab state and pins Log out to the
-// bottom of every sub-page. Mirrors the clubhouse pill nav (components/site-nav)
-// so the second-level nav reads as part of the same system.
+// Personalize · Admin). The server page fetches everything and passes it in;
+// this component owns the tab state and pins Log out to the bottom of every
+// sub-page. Mirrors the clubhouse pill nav (components/site-nav) so the
+// second-level nav reads as part of the same system.
+//
+// "How it works" came out Aug 23, 2026: it restated the dashboard's own
+// walkthrough — same four cards from the same howItWorksCards() — one tab away
+// from a page nobody opens to read the rules. The dashboard accordion is the
+// one copy now.
 
-type Tab = "status" | "personalize" | "how-it-works" | "admin"
+type Tab = "status" | "personalize" | "admin"
+
+function toTab(value: string | undefined, isAdmin: boolean): Tab {
+  if (value === "personalize") return "personalize"
+  // Guarded: ?tab=admin from a non-admin must not render the admin menu.
+  if (value === "admin" && isAdmin) return "admin"
+  return "status"
+}
 
 type StatusModel = {
   isAdmin: boolean
@@ -35,8 +47,7 @@ export function ProfileTabs({
   avatarUrl,
   isAdmin,
   status,
-  minPicks,
-  maxPicks,
+  initialTab,
 }: {
   userId: string
   displayName: string
@@ -45,10 +56,10 @@ export function ProfileTabs({
   avatarUrl: string | null
   isAdmin: boolean
   status: StatusModel
-  minPicks: number
-  maxPicks: number
+  /** ?tab= from the server — how an admin page returns to the Admin menu. */
+  initialTab?: string
 }) {
-  const [tab, setTab] = useState<Tab>("status")
+  const [tab, setTab] = useState<Tab>(() => toTab(initialTab, isAdmin))
   const activeRef = useRef<HTMLButtonElement | null>(null)
 
   // Same rail, same fix as components/site-nav: an admin's four tabs overflow a
@@ -61,7 +72,6 @@ export function ProfileTabs({
   const tabs: { id: Tab; label: string }[] = [
     { id: "status", label: "Your status" },
     { id: "personalize", label: "Personalize" },
-    { id: "how-it-works", label: "How it works" },
     ...(isAdmin ? [{ id: "admin" as const, label: "Admin" }] : []),
   ]
 
@@ -120,9 +130,6 @@ export function ProfileTabs({
             initialAvatarUrl={avatarUrl}
           />
         )}
-        {tab === "how-it-works" && (
-          <HowItWorksPanel minPicks={minPicks} maxPicks={maxPicks} />
-        )}
         {tab === "admin" && isAdmin && <AdminPanel />}
       </div>
 
@@ -174,72 +181,75 @@ function StatusPanel({ status }: { status: StatusModel }) {
   )
 }
 
-function HowItWorksPanel({
-  minPicks,
-  maxPicks,
-}: {
-  minPicks: number
-  maxPicks: number
-}) {
-  const cards = howItWorksCards(minPicks, maxPicks)
-  return (
-    <div className="flex flex-col gap-3">
-      {cards.map((c) => {
-        const Icon = c.icon
-        return (
-          <Card key={c.title}>
-            <CardContent className="flex gap-3.5">
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-accent-gold text-accent-gold-foreground">
-                <Icon className="size-5" aria-hidden />
-              </span>
-              <div className="flex flex-col gap-1">
-                <div className="font-heading text-lg text-text-strong">
-                  {c.title}
-                </div>
-                <p className="text-sm leading-normal text-text-muted">
-                  {c.body}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )
-      })}
-    </div>
-  )
-}
+// Five pages, clean boundaries: people · menu · money · the clock · the
+// rulebook. Sprint 20 merged the old Participants and Roster buttons into
+// People; Sprint 25 added Close & Settle, the only one that matters on a
+// deadline; Sprint 23 added House Rules, the only one you should rarely need.
+//
+// Labels renamed Aug 23, 2026 to say what the page does rather than what it
+// is: "People" and "View All" told an admin standing in the clubhouse on
+// tournament night nothing about which one to tap. The page headings keep
+// their short names.
+const ADMIN_PAGES: { href: string; label: string; blurb: string }[] = [
+  {
+    href: "/admin/people",
+    label: "Manage Users and Entry Fees",
+    blurb: "Approve members, set entry fees, edit names, invite the rest.",
+  },
+  {
+    href: "/admin/import",
+    label: "Import Bets",
+    blurb: "Upload the spreadsheet to publish or update the menu.",
+  },
+  {
+    href: "/admin/view",
+    label: "Review All Bets",
+    blurb: "Every wager in the pool, the View sheet as the app sees it.",
+  },
+  {
+    href: "/admin/close",
+    label: "Close & Settle",
+    blurb: "Close a phase, publish results, settle the pool.",
+  },
+  {
+    href: "/admin/rules",
+    label: "Manage House Rules",
+    blurb: "Entry-fee bounds, bet caps and pick counts for this tournament.",
+  },
+]
 
 function AdminPanel() {
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3">
-        <div className="font-heading text-lg text-text-strong">Admin</div>
-        <p className="text-sm text-text-muted">
-          You&apos;re an admin. Manage the pool from here.
-        </p>
-        {/* Five pages, clean boundaries: people · menu · money · the clock ·
-            the rulebook. Sprint 20 merged the old Participants and Roster
-            buttons into People; Sprint 25 added Close & Settle, which is the
-            only one that matters on a deadline; Sprint 23 added House Rules,
-            which is the only one you should rarely need. */}
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" render={<Link href="/admin/people" />}>
-            People
-          </Button>
-          <Button variant="secondary" size="sm" render={<Link href="/admin/import" />}>
-            Import Bets
-          </Button>
-          <Button variant="secondary" size="sm" render={<Link href="/admin/view" />}>
-            View All
-          </Button>
-          <Button variant="secondary" size="sm" render={<Link href="/admin/close" />}>
-            Close &amp; Settle
-          </Button>
-          <Button variant="secondary" size="sm" render={<Link href="/admin/rules" />}>
-            House Rules
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-3">
+      <p className="text-sm text-text-muted">
+        You&apos;re an admin. Manage the pool from here.
+      </p>
+      {/* A list of destinations, not a toolbar: these are five separate pages,
+          and a row per page — full width, tap-sized, chevroned — says that in a
+          way a wrap of small buttons never did. */}
+      <nav className="flex flex-col gap-2">
+        {ADMIN_PAGES.map((page) => (
+          <Link
+            key={page.href}
+            href={page.href}
+            className="group flex min-h-16 items-center justify-between gap-3 rounded-xl border border-border bg-surface-card px-4 py-3 shadow-sm transition-colors duration-fast ease-standard hover:border-indigo-200 hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <span className="min-w-0">
+              <span className="block font-heading text-lg text-text-strong">
+                {page.label}
+              </span>
+              <span className="mt-0.5 block text-sm text-text-muted">
+                {page.blurb}
+              </span>
+            </span>
+            <ChevronRight
+              aria-hidden
+              className="size-5 shrink-0 text-text-muted transition-transform duration-fast ease-standard group-hover:translate-x-0.5"
+            />
+          </Link>
+        ))}
+      </nav>
+    </div>
   )
 }
 

@@ -3,14 +3,21 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { ProfileTabs } from "@/components/profile/profile-tabs"
 import { LoadError } from "@/components/modules/load-error"
-import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
 
 // Self-serve profile (Sprint 15; reorganized into tabbed sub-nav): the one
 // place a member sets their own nickname + photo and reads their own status.
 // For admins it's also the home of the admin entry point. This page is just
 // the data-fetching shell — the tabbed UI lives in <ProfileTabs>.
 
-export default async function ProfilePage() {
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>
+}) {
+  // ?tab=admin is how the five admin pages come back to the menu they were
+  // launched from. Resolved on the server so the right panel is in the first
+  // paint — a client-side hook would flash "Your status" first.
+  const { tab } = await searchParams
   const supabase = await createClient()
   const {
     data: { user },
@@ -51,7 +58,7 @@ export default async function ProfilePage() {
   // (#132) — same judgement call middleware.ts:62 documents.
   const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
-    .select(`id, name, status, ${TOURNAMENT_RULE_COLUMNS}`)
+    .select("id, name, status")
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -61,7 +68,6 @@ export default async function ProfilePage() {
   const tournament = tournamentData as
     | ({ id: string; name: string; status: string } & Record<string, unknown>)
     | null
-  const rules = tournament ? toTournamentRules(tournament) : null
 
   const { data: participantData, error: participantError } = tournament
     ? await supabase
@@ -93,14 +99,13 @@ export default async function ProfilePage() {
           nickname={profile?.nickname ?? null}
           avatarUrl={profile?.avatar_url ?? null}
           isAdmin={isAdmin}
+          initialTab={tab}
           status={{
             isAdmin,
             hasTournament: tournament !== null,
             participant,
             readyToBet,
           }}
-          minPicks={rules?.min_picks_per_tournament ?? 1}
-          maxPicks={rules?.max_picks_per_phase ?? 1}
         />
       </div>
 
