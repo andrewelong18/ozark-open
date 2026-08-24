@@ -180,9 +180,15 @@ export default async function MyBetsPage() {
             <div className="font-heading text-lg text-text-strong">
               Your Budget
             </div>
-            <Button variant="gold" size="sm" render={<Link href="/bets" />}>
-              Place Bets →
-            </Button>
+            {/* Gold is rationed to one marquee action per screen. With no
+                wagers yet the empty state below is already carrying that
+                action, and two identical gold buttons stacked is what a
+                phone screenshot of this page actually showed. */}
+            {entries.length > 0 && (
+              <Button variant="gold" size="sm" render={<Link href="/bets" />}>
+                Place Bets →
+              </Button>
+            )}
           </div>
           <BudgetModule
             wagered={totals.total}
