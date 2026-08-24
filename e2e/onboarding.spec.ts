@@ -41,9 +41,6 @@ test("a new member is forced through onboarding and lands view-only", async ({ p
   await page.getByRole("button", { name: "Start betting" }).click()
   await expect(page).toHaveURL(/\/bets/)
 
-  // Their chosen name took, and it's the name the app now calls them.
-  await expect(page.getByRole("link", { name: /Nate Newbie/ })).toBeVisible()
-
   // Registered, not yet approved: the menu is browsable and inert.
   await expect(
     page.getByText(/an admin just needs to approve you before you can place bets/)
@@ -54,6 +51,14 @@ test("a new member is forced through onboarding and lands view-only", async ({ p
   // The assertion with teeth: no way in to the money.
   await expect(page.getByRole("button", { name: "Place stake" })).toHaveCount(0)
   await expect(page.getByRole("textbox")).toHaveCount(0)
+
+  // Their chosen name took, and it's the name the app now calls them. Read off
+  // /profile since the header stopped carrying it: the top-right name cluster
+  // became a "Profile" nav pill wearing their avatar, and a pill that said
+  // their name would be the widest thing on the rail.
+  await page.locator("header").getByRole("link", { name: "Profile" }).click()
+  await page.waitForURL("**/profile")
+  await expect(page.getByText("Nate Newbie").first()).toBeVisible()
 })
 
 test("re-visiting onboarding once you're done just sends you on", async ({ page }) => {
