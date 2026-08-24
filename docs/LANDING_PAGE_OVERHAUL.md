@@ -1,6 +1,7 @@
 # Landing Page Overhaul — Context & Preferences
 
-**Status:** collecting context (not yet a sprint, not yet a plan).
+**Status:** direction approved Aug 24, 2026 (Item 2). Blocked on assets — not
+yet a sprint, not yet an implementation plan.
 **Scope:** `ozark-open.com` root route only — the logged-out marketing page at
 [`app/page.tsx`](../app/page.tsx). Everything behind login is out of scope
 unless a context item below says otherwise.
@@ -10,6 +11,10 @@ written **incrementally, one context item at a time**, in the order the items
 arrive. When the collection phase ends, this doc — plus
 `docs/DESIGN_SYSTEM.md` and the `ozark-open-design` skill — is the brief the
 implementation works from. Nothing here is built until the brief is closed.
+
+Item 1 is a reference Andrew supplied. **Item 2 is the decision log** — 24
+research recommendations with his verdict on each — and is the operative
+section. Where the two disagree, Item 2 wins.
 
 ---
 
@@ -99,22 +104,313 @@ survives without the chat thread.
 
 ---
 
+### Item 2 — Approved design direction (research pass, Aug 24, 2026)
+
+A research pass across golf brand and resort sites, event/conference sites, the
+scroll-animation technique literature, and the browser constraints on audio
+produced 24 recommendations. Andrew's verdicts are recorded below: **18
+approved, 3 revised or partially superseded, 3 rejected.** Everything in this
+item is decided unless a row says otherwise.
+
+#### The finding that reframed the brief
+
+The golf-site sweep was mostly a **negative result**. Sand Valley, Cabot,
+Ohoopee, TGL and Manors are all *inventory marketing* — courses as products,
+"Explore Course", "Plan Your Trip", carousels, press accolades. None of it maps
+to a private tournament that sells nothing and has no inventory. The one
+transferable lesson came from Ohoopee, and it inverts the expectation: a real
+members-only club's homepage is a photo slider and a "Contact Us". **Restraint
+is the exclusivity signal.** Resort sites market because they need strangers;
+the Ozark Open has ~32 invited men who already know exactly what this is.
+
+So the genre is wrong. This is not a golf site. It is an **annual event site**:
+dates, venue, schedule, edition, one entry action. That reframe drives the
+section architecture below.
+
+#### Verdict table
+
+| # | Recommendation | Verdict |
+|---|---|---|
+| 1 | Front-of-house / back-of-house doctrine | ✅ Approved |
+| 2 | Ceremony, not persuasion | ✅ Approved |
+| 3 | Budget is free on cost, not on time | ✅ Approved |
+| 4 | Five beats, one idea per viewport | ⚠️ **Revised** — collapsed to three |
+| 5 | Lead with the Roman numeral, not "5th Annual" | ❌ **Rejected** — say "5th Annual" |
+| 6 | The agenda is a scorecard, not a timeline | ✅ Approved |
+| 7 | Honours board of past champions | ❌ **Rejected** — no names of people |
+| 8 | Location as a drawn map, not photography | ✅ Approved *(see note)* |
+| 9 | Cut the three sportsbook explainer cards | ✅ Approved |
+| 10 | The CTA is a door, not a button | ✅ Approved |
+| 11 | Scroll-expansion **without** hijacking scroll | ✅ Approved |
+| 12 | GSAP ScrollTrigger over framer-motion, if JS at all | ✅ Approved |
+| 13 | Split the wordmark, not a sentence | ✅ Approved |
+| 14 | No scroll-scrubbed video in v1 | ✅ Approved |
+| 15 | Two parallax planes maximum | ✅ Approved |
+| 16 | Reduced motion designed as a poster | ✅ Approved |
+| 17 | Hide the app header on `/` until first scroll | ✅ Approved |
+| 18 | Autoplay-with-sound is impossible; scroll is not a gesture | ✅ Approved |
+| 19 | The first tap is the door | ✅ Approved — **chosen audio path** |
+| 20 | Fallback: muted autoplay + corner toggle | ⚠️ **Partially superseded** by 19 |
+| 21 | Cut the theme to a 10–15s loop | ❌ **Rejected** — full track |
+| 22 | Four years of bad phone footage is the best asset | ✅ Approved |
+| 23 | One typeface doing something extraordinary | ⚠️ **Revised** — wrong palette |
+| 24 | Film grain at ~3% over the video | ✅ Approved |
+
+> **Note on #8.** Andrew's written comment numbered "8" is about tournament
+> format, which is the Format beat, not the map. The map recommendation was
+> filed as approved under his blanket "everything else I agree to". If that
+> was not the intent, this is the row to correct.
+
+---
+
+#### A. Doctrine
+
+**1. Front of house / back of house.** `ozark-open-design` bans what this page
+needs: *"Flat warm cream — no gradients, no imagery, no textures"*, single
+light theme, motion "rationed like gold". Rather than quietly break the DS,
+the exception is written as a rule: **the landing page is the clubhouse
+entrance; the app is the book.** Cinema is permitted on `/` and stops dead at
+`/login`. Without this the whole direction is a DS violation, and worse, the
+exception leaks into the app over time.
+
+This doctrine got sharper with decision 23 below: the split is not merely
+"cinematic vs. flat", it is **two distinct brand systems**. See §E.
+
+**2. Ceremony, not persuasion.** Nobody arrives asking what the Ozark Open is.
+That kills the entire benefits-and-features vocabulary — which is exactly what
+`app/page.tsx` currently ships (three explainer cards). Replace persuasion with
+*announcement*: the register of a pairings sheet or a fight card.
+
+**3. The budget is free on cost, not on time.** ~32 users means bandwidth and
+Vercel cost are non-issues; a 15MB hero video is affordable. But the DS says
+these users are *"on phones, outdoors, in sunlight"*, so the real constraint is
+the first 800ms on LTE. **The poster is the LCP element and the video is
+progressive enhancement** — the research consensus is that autoplay hero video
+is the top cause of LCP failure. Everything after the poster is free.
+
+#### B. Section architecture
+
+**4 (revised). Three beats, not five.** Andrew combined beats 1+2 and 3+4:
+
+| Beat | Contains | Notes |
+|---|---|---|
+| **A. The Announcement** | Tournament logo/mark · "5th Annual" · dates · location | Was two beats. Identity and the when/where now land together. |
+| **B. The Card** | Three days, three courses, and the **tournament format** per round | Was two beats. The scorecard *is* the format section. |
+| **C. Entry** | The sportsbook lead-in and the login | Terminal, full-viewport. |
+
+Nothing else. No feature grid, no testimonials, no FAQ.
+
+**5 (rejected). The page says "5th Annual" plainly.** The recommendation was to
+set a giant Roman **V** and let the numeral carry the edition, on the grounds
+that "5th Annual" in a subhead is the generic version. Andrew disagrees and
+wants it stated. **Decision: "5th Annual" appears as words on the page.** How
+it is set typographically is still open, but the numeral-only treatment is off
+the table.
+
+**6. The agenda is a scorecard.** The highest-value structural idea that
+survived. Golf's own typographic artifact for "three rounds" is the scorecard:
+ruled, tabular, numerals aligned. The DS already mandates tabular figures and
+describes the aesthetic as *"squared-ish, for a tabular, sportsbook feel"*.
+Rounds render as a ruled card — Round · Date · Course · Format. Three feature
+cards with icons is what every generic site does, and what the current page
+does. A scorecard is what makes a golfer feel this was built by a golfer.
+
+**7 (rejected). No honours board, and no names of people anywhere on the page.**
+The proposal was an engraved list of the four previous champions. Andrew: *"I
+don't want any specific names of people on this page."* Treat this as a
+**standing rule for the landing page**, not just a no on this section — it also
+rules out rosters, quotes, attributed copy and champion callouts. Consequence:
+with the honours board gone, the plain "5th Annual" statement from decision 5 is
+now the *only* thing establishing the tournament's history. It has to carry that
+weight alone.
+
+**8. Location as a drawn map.** Three courses plotted as three points on a
+minimal vector map, drawn from real coordinates. This also solves the asset
+problem: there is no course photography, and the alternative is generic stock
+golf imagery, which would undo everything else here.
+
+**The Format (revises beat B and reinforces 9).** Andrew: *"The format should
+not focus on the Ozark Open Sportsbook, it should focus on the tournament
+format (stroke play, scramble day, etc.)... I only want enough to promote the
+sportsbook as the lead in to the call to action, in which we explain the
+sportsbook after authenticating."*
+
+- The Format content is **golf**: stroke play, scramble day, and whatever else
+  each round runs. Andrew will supply the specifics.
+- The **sportsbook is not explained on this page.** It gets only enough to
+  motivate the login, immediately before the CTA.
+- The full sportsbook explanation lives **after authentication**. That is a
+  scope note for a later sprint: something behind login has to do the
+  explaining that this page is no longer doing.
+
+**9. Cut the three explainer cards.** Pari-mutuel / bet the tournament /
+invite-only all go. *"No house, no rake, no profit"* survives as the sportsbook
+lead-in above the CTA, since it is the best line available and does the job in
+six words.
+
+**10. The CTA is a door.** Login is the only action, so it earns a full terminal
+viewport rather than a button inside a hero. Gold once, at the end — which
+keeps the DS's one-gold-moment rule intact rather than breaking it.
+
+#### C. Motion and scroll
+
+**11. Reproduce the scroll-expansion effect without hijacking scroll.** The
+important technical decision. `position: sticky` + `animation-timeline:
+view()/scroll()` gives the exact choreography of the Item 1 component (media
+expands, background fades, title halves split) driven by *real* scroll position:
+no wheel interception, keyboard scrolling works, no dependency, compositor
+threaded. The Item 1 component is a textbook scrolljack — it calls
+`window.scrollTo(0, 0)` on every scroll event until the animation completes.
+NN/g research (via secondary sources) finds most participants become at least
+mildly disoriented by scrolljacking, and it conflicts with assistive tech and
+reduced-motion settings.
+
+Independently corroborated by the newly installed `design-taste-frontend` skill,
+whose §5.D bans `window.addEventListener("scroll", ...)` outright and prescribes
+`animation-timeline: view()` or ScrollTrigger instead.
+
+Support is ~84%; Firefox stable still had it behind a flag as of June 2026 →
+wrap in `@supports`, fallback is the static composition.
+
+**12. If JS is needed, GSAP ScrollTrigger — not framer-motion.** Pinning is
+native to ScrollTrigger. GSAP core ~23KB gzipped plus ScrollTrigger; Motion ~32KB
+full, ~4.6KB with the `LazyMotion`+`m` pattern. Note `framer-motion` is
+deprecated in name (the package is now `motion`), and in the Item 1 source it
+only performs opacity fades that CSS does for free.
+
+**13. Split the wordmark, not a sentence.** The Item 1 signature move applied to
+a generic headline is a stock effect; applied to the tournament wordmark parting
+to reveal the course behind it, it is a brand moment. Same code, different
+result.
+
+**14. No scroll-scrubbed video in v1.** Backward scrubbing of `<video>` is
+unreliable across codecs and devices; canvas image sequences (the Apple
+approach) are reliable but heavy and complex. Ship a plain muted looping
+`<video>` behind the poster and let scroll drive only transform/opacity of the
+layers above it.
+
+**15. Two parallax planes maximum.** Background at 10–20% of scroll rate,
+foreground at 100%. Five-layer dioramas read as 2014.
+
+**16. Design the reduced-motion version as a poster.** Opt-in pattern: base CSS
+*is* the final composed state, animation added only inside `@media
+(prefers-reduced-motion: no-preference)`. Avoids a flash of animated content
+and forces the still frame to be a composition worth printing.
+
+**17. Hide the app header on `/` until first scroll.** Full-bleed cinema with a
+nav bar on top of it is the tell that a template was used.
+
+#### D. Audio
+
+**18. Autoplay with sound is impossible — plan around it.** Verified: the
+activation-triggering events are `click`, `keydown`, `pointerdown`/`pointerup`,
+`touchend`, and **scroll and swipe explicitly do not count**. Muted autoplay is
+always allowed. "The theme plays on landing" cannot literally happen on first
+load in Chrome or Safari. Any plan assuming otherwise fails silently for every
+visitor.
+
+**19. The first tap is the door — chosen path.** The page opens on a held frame
+(mark, "5th Annual", *"Tap to enter"*) and that one tap simultaneously starts
+the theme, unlocks the hero, and begins the scroll sequence. A gesture is
+required anyway; this makes the browser restriction feel like a velvet rope. It
+is also the correct read of the product: an invite-only clubhouse should make
+you knock. Andrew: *"I'm good with the first click being used to enter the site
+first to trigger it."*
+
+**20 (partially superseded).** 19 and 20 were alternatives, and 19 won, so the
+"muted autoplay with no gate" variant is **dead**. What survives from 20 and
+still applies: a **persistent, visible, keyboard-reachable mute control**
+(equalizer-bars affordance), and no restart of audio on client-side navigation.
+
+**21 (rejected). The full track plays, not a loop cut.** The recommendation was
+a 10–15s seamless loop. Andrew: *"I want the full track to play until the user
+logs in."* Implications to handle at build time:
+
+- The track is a **larger asset**. It must be fetched **after** the entry tap,
+  never on initial load, so it cannot touch LCP.
+- "Until the user logs in" means the audio has to **survive the route change to
+  `/login`**. A full-page navigation kills it; keeping it alive means the audio
+  element lives in a shared layout and `/login` is reached by client-side
+  navigation. This is a real architectural constraint on how the CTA is wired,
+  not a detail.
+- No loop is needed, but decide what happens if the track **ends** before the
+  user logs in: stop, or loop from the top.
+
+#### E. Craft
+
+**23 (revised). The landing page is branded to the tournament, not the
+sportsbook.** The recommendation assumed Azalea in indigo on cream. Andrew: *"There
+is a different color palette for the Ozark Open that is different than the
+sportsbook. It is more green than blue/indigo. I will provide this and the
+tournament logo to you at some point."*
+
+This is the most consequential correction of the pass, because it upgrades
+decision 1 from a styling exception into a **brand boundary**:
+
+| | Front of house — `/` | Back of house — the app |
+|---|---|---|
+| Brand | **Ozark Open tournament** | Ozark Open **Sportsbook** |
+| Palette | Green-led *(pending)* | Indigo `#312F8C` + rationed gold |
+| Mark | Tournament logo *(pending)* | `ozark-mark.svg` / wordmark |
+| Register | Cinematic, dark-capable | Flat cream, sunlight-legible |
+
+The underlying principle from 23 still holds — **one typeface doing something
+extraordinary beats five effects** — but whether that face is Azalea depends on
+the tournament logo. Do not assume the sportsbook type stack carries over.
+
+**22. The most valuable possible asset is four years of bad phone footage.**
+Grainy, handheld, badly-lit clips of actual prior Ozark Opens, cut short,
+desaturated, silent under the theme, will read as far higher taste than any
+drone-shot stock golf video, because it is real and unrepeatable. Polished stock
+would actively cheapen everything above. Note this does not conflict with
+decision 7 as long as no one is *named*; if faces are identifiable that is worth
+a second look.
+
+**24. Film grain at ~3% over the video.** The DS bans textures in-app for
+sunlight legibility, which is irrelevant here. Grain is the cheapest thing that
+makes video feel authored rather than licensed.
+
+---
+
+#### Assets Andrew owes before this can be built
+
+1. **The tournament color palette** (green-led) and the **tournament logo** — blocks 23, and with it most of the visual direction.
+2. **The three courses, three dates, and the format per round** (stroke play, scramble, etc.) — blocks beat B entirely; the scorecard is only as good as this data.
+3. **Any footage or photography from the first four years** — decides whether the hero is cinematic or typographic. Both can be excellent; they are different designs.
+4. **The theme track**, full length, plus a decision on what happens when it ends.
+
+---
+
 ## Open questions
 
-Carried forward until answered; each becomes a decision line above.
+Carried forward until answered. The Item 1 questions are now mostly resolved by
+Item 2; what remains is listed here.
 
-1. **Adopt or borrow?** Is Item 1 the hero we build, or a mood reference for
-   "big, cinematic, scroll-reactive"?
-2. **Client JS budget.** Is a ~30–50KB animation dependency acceptable on the
-   logged-out page, or should the effect be CSS/`scroll-timeline`-only?
-3. **Media.** What actually fills the hero — course photography, tournament
-   video, trophy/mark animation? Who supplies it?
-4. **Does the CTA still come first?** A scroll-locked hero puts the login
-   button below an animation. Acceptable for an invite-only crowd, or not?
-5. **Reduced motion / keyboard / mobile fallbacks.** What does the page do for
-   someone who can't or won't scroll through it?
-6. **Does anything else on the page change** — the three cards, the countdown
-   (`components/countdown.tsx`), the footer — or is this hero-only?
+1. **Adopt or borrow the Item 1 hero?** Resolved in principle by decision 11 —
+   the *choreography* is adopted, the *implementation* is not. Still open: does
+   the media that expands hold footage (decision 22) or typography?
+2. **Client JS budget.** Decision 11 prefers CSS scroll-driven animation with no
+   dependency. Only if that proves insufficient does decision 12 apply. Not yet
+   tested against a real composition.
+3. **What is the tournament brand?** Blocked on the palette and logo. See Item 2 §E.
+4. **What happens when the theme track ends** before the user logs in — stop, or
+   loop? See decision 21.
+5. **Does the theme survive the route change to `/login`?** Decision 21 requires
+   it. Confirm the CTA is client-side navigation and the audio element lives in a
+   shared layout, or accept that the music stops at the login page.
+6. **Repeat visits.** The full track starting over on every visit may irritate
+   rather than delight. Does the entry gate remember that this browser has
+   already been let in?
+7. **The em-dash question.** The newly installed `design-taste-frontend` skill
+   (§9.G) bans `—` and `–` outright in shipped page copy, calling it the single
+   biggest AI tell. Current brand copy uses them (`September 24–26, 2026`).
+   Unresolved: does the landing page adopt the ban? This affects copy only, not
+   these docs.
+8. **Identifiable faces in footage.** Decision 7 bans names. If prior-year
+   footage shows recognisable people, confirm that is still acceptable.
+9. **Where does the sportsbook get explained now?** Decision 9 and the Format
+   note move that job to after authentication. Nothing behind login currently
+   does it. Likely a separate sprint item.
 
 ---
 
