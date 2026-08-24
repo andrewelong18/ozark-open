@@ -1,4 +1,5 @@
 import { requireAdminPage } from "@/lib/admin-gate"
+import { AdminBackLink } from "@/components/admin/admin-back-link"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { EmptyState } from "@/components/modules/empty-state"
@@ -71,6 +72,7 @@ export default async function AdminPeoplePage() {
     console.error("[admin/people] tournament read failed:", tournamentError.message)
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
+        <AdminBackLink />
         <h1 className="font-heading text-3xl leading-tight text-text-strong">
           People
         </h1>
@@ -88,6 +90,7 @@ export default async function AdminPeoplePage() {
   if (!tournament) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
+        <AdminBackLink />
         <h1 className="font-heading text-3xl leading-tight text-text-strong">
           People
         </h1>
@@ -132,6 +135,7 @@ export default async function AdminPeoplePage() {
     console.error("[admin/people] roster read failed:", rosterError.message)
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
+        <AdminBackLink />
         <h1 className="font-heading text-3xl leading-tight text-text-strong">
           People
         </h1>
@@ -158,6 +162,7 @@ export default async function AdminPeoplePage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
+      <AdminBackLink />
       <div>
         <h1 className="font-heading text-3xl leading-tight text-text-strong">
           People

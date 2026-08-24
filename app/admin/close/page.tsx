@@ -10,6 +10,7 @@ import {
   TOURNAMENT_RULE_COLUMNS,
 } from "@/lib/placements"
 import type { ExistingPlacement } from "@/lib/validation"
+import { AdminBackLink } from "@/components/admin/admin-back-link"
 
 // /admin/close (Sprint 25 / #108) — the two most time-critical moments of the
 // tournament, which both used to require database access:
@@ -173,6 +174,7 @@ export default async function AdminClosePage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
+      <AdminBackLink />
       <div>
         <h1 className="font-heading text-3xl leading-tight text-text-strong">
           Close &amp; settle

@@ -1,5 +1,6 @@
 import { requireAdminPage } from "@/lib/admin-gate"
 import { ImportForm } from "@/components/admin/import-form"
+import { AdminBackLink } from "@/components/admin/admin-back-link"
 
 // The one custom admin page in v1 (ADR 0001 §7): publish and update the bet
 // menu by uploading the admin's spreadsheet. Non-admins get a 404 — the page
@@ -12,6 +13,7 @@ export default async function AdminImportPage() {
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
+      <AdminBackLink />
       <div>
         <h1 className="font-heading text-3xl leading-tight text-text-strong">
           Import Bets

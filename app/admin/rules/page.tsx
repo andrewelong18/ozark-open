@@ -3,6 +3,7 @@ import { requireAdminPage } from "@/lib/admin-gate"
 import { LoadError } from "@/components/modules/load-error"
 import { RulesForm } from "@/components/admin/rules-form"
 import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
+import { AdminBackLink } from "@/components/admin/admin-back-link"
 
 // /admin/rules (Sprint 23 / #100) — the house rules, editable from the app.
 //
@@ -41,6 +42,7 @@ export default async function AdminRulesPage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
+      <AdminBackLink />
       <div>
         <h1 className="font-heading text-3xl leading-tight text-text-strong">
           House Rules
