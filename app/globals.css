@@ -911,3 +911,522 @@
   -webkit-mask-image: none;
   mask-image: none;
 }
+
+/* ===================================================================
+   Ozark Open TOURNAMENT brand — landing page only.
+
+   This is the "front of house" layer from docs/LANDING_PAGE_OVERHAUL.md
+   (Item 2, decision 1). The tournament is a different brand from the
+   sportsbook: forest green and gold, dark, cinematic. The sportsbook is
+   indigo, cream, flat, sunlight-legible.
+
+   Everything here is scoped under `.ozk` so it cannot leak into the app.
+   Nothing in this block touches `:root`.
+
+   COLOURS ARE PROVISIONAL. They are read visually from the logo art, not
+   sampled from source files (the logos arrived as chat attachments and were
+   never on disk). Swapping them is a one-line edit per token below.
+   =================================================================== */
+
+.ozk {
+  /* Brand, provisional. See Item 3.2. */
+  --ozk-green: #00693e;
+  --ozk-green-mid: #005432;
+  --ozk-gold: #fdda00;
+  --ozk-cream: #f4f1e6;
+
+  /* Page ground. Deep green-black, never pure #000 (taste skill 9.A). */
+  --ozk-ink: #071a12;
+  --ozk-ink-2: #0b2418;
+
+  /* Text roles on the dark ground. */
+  --ozk-text: #f4f1e6;
+  --ozk-text-dim: #a9bdb0;
+  --ozk-rule: rgba(244, 241, 230, 0.16);
+
+  background-color: var(--ozk-ink);
+  color: var(--ozk-text);
+  font-family: var(--font-sans);
+
+  /* One radius system for the whole page: sharp. Engraved plates do not
+     have rounded corners (taste skill 4.4, shape consistency lock). */
+  --ozk-radius: 0px;
+}
+
+/* The app header is chrome. A full-bleed hero with a nav bar sitting on top
+   of it is the tell that a template was used (decision 17). No JS and no
+   layout change: the landing page is the only route that renders `.ozk`. */
+body:has(.ozk) > header,
+body:has(.ozk) header {
+  display: none;
+}
+
+.ozk-display {
+  font-family: var(--font-cormorant), Georgia, "Times New Roman", serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.04;
+}
+
+/* ---------- Beat A: the announcement ---------- */
+
+.ozk-hero {
+  position: relative;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+/* The aerial is a CSS background rather than <Image> on purpose: the file is
+   not in the repo yet, and a missing background silently shows the green
+   ground beneath instead of a broken image box. Drop the photo at the path
+   below and the hero lights up with no code change. */
+.ozk-hero-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  transform-origin: center;
+  background-image: url("/tournament/old-kinderhook-aerial.jpg");
+  background-size: cover;
+  background-position: center 40%;
+}
+
+/* Scrim. The aerial is a bright daylight photo and the logo green is deep
+   forest; ungraded they fight. This grades the photo down in the browser
+   so the type has a ground to sit on (Item 3.3). */
+.ozk-hero-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(to bottom, rgba(7, 26, 18, 0.5) 0%, rgba(7, 26, 18, 0.12) 42%, rgba(7, 26, 18, 0.86) 100%),
+    linear-gradient(to right, rgba(0, 67, 42, 0.28), rgba(0, 67, 42, 0.1));
+}
+
+/* Film grain. Fixed and pointer-events:none so it never repaints on scroll
+   (taste skill 6.E). Decision 24. */
+.ozk-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.ozk-hero-inner {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding: 0 1.25rem;
+}
+
+.ozk-eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--ozk-gold);
+  font-weight: 600;
+}
+
+/* The wordmark parts on scroll. This is decision 13: the signature move from
+   the reference component applied to the brand's own name rather than to a
+   generic headline. */
+.ozk-wordmark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.02em;
+  margin: 0.6rem 0 0;
+  font-size: clamp(2.75rem, 12vw, 8.5rem);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  /* Uppercase has no descenders, but the line box still needs room or the
+     cap-height crowds whatever sits under the wordmark. */
+  line-height: 1.12;
+}
+
+.ozk-word {
+  display: block;
+  will-change: transform;
+}
+
+.ozk-meta {
+  margin-top: 1.75rem;
+  font-size: clamp(0.95rem, 2.4vw, 1.15rem);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ozk-text);
+}
+
+.ozk-meta-sub {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ozk-text-dim);
+}
+
+/* ---------- Shared section furniture ---------- */
+
+.ozk-section {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: clamp(5rem, 14vh, 9rem) 1.25rem;
+}
+
+.ozk-h2 {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  margin: 0 0 2.5rem;
+}
+
+/* ---------- Beat B: the card ---------- */
+
+.ozk-card {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.ozk-card th {
+  font-size: 0.68rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ozk-text-dim);
+  padding: 0 0 0.9rem;
+  border-bottom: 1px solid var(--ozk-rule);
+}
+
+.ozk-card td {
+  padding: 1.5rem 0;
+  border-bottom: 1px solid var(--ozk-rule);
+  vertical-align: baseline;
+}
+
+.ozk-card tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Tabular figures so 24 / 25 / 26 run in lockstep down the column. The DS
+   mandates this for all numerals and the card is the reason why (Item 4.1). */
+.ozk-day {
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(1.6rem, 5vw, 2.4rem);
+  line-height: 1;
+  color: var(--ozk-gold);
+}
+
+.ozk-dow-top {
+  margin-top: 0;
+  margin-bottom: 0.45rem;
+}
+
+.ozk-dow {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ozk-text-dim);
+  margin-top: 0.5rem;
+  font-family: var(--font-sans);
+}
+
+.ozk-course {
+  font-size: clamp(1.05rem, 3vw, 1.45rem);
+  color: var(--ozk-text);
+}
+
+.ozk-town {
+  display: block;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: var(--ozk-text-dim);
+  margin-top: 0.35rem;
+  font-family: var(--font-sans);
+}
+
+/* Mobile: the venue name is the widest cell by a wide margin (Item 4.1), so
+   the row stacks rather than squeezing three columns onto a phone. */
+@media (max-width: 640px) {
+  .ozk-card,
+  .ozk-card tbody,
+  .ozk-card tr,
+  .ozk-card td {
+    display: block;
+    width: 100%;
+  }
+  .ozk-card thead {
+    display: none;
+  }
+  .ozk-card tr {
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--ozk-rule);
+  }
+  .ozk-card tr:last-child {
+    border-bottom: 0;
+  }
+  .ozk-card td {
+    padding: 0;
+    border-bottom: 0;
+  }
+  .ozk-card td + td {
+    margin-top: 0.75rem;
+  }
+}
+
+/* ---------- The sponsor strip ---------- */
+
+/* Played straight. It is a real sponsor bar for a joke sponsorship, and the
+   deadpan is what makes it land (Item 3.4). */
+.ozk-strip {
+  border-top: 1px solid var(--ozk-rule);
+  border-bottom: 1px solid var(--ozk-rule);
+  background: var(--ozk-ink-2);
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+}
+
+.ozk-strip-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ozk-text-dim);
+}
+
+.ozk-strip-name {
+  margin-top: 0.5rem;
+  font-size: clamp(0.95rem, 2.6vw, 1.2rem);
+  letter-spacing: 0.06em;
+  color: var(--ozk-text);
+}
+
+/* ---------- Beat C: entry ---------- */
+
+.ozk-entry {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 4rem 1.25rem;
+}
+
+.ozk-creed {
+  font-size: clamp(1.5rem, 5vw, 2.75rem);
+  color: var(--ozk-text);
+  margin: 0 0 2.5rem;
+}
+
+.ozk-cta {
+  display: inline-block;
+  background: var(--ozk-gold);
+  color: #1a1600;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1.15rem 2.75rem;
+  border-radius: var(--ozk-radius);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+/* The label is the brand's own line and stays intact, so the button adapts
+   instead: full width and tighter tracking on a phone, where "LOG IN TO PLACE
+   YOUR BETS" at desktop metrics runs past the right edge. */
+@media (max-width: 640px) {
+  .ozk-cta {
+    display: block;
+    width: 100%;
+    padding: 1.15rem 1rem;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+  }
+}
+
+.ozk-cta:hover {
+  background: #ffe642;
+}
+
+.ozk-cta:active {
+  transform: translateY(1px);
+}
+
+.ozk-cta:focus-visible {
+  outline: 3px solid var(--ozk-cream);
+  outline-offset: 3px;
+}
+
+.ozk-footnote {
+  margin-top: 1.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ozk-text-dim);
+}
+
+/* ---------- Motion ----------
+   Everything below is opt-in: the base styles above are the finished state,
+   and motion is added only when the user has not asked for less (decision 16,
+   taste skill 6.B). No scroll listeners anywhere; this is all compositor
+   driven (decision 11, taste skill 5.D). */
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    /* The wordmark parts as the first viewport scrolls. Storytelling: the
+       curtain opens on the tournament. */
+    .ozk-word-a,
+    .ozk-word-b {
+      animation: ozk-part linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 90vh;
+    }
+    .ozk-word-b {
+      animation-name: ozk-part-b;
+    }
+
+    /* The photo settles in as the type clears. */
+    .ozk-hero-media {
+      animation: ozk-settle linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 90vh;
+    }
+
+    /* Sections arrive as they enter. Hierarchy: one idea at a time. */
+    .ozk-reveal {
+      animation: ozk-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 5% entry 55%;
+    }
+  }
+}
+
+@keyframes ozk-part {
+  to {
+    transform: translateX(-14vw);
+    opacity: 0.15;
+  }
+}
+
+@keyframes ozk-part-b {
+  to {
+    transform: translateX(14vw);
+    opacity: 0.15;
+  }
+}
+
+@keyframes ozk-settle {
+  from {
+    transform: scale(1.12);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes ozk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- The entry gate ---------- */
+
+.ozk-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  background: var(--ozk-ink);
+  text-align: center;
+  border: 0;
+  width: 100%;
+  color: var(--ozk-text);
+  cursor: pointer;
+  font: inherit;
+  padding: 2rem;
+}
+
+.ozk-gate[data-open="true"] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 700ms ease;
+}
+
+.ozk-gate-knock {
+  margin-top: 2rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--ozk-gold);
+}
+
+/* ---------- The sound toggle ---------- */
+
+.ozk-sound {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 65;
+  display: flex;
+  align-items: end;
+  gap: 3px;
+  height: 44px;
+  width: 44px;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--ozk-rule);
+  color: var(--ozk-text);
+  cursor: pointer;
+}
+
+.ozk-sound:focus-visible {
+  outline: 2px solid var(--ozk-gold);
+  outline-offset: 2px;
+}
+
+.ozk-sound span {
+  display: block;
+  width: 3px;
+  background: currentColor;
+  height: 6px;
+}
+
+.ozk-sound[data-playing="true"] span {
+  animation: ozk-eq 900ms ease-in-out infinite alternate;
+}
+
+.ozk-sound[data-playing="true"] span:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.ozk-sound[data-playing="true"] span:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+/* The bars carry information that is true only while they run: the theme is
+   playing. They stop when it stops (DS motion rule). */
+@keyframes ozk-eq {
+  from {
+    height: 5px;
+  }
+  to {
+    height: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ozk-sound[data-playing="true"] span {
+    animation: none;
+    height: 12px;
+  }
+}

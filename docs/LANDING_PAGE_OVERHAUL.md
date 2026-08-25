@@ -1,7 +1,7 @@
 # Landing Page Overhaul — Context & Preferences
 
-**Status:** direction approved Aug 24, 2026 (Item 2). Blocked on assets — not
-yet a sprint, not yet an implementation plan.
+**Status:** draft 1 built and pushed Aug 25, 2026 (Item 6). Still not a sprint.
+The page runs; the art does not exist in the repo yet.
 **Scope:** `ozark-open.com` root route only — the logged-out marketing page at
 [`app/page.tsx`](../app/page.tsx). Everything behind login is out of scope
 unless a context item below says otherwise.
@@ -665,6 +665,51 @@ page would be a reasonable thing to carry anyway.
 
 ---
 
+### Item 6 — Draft 1, built (Aug 25, 2026)
+
+The first build of the approved direction. Files: `app/page.tsx`,
+`components/landing/entry-gate.tsx`, `components/landing/tournament-mark.tsx`,
+and a `.ozk`-scoped block appended to `app/globals.css`.
+
+**What is real in this draft**
+
+| Decision | Built as |
+|---|---|
+| 1, 23 (brand boundary) | Every tournament token is scoped under `.ozk`. Nothing touches `:root`, so the sportsbook palette is untouched and the boundary cannot leak. |
+| 4 (three beats) | Announcement, card, sponsor strip, entry. |
+| 5 ("5th Annual") | Set as a gold eyebrow above the wordmark. |
+| 6 (scorecard) | A real `<table>`, tabular figures, sparse rules, stacking to one column under 640px where the venue name would otherwise drive the layout. |
+| 9 (cut explainers) | Gone. "No house, no rake, no profit." survives as the lead-in above the CTA. |
+| 10 (CTA is a door) | Its own full viewport, gold once, at the end. |
+| 11, 13 (expansion without hijack) | `animation-timeline: scroll(root)` parts the wordmark, `view()` reveals sections. No scroll listeners, no animation dependency, all inside `@supports` and `prefers-reduced-motion: no-preference`. |
+| 16 (reduced motion as a poster) | Opt-in: the base CSS is the finished composition and motion is added on top. |
+| 17 (no chrome on the hero) | `body:has(.ozk) header { display: none }`. No JS, no layout change. |
+| 18, 19, 20 (audio) | Tap-to-enter gate as a real `<button>`, so keyboard activation unlocks audio too. Persistent equalizer toggle, `localStorage` mute memory, `preload="none"`. |
+| 21 (full track) | The committed 3:48 file, no loop, `onEnded` resets the toggle. |
+| 24 (grain) | Fixed, `pointer-events: none`, 3.5%. |
+
+**Deliberate deviations from `design-taste-frontend`, each with cause**
+
+1. **Centered hero** despite the anti-center bias. The skill's own exception is the editorial / launch-announcement brief where the message is the design, which is this page exactly.
+2. **Single theme, dark.** The skill calls dark mode mandatory; it also defers to a brand that insists on one mode. The sportsbook is light-only by design and the tournament page is its dark counterpart. Page Theme Lock is satisfied: one theme, no section inverts.
+3. **A serif display face.** The skill treats serif as a strong default-reach tell. The exception it names is a brand brief that is genuinely heritage or ceremonial, which the engraved wordmark makes true. Cormorant Garamond stands in until the real face is identified. Not Fraunces, not Instrument Serif.
+4. **No CTA in the hero.** Decision 10 puts the only action at the end on purpose. The skill's rule protects conversion for strangers; this page has 32 invited members.
+
+**Resolves open question 7.** The em-dash ban is adopted for page copy. Nothing rendered on `/` contains an em-dash or en-dash. The date reads "September 24-26, 2026" with a hyphen. This applies to page copy only, not to these docs or the app.
+
+**What is still standing in**
+
+- **No aerial.** The photo is a CSS `background-image` at `public/tournament/old-kinderhook-aerial.jpg`, deliberately not `<Image>`: a missing background degrades to the green ground instead of a broken image box. Drop the file at that path and the hero lights up with no code change.
+- **Placeholder mark.** A pin, flag and cup in three primitives. Not an attempt to trace Missouri freehand, which would look worse than nothing. Swap for the real logo.
+- **Provisional colours.** Read from the logo art, not sampled. One line each in `app/globals.css`.
+- **No map.** Amended decision 8 wants the Lake drawn. Deferred rather than faked: an inaccurate freehand Lake of the Ozarks would be worse than none, and it needs real geodata. The card's town column carries "where" for now.
+- **No sponsor badge art.** The strip is type only until the badge lands.
+- **Audio still stops at `/login`.** Open question 5 is unchanged: keeping it alive needs the element hoisted into a shared layout.
+
+**Verified:** `npm run build` clean, `npm run lint` clean, 397 unit tests pass, and the page was rendered in a real browser at 1440x900 and 390x844. Three defects were found that way and fixed: the wordmark's descender collided with the line beneath it (fixed by setting it uppercase, which also matches the logo's small caps), the scrim was heavy enough to hide the photo entirely, and the CTA overflowed the viewport on a phone.
+
+---
+
 ## Open questions
 
 Carried forward until answered. The Item 1 questions are now mostly resolved by
@@ -688,11 +733,8 @@ Item 2; what remains is listed here.
 6. **Repeat visits.** The full track starting over on every visit may irritate
    rather than delight. Does the entry gate remember that this browser has
    already been let in?
-7. **The em-dash question.** The newly installed `design-taste-frontend` skill
-   (§9.G) bans `—` and `–` outright in shipped page copy, calling it the single
-   biggest AI tell. Current brand copy uses them (`September 24–26, 2026`).
-   Unresolved: does the landing page adopt the ban? This affects copy only, not
-   these docs.
+7. ~~The em-dash question~~ — **adopted for page copy (Item 6).** Nothing
+   rendered on `/` uses an em-dash or en-dash.
 8. **Identifiable faces in footage.** Decision 7 bans names. If prior-year
    footage shows recognisable people, confirm that is still acceptable.
 9. **Where does the sportsbook get explained now?** Decision 9 and the Format

@@ -1,15 +1,51 @@
 import Link from "next/link"
-import Image from "next/image"
 import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
-import { buttonVariants } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
+import { EntryGate } from "@/components/landing/entry-gate"
+import { TournamentMark } from "@/components/landing/tournament-mark"
 
-// Marketing landing page for logged-out visitors; authenticated members go
-// straight to their dashboard. One CTA only — log in — rendered as a plain
-// <Link> styled by buttonVariants so navigation works with zero client JS.
+/**
+ * The Ozark Open landing page. Logged-out only: members go to their dashboard.
+ *
+ * This is the "front of house" surface. It wears the TOURNAMENT brand (forest
+ * green, gold, dark, cinematic), not the sportsbook brand (indigo, cream, flat,
+ * sunlight-legible). The boundary is deliberate and stops at /login. The whole
+ * brief lives in docs/LANDING_PAGE_OVERHAUL.md.
+ *
+ * Three beats, one idea each, plus a sponsor strip: the announcement, the card,
+ * the strip, the entry. No feature grid, no explainer cards, no names of
+ * people. The audience is ~32 invited men who already know what this is, so
+ * the page is an announcement rather than a pitch.
+ *
+ * Server component apart from the gate. All motion is CSS scroll-driven, so
+ * there are no scroll listeners and no animation dependency.
+ */
+
+const ROUNDS = [
+  {
+    round: "Round 1",
+    dow: "Thu",
+    day: "24",
+    course: "Old Kinderhook Golf Club",
+    town: "Camdenton, Missouri",
+  },
+  {
+    round: "Round 2",
+    dow: "Fri",
+    day: "25",
+    course: "Bear Creek Valley Golf Club",
+    town: "Osage Beach, Missouri",
+  },
+  {
+    round: "Round 3",
+    dow: "Sat",
+    day: "26",
+    course: "Osage National Golf Resort",
+    town: "Lake Ozark, Missouri",
+  },
+]
+
 export default async function Home() {
   const supabase = await createClient()
   const {
@@ -18,74 +54,90 @@ export default async function Home() {
   if (user) redirect("/dashboard")
 
   return (
-    <div className="mx-auto max-w-[var(--content-max,640px)] px-4 pt-14 pb-16 sm:pt-20">
-      <section className="flex flex-col items-center text-center">
-        <Image
-          src="/ozark-mark.svg"
-          alt=""
-          width={112}
-          height={112}
-          className="h-24 w-auto"
-          priority
-        />
-        <h1 className="mt-5 font-heading text-5xl leading-none text-indigo-700 sm:text-6xl">
-          Ozark Open Sportsbook
-        </h1>
-        <p className="mt-4 max-w-md text-lg leading-normal text-text-body">
-          The private betting pool for the Ozark Open. Ante up, pick your
-          spots, and let the golf settle it.
-        </p>
-        <p className="mt-2 font-semibold text-text-strong">
-          No house, no rake, no profit.
-        </p>
-        <Link
-          href="/login"
-          className={cn(
-            buttonVariants({ variant: "gold", size: "lg" }),
-            "mt-8 w-full sm:w-auto sm:px-10"
-          )}
-        >
-          Log in to place your bets
-        </Link>
-        <p className="mt-3 text-sm text-text-muted">
-          Magic link, no passwords. Invite only.
-        </p>
-      </section>
+    <div className="ozk">
+      <EntryGate>
+        <div className="ozk-grain" aria-hidden />
 
-      <section className="mt-14 grid gap-4 sm:mt-16">
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Everyone&apos;s in the pool</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm leading-normal text-text-body">
-            Pari-mutuel, all the way down. Entry fees build the pot, and the
-            whole thing gets paid back out based on how everyone&apos;s bets
-            perform. Nobody skims a cut.
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Bet the tournament</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm leading-normal text-text-body">
-            A full menu of odds on the field — pick your spots round by round
-            across three days of golf, September 24&ndash;26, 2026.
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Strictly clubhouse</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm leading-normal text-text-body">
-            Invite only, behind login. If you&apos;re in the field,
-            you&apos;re in the book.
-          </CardContent>
-        </Card>
-      </section>
+        {/* Beat A: the announcement. Centered on purpose. The taste skill
+            pushes against centered heroes, but its own exception is the
+            editorial / launch-announcement brief where the message is the
+            design, which is exactly this page. */}
+        <section className="ozk-hero">
+          {/* The Old Kinderhook aerial. Decorative, so it carries no alt text
+              and lives in CSS: until the file exists at
+              public/tournament/old-kinderhook-aerial.jpg this degrades to the
+              green ground rather than a broken image. */}
+          <div className="ozk-hero-media" aria-hidden />
+          <div className="ozk-hero-scrim" aria-hidden />
 
-      <p className="mt-10 text-center text-xs text-text-muted">
-        Private pool · invite only · Ozark Open 2026
-      </p>
+          <div className="ozk-hero-inner">
+            <TournamentMark className="mx-auto mb-6 h-16 w-auto" />
+            <p className="ozk-eyebrow">5th Annual</p>
+            <h1 className="ozk-display ozk-wordmark">
+              <span className="ozk-word ozk-word-a">Ozark</span>
+              <span className="ozk-word ozk-word-b">Open</span>
+            </h1>
+            <p className="ozk-meta">September 24-26, 2026</p>
+            <p className="ozk-meta-sub">Lake of the Ozarks, Missouri</p>
+          </div>
+        </section>
+
+        {/* Beat B: the card. A scorecard, not a feature grid. Golf already has
+            a typographic artifact for three rounds and this is it. */}
+        <section className="ozk-section ozk-reveal">
+          <h2 className="ozk-display ozk-h2">The Card</h2>
+          <table className="ozk-card">
+            <thead>
+              <tr>
+                <th scope="col">Round</th>
+                <th scope="col">Date</th>
+                <th scope="col">Course</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ROUNDS.map((r) => (
+                <tr key={r.round}>
+                  <td>
+                    <span className="ozk-strip-label">{r.round}</span>
+                  </td>
+                  <td>
+                    <span className="ozk-dow ozk-dow-top">{r.dow}</span>
+                    <span className="ozk-day">{r.day}</span>
+                  </td>
+                  <td>
+                    <span className="ozk-course ozk-display">{r.course}</span>
+                    <span className="ozk-town">{r.town}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        {/* The sponsor strip. Played completely straight: it is a real sponsor
+            bar for a joke sponsorship, and the deadpan is what makes it land.
+            The badge art is not in the repo yet, so this is type only. */}
+        <aside className="ozk-strip ozk-reveal">
+          <p className="ozk-strip-label">Proud sponsor of</p>
+          <p className="ozk-strip-name ozk-display">
+            Pace of Play Awareness Month
+          </p>
+        </aside>
+
+        {/* Beat C: entry. The only action on the page, so it gets its own
+            viewport rather than a button tucked into the hero. Gold once. */}
+        <section className="ozk-entry ozk-reveal">
+          <div>
+            <p className="ozk-creed ozk-display">
+              No house, no rake, no profit.
+            </p>
+            <Link href="/login" className="ozk-cta">
+              Log in to place your bets
+            </Link>
+            <p className="ozk-footnote">Invite only</p>
+          </div>
+        </section>
+      </EntryGate>
     </div>
   )
 }
