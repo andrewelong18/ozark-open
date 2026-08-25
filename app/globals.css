@@ -911,3 +911,798 @@
   -webkit-mask-image: none;
   mask-image: none;
 }
+
+/* ===================================================================
+   Ozark Open TOURNAMENT brand — landing page only.
+
+   This is the "front of house" layer from docs/LANDING_PAGE_OVERHAUL.md
+   (Item 2, decision 1). The tournament is a different brand from the
+   sportsbook: forest green and gold, dark, cinematic. The sportsbook is
+   indigo, cream, flat, sunlight-legible.
+
+   Everything here is scoped under `.ozk` so it cannot leak into the app.
+   Nothing in this block touches `:root`.
+
+   COLOURS ARE SAMPLED from the real logo art in
+   public/tournament/ozark-open-logo.svg, not eyeballed. The tournament gold
+   turns out to be exactly the sportsbook's #FDDA00, which is what lets gold
+   carry across the brand boundary at the CTA.
+   =================================================================== */
+
+.ozk {
+  /* Brand, sampled from the logo SVG. See Item 3.2. */
+  --ozk-green: #006747;
+  --ozk-green-mid: #00513a;
+  --ozk-gold: #fdda00;
+  --ozk-red: #c20f2f;
+  --ozk-cream: #f4f1e6;
+
+  /* Page ground. Deep green-black, never pure #000 (taste skill 9.A). */
+  --ozk-ink: #04211a;
+  --ozk-ink-2: #062c22;
+
+  /* Text roles on the dark ground. */
+  --ozk-text: #f4f1e6;
+  --ozk-text-dim: #9fbcae;
+  --ozk-rule: rgba(244, 241, 230, 0.16);
+
+  background-color: var(--ozk-ink);
+  color: var(--ozk-text);
+  font-family: var(--font-sans);
+
+  /* One radius system for the whole page: sharp. Engraved plates do not
+     have rounded corners (taste skill 4.4, shape consistency lock). */
+  --ozk-radius: 0px;
+}
+
+/* The app header is chrome. A full-bleed hero with a nav bar sitting on top
+   of it is the tell that a template was used (decision 17). No JS and no
+   layout change: the landing page is the only route that renders `.ozk`. */
+body:has(.ozk) > header,
+body:has(.ozk) header {
+  display: none;
+}
+
+/* Azalea, per Andrew. Item 3.2 had read the logo's wordmark as a different
+   engraved Roman serif and set Cormorant as a stand-in; Azalea is the call. */
+.ozk-display {
+  font-family: var(--font-azalea), Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.04;
+}
+
+/* ---------- Beat A: the announcement ---------- */
+
+/* The lake fills the hero. It is not a card on a page: it runs off every edge
+   and the type sits on it. An earlier version boxed it into a small centred
+   card, which read as timid and left most of the viewport empty. */
+.ozk-hero {
+  position: relative;
+  height: 100dvh;
+}
+
+.ozk-hero-stage {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.ozk-hero-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  transform-origin: 55% 45%;
+  background-color: var(--ozk-ink);
+  /* Overscaled at rest so the arms bleed past every edge. Scrolling pulls back
+     to reveal the whole lake, rather than growing a card. */
+  transform: scale(1.35);
+}
+
+/* Legibility. The lake is busy exactly where the type sits, so a soft pool of
+   ground is pulled up under the announcement while the edges stay bright. */
+.ozk-hero-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(
+      58% 46% at 50% 46%,
+      rgba(4, 33, 26, 0.9) 0%,
+      rgba(4, 33, 26, 0.7) 40%,
+      rgba(4, 33, 26, 0.22) 70%,
+      rgba(4, 33, 26, 0.04) 100%
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(4, 33, 26, 0.66) 0%,
+      rgba(4, 33, 26, 0) 30%,
+      rgba(4, 33, 26, 0) 66%,
+      rgba(4, 33, 26, 0.86) 100%
+    );
+}
+
+/* Film grain. Fixed and pointer-events:none so it never repaints on scroll. */
+.ozk-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.ozk-hero-inner {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding: 0 1.25rem;
+}
+
+.ozk-mark {
+  display: block;
+  width: auto;
+  height: 4.5rem;
+  margin: 0 auto 1.1rem;
+  filter: drop-shadow(0 2px 14px rgba(4, 33, 26, 0.9));
+}
+
+.ozk-eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  color: var(--ozk-gold);
+  font-weight: 600;
+  text-shadow: 0 1px 12px rgba(4, 33, 26, 0.95);
+}
+
+/* Small caps, matching the logo's wordmark: the leading letter at full cap
+   height and the rest as reduced capitals on a shared baseline.
+
+   Measured off the logo art, the small caps are 109px against the leading O's
+   156px, a ratio of 0.70. Azalea has no `smcp` table, so font-variant-caps
+   would only get browser-synthesised scaling with no control over that ratio.
+   Scaling ::first-letter instead hits it exactly: the base size below IS the
+   small-cap size, and the leading letter is scaled by 1/0.70. */
+.ozk-wordmark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.06em;
+  margin: 0.5rem 0 0;
+  font-size: clamp(2.1rem, 8.3vw, 6.1rem);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.12;
+  text-shadow: 0 2px 30px rgba(4, 33, 26, 0.95), 0 0 60px rgba(4, 33, 26, 0.7);
+}
+
+.ozk-word {
+  display: block;
+  will-change: transform;
+}
+
+/* 1.40, not the arithmetic 1.43: Azalea's O is a round letter with overshoot,
+   so it measures taller than the flat-topped small caps beside it. Rendered
+   and measured back until the ratio matched the logo's 0.70. */
+.ozk-word::first-letter {
+  font-size: 1.4em;
+}
+
+.ozk-meta {
+  margin-top: 1.5rem;
+  font-size: clamp(0.95rem, 2.4vw, 1.15rem);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ozk-text);
+  text-shadow: 0 1px 16px rgba(4, 33, 26, 0.95);
+}
+
+.ozk-meta-sub {
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ozk-text-dim);
+  text-shadow: 0 1px 16px rgba(4, 33, 26, 0.95);
+}
+
+/* ---------- The lake ---------- */
+
+/* The shader canvas, masked to the lake silhouette. cover + center matches the
+   sibling SVG's preserveAspectRatio="xMidYMid slice", which is what keeps the
+   water registered to its shoreline at every viewport size. */
+.ozk-water {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 1;
+  pointer-events: none;
+  -webkit-mask-image: url("/tournament/lake-mask.svg");
+  mask-image: url("/tournament/lake-mask.svg");
+  -webkit-mask-size: cover;
+  mask-size: cover;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.ozk-lake {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Fill below the canvas, shoreline above it. Without this the water covers
+   the very outline it is meant to be held by. */
+.ozk-lake-fill {
+  z-index: 0;
+}
+
+.ozk-lake-shore-layer {
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Base state is the finished composition: shoreline drawn, current parked,
+   pins at rest. Motion is added below. */
+.ozk-lake-shore {
+  stroke-dashoffset: 0;
+  opacity: 0.85;
+}
+
+/* ---------- The lake, moving ----------
+
+   THIS BLOCK IS DELIBERATELY OUTSIDE @supports (animation-timeline).
+   These are ordinary time-based animations and they must run everywhere. A
+   previous version nested them alongside the scroll-driven rules, so any
+   browser without scroll-driven animations dropped the lot and the water sat
+   dead still. Safari did exactly that. Only reduced-motion gates them now. */
+
+@media (prefers-reduced-motion: no-preference) {
+  .ozk-lake-shore {
+    stroke-dasharray: 9000;
+    animation:
+      ozk-draw 5s cubic-bezier(0.33, 0, 0.2, 1) 0.2s both,
+      ozk-shore-glow 7s ease-in-out 5.2s infinite;
+  }
+
+}
+
+@keyframes ozk-draw {
+  from {
+    stroke-dashoffset: 9000;
+    opacity: 0.3;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 0.85;
+  }
+}
+
+@keyframes ozk-shore-glow {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ---------- The scroll nudge ---------- */
+
+/* A 1px sentinel at the top of the hero SECTION, in page flow. It must not be
+   inside the sticky stage: that is pinned to the viewport and never scrolls
+   away, so the observer would never fire and the nudge would show to people
+   who had already scrolled. */
+.ozk-nudge-sentinel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+/* Fixed, so it stays at the bottom of the viewport while the sentinel moves. */
+.ozk-nudge {
+  position: fixed;
+  bottom: max(2.25rem, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 900ms ease;
+}
+
+.ozk-nudge[data-visible="true"] {
+  opacity: 1;
+}
+
+.ozk-nudge-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--ozk-text-dim);
+  text-shadow: 0 1px 12px rgba(4, 33, 26, 0.95);
+}
+
+/* A line that falls, rather than a bouncing chevron. */
+.ozk-nudge-line {
+  display: block;
+  width: 1px;
+  height: 2.75rem;
+  background: linear-gradient(to bottom, transparent, var(--ozk-gold));
+  transform-origin: top center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ozk-nudge[data-visible="true"] .ozk-nudge-line {
+    animation: ozk-nudge-fall 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes ozk-nudge-fall {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* ---------- Shared section furniture ---------- */
+
+.ozk-section {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: clamp(5rem, 14vh, 9rem) 1.25rem;
+}
+
+.ozk-h2 {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  margin: 0 0 2.5rem;
+}
+
+/* ---------- Beat B: the card ---------- */
+
+.ozk-card {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.ozk-card th {
+  font-size: 0.68rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ozk-text-dim);
+  padding: 0 0 0.9rem;
+  border-bottom: 1px solid var(--ozk-rule);
+}
+
+.ozk-card td {
+  padding: 1.5rem 0;
+  border-bottom: 1px solid var(--ozk-rule);
+  vertical-align: baseline;
+}
+
+.ozk-card tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Tabular figures so 24 / 25 / 26 run in lockstep down the column. The DS
+   mandates this for all numerals and the card is the reason why (Item 4.1). */
+.ozk-day {
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(1.6rem, 5vw, 2.4rem);
+  line-height: 1;
+  color: var(--ozk-gold);
+}
+
+.ozk-dow-top {
+  margin-top: 0;
+  margin-bottom: 0.45rem;
+}
+
+.ozk-dow {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ozk-text-dim);
+  margin-top: 0.5rem;
+  font-family: var(--font-sans);
+}
+
+.ozk-course {
+  font-size: clamp(1.05rem, 3vw, 1.45rem);
+  color: var(--ozk-text);
+}
+
+.ozk-town {
+  display: block;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: var(--ozk-text-dim);
+  margin-top: 0.35rem;
+  font-family: var(--font-sans);
+}
+
+/* Mobile: the venue name is the widest cell by a wide margin (Item 4.1), so
+   the row stacks rather than squeezing three columns onto a phone. */
+@media (max-width: 640px) {
+  .ozk-card,
+  .ozk-card tbody,
+  .ozk-card tr,
+  .ozk-card td {
+    display: block;
+    width: 100%;
+  }
+  .ozk-card thead {
+    display: none;
+  }
+  .ozk-card tr {
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--ozk-rule);
+  }
+  .ozk-card tr:last-child {
+    border-bottom: 0;
+  }
+  .ozk-card td {
+    padding: 0;
+    border-bottom: 0;
+  }
+  .ozk-card td + td {
+    margin-top: 0.75rem;
+  }
+}
+
+/* ---------- The sponsor strip ---------- */
+
+/* Played straight. It is a real sponsor bar for a joke sponsorship, and the
+   deadpan is what makes it land (Item 3.4). */
+.ozk-strip {
+  border-top: 1px solid var(--ozk-rule);
+  border-bottom: 1px solid var(--ozk-rule);
+  background: var(--ozk-ink-2);
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+}
+
+.ozk-ribbon {
+  display: block;
+  width: auto;
+  height: 2.1rem;
+  margin: 0 auto 0.85rem;
+  color: var(--ozk-gold);
+  opacity: 0.9;
+}
+
+.ozk-strip-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ozk-text-dim);
+}
+
+.ozk-strip-name {
+  margin-top: 0.5rem;
+  font-size: clamp(0.95rem, 2.6vw, 1.2rem);
+  letter-spacing: 0.06em;
+  color: var(--ozk-text);
+}
+
+/* ---------- Beat C: entry, and the handoff to the sportsbook ----------
+
+   This is the one place the page changes brand, and the switch is the point.
+   Everything above is the TOURNAMENT (forest green, gold, engraved serif).
+   This block is the SPORTSBOOK (indigo #312F8C, Azalea, gold CTA), because it
+   is the doorway into it. The taste skill allows exactly one deliberate
+   colour-block switch per page and this is it: not a section that wandered
+   off palette, but the moment you walk from the clubhouse into the book.
+
+   Gold is what carries across. It is the sportsbook's own accent and it reads
+   as continuous through the login. */
+
+.ozk-entry {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 4rem 1.25rem;
+  background: linear-gradient(to bottom, var(--ozk-ink) 0%, #262573 38%, #312f8c 100%);
+  color: #fff;
+}
+
+.ozk-entry-mark {
+  height: 4.5rem;
+  width: auto;
+  margin: 0 auto 1.25rem;
+}
+
+/* Azalea, not the tournament serif. This block belongs to the sportsbook and
+   wears the sportsbook's display face. */
+.ozk-entry-name {
+  font-family: var(--font-azalea), Georgia, serif;
+  font-size: clamp(1.1rem, 3.4vw, 1.5rem);
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.ozk-join {
+  font-family: var(--font-azalea), Georgia, serif;
+  font-size: clamp(2.25rem, 8vw, 4.5rem);
+  line-height: 1.05;
+  margin: 0.75rem 0 0;
+  color: #fff;
+}
+
+.ozk-creed {
+  margin: 1.25rem 0 2.5rem;
+  font-size: clamp(0.95rem, 2.6vw, 1.15rem);
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.ozk-cta {
+  display: inline-block;
+  background: var(--ozk-gold);
+  color: #1a1600;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 1.15rem 3.5rem;
+  border-radius: var(--ozk-radius);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+/* The label is two words now, so it fits at any width without special-casing
+   the phone. Full width on a phone anyway, because a lone centred button on a
+   390px screen reads as an afterthought. */
+@media (max-width: 640px) {
+  .ozk-cta {
+    display: block;
+    width: 100%;
+    padding: 1.15rem 1rem;
+  }
+}
+
+.ozk-cta:hover {
+  background: #ffe642;
+}
+
+.ozk-cta:active {
+  transform: translateY(1px);
+}
+
+.ozk-cta:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+.ozk-footnote {
+  margin-top: 1.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ---------- Scroll-linked motion ----------
+
+   Progressive enhancement ONLY. Everything here is genuinely tied to scroll
+   position, so it needs animation-timeline. Nothing time-based belongs in this
+   block: a browser that skips it must still get a living page. */
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    /* The runway the parallax plays out over. */
+    .ozk-hero {
+      height: 210vh;
+    }
+
+    /* Pull back from the overscaled rest state to reveal the whole lake. */
+    .ozk-hero-media {
+      animation: ozk-pullback linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 105vh;
+    }
+
+    /* The wordmark parts as the water opens out behind it. */
+    .ozk-word-a,
+    .ozk-word-b {
+      animation: ozk-part linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 105vh;
+    }
+    .ozk-word-b {
+      animation-name: ozk-part-b;
+    }
+
+    /* The announcement clears so the lake is alone by the time it opens. */
+    .ozk-mark,
+    .ozk-meta,
+    .ozk-meta-sub,
+    .ozk-eyebrow {
+      animation: ozk-clear linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 62vh;
+    }
+
+    /* The legibility pool lifts with them. */
+    .ozk-hero-scrim {
+      animation: ozk-scrim-lift linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 95vh;
+    }
+
+    /* Sections arrive as they enter. */
+    .ozk-reveal {
+      animation: ozk-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 5% entry 55%;
+    }
+  }
+}
+
+@keyframes ozk-pullback {
+  from {
+    transform: scale(1.35);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes ozk-scrim-lift {
+  to {
+    opacity: 0.28;
+  }
+}
+
+@keyframes ozk-clear {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes ozk-part {
+  to {
+    transform: translateX(-14vw);
+    opacity: 0.12;
+  }
+}
+
+@keyframes ozk-part-b {
+  to {
+    transform: translateX(14vw);
+    opacity: 0.12;
+  }
+}
+
+@keyframes ozk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- The entry gate ---------- */
+
+.ozk-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  background: var(--ozk-ink);
+  text-align: center;
+  border: 0;
+  width: 100%;
+  color: var(--ozk-text);
+  cursor: pointer;
+  font: inherit;
+  padding: 2rem;
+}
+
+.ozk-gate[data-open="true"] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 700ms ease;
+}
+
+.ozk-gate-knock {
+  margin-top: 2rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--ozk-gold);
+}
+
+/* ---------- The sound toggle ---------- */
+
+.ozk-sound {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 65;
+  display: flex;
+  align-items: end;
+  gap: 3px;
+  height: 44px;
+  width: 44px;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--ozk-rule);
+  color: var(--ozk-text);
+  cursor: pointer;
+}
+
+.ozk-sound:focus-visible {
+  outline: 2px solid var(--ozk-gold);
+  outline-offset: 2px;
+}
+
+.ozk-sound span {
+  display: block;
+  width: 3px;
+  background: currentColor;
+  height: 6px;
+}
+
+.ozk-sound[data-playing="true"] span {
+  animation: ozk-eq 900ms ease-in-out infinite alternate;
+}
+
+.ozk-sound[data-playing="true"] span:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.ozk-sound[data-playing="true"] span:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+/* The bars carry information that is true only while they run: the theme is
+   playing. They stop when it stops (DS motion rule). */
+@keyframes ozk-eq {
+  from {
+    height: 5px;
+  }
+  to {
+    height: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ozk-sound[data-playing="true"] span {
+    animation: none;
+    height: 12px;
+  }
+}

@@ -1,0 +1,16 @@
+<svg width="818" height="737" viewBox="-14 -14 846 765" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Ozark Open tournament mark. Missouri in forest green with a gold border,
+     the flagstick planted at the Lake of the Ozarks.
+
+     The source file draws the gold border as a separate 21KB traced path.
+     Here it is a stroke on the state silhouette with paint-order="stroke", so
+     only the outer half shows and the result reads the same at every size the
+     page uses it. Swap in the source outline if exact vector fidelity is ever
+     needed; the colours and geometry are otherwise the original's. -->
+<path d="M13 9H477L514 43.5L510 77.5L520 115V126.5L542 161.5L605.5 225.5L608 243L605.5 254L621 277L636 268L649 265.5L676.5 285L667.5 301.5L671.5 314L657 347.5L649 362V384L691.5 416.5L701.5 431H717L750 463.5L759.5 479L767.5 513.5L759.5 530.5L775.5 556L810.5 577.5L803.5 605L802 628L793 636L775.5 631L772.5 648.5L756 674.5L749.5 707L740 726.5L654 729L694 674.5L673.5 653.5H135.5V365.5V230.5L114 224.5L101.5 196.5L82 169L96 141.5L101.5 116.5H76L53.5 97L46 80.5L22.5 43.5L13 9Z"
+      fill="#006747" stroke="#FDDA00" stroke-width="26" stroke-linejoin="round" paint-order="stroke"/>
+<path d="M417.5 161.586C416.5 160.017 410.5 155.655 402 154.086C393.5 152.517 384 157.086 374 154.086C364 151.087 361.5 144.586 355.5 141.086C349.5 137.586 346.5 138.017 346.5 138.017L346 208.086C346 208.086 353 206.087 355.5 208.086C358 210.086 366.819 217.328 375.5 220.086C385.556 223.281 393.5 220.587 402.5 221.087C411.5 221.586 429.5 233.655 429.5 230.086C429.5 226.517 418.5 163.155 417.5 161.586Z" fill="#C20F2F"/>
+<ellipse cx="342.58" cy="421.128" rx="26.0796" ry="16.4502" fill="#FDDA00"/>
+<ellipse cx="342.575" cy="423.534" rx="18.0551" ry="10.8331" fill="#363535"/>
+<path d="M346.694 434.696V138.308H338.306V434.696H346.694Z" fill="#FDDA00" stroke="#FCE300" stroke-width="0.610656"/>
+</svg>
