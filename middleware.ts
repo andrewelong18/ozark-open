@@ -97,8 +97,13 @@ export async function middleware(request: NextRequest) {
     // /api/onboarding to /onboarding swallows the write (the browser follows
     // the 307 to an HTML page, sees res.ok, and advances) so onboarded_at is
     // never stamped and the member is stuck in the gate forever.
+    // The homepage is exempt too: it's the address members are given, and
+    // bouncing it to /onboarding reintroduces the thing this gate isn't for —
+    // typing ozark-open.com and landing somewhere else. The gate still covers
+    // every protected route, so the CTA leads straight back into it.
     if (
       !onboarded &&
+      pathname !== "/" &&
       !pathname.startsWith("/onboarding") &&
       !pathname.startsWith("/api/")
     ) {

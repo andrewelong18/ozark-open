@@ -1,12 +1,11 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 import { EntryGate } from "@/components/landing/entry-gate"
 import { TournamentMark } from "@/components/landing/tournament-mark"
 
 /**
- * The Ozark Open landing page. Logged-out only: members go to their dashboard.
+ * The Ozark Open landing page, the front door for members and visitors alike.
  *
  * This is the "front of house" surface. It wears the TOURNAMENT brand (forest
  * green, gold, dark, cinematic), not the sportsbook brand (indigo, cream, flat,
@@ -17,6 +16,13 @@ import { TournamentMark } from "@/components/landing/tournament-mark"
  * the strip, the entry. No feature grid, no explainer cards, no names of
  * people. The audience is ~32 invited men who already know what this is, so
  * the page is an announcement rather than a pitch.
+ *
+ * The door stays a door for everybody (#181). This page used to
+ * `redirect("/dashboard")` the moment it saw a session, so a returning member
+ * never actually laid eyes on ozark-open.com. The domain is what people are
+ * handed, so it renders for everyone and the CTA is what knows who you are:
+ * signed out to /login, signed in straight to /dashboard with no login screen
+ * in between.
  *
  * Server component apart from the gate. All motion is CSS scroll-driven, so
  * there are no scroll listeners and no animation dependency.
@@ -51,7 +57,7 @@ export default async function Home() {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (user) redirect("/dashboard")
+  const signedIn = Boolean(user)
 
   return (
     <div className="ozk">
@@ -125,14 +131,15 @@ export default async function Home() {
         </aside>
 
         {/* Beat C: entry. The only action on the page, so it gets its own
-            viewport rather than a button tucked into the hero. Gold once. */}
+            viewport rather than a button tucked into the hero. Gold once, and
+            it knows who you are. */}
         <section className="ozk-entry ozk-reveal">
           <div>
             <p className="ozk-creed ozk-display">
               No house, no rake, no profit.
             </p>
-            <Link href="/login" className="ozk-cta">
-              Log in to place your bets
+            <Link href={signedIn ? "/dashboard" : "/login"} className="ozk-cta">
+              {signedIn ? "Enter the sportsbook" : "Log in to place your bets"}
             </Link>
             <p className="ozk-footnote">Invite only</p>
           </div>
