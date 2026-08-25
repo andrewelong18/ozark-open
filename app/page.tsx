@@ -1,21 +1,31 @@
 import Link from "next/link"
 import Image from "next/image"
-import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
-// Marketing landing page for logged-out visitors; authenticated members go
-// straight to their dashboard. One CTA only — log in — rendered as a plain
-// <Link> styled by buttonVariants so navigation works with zero client JS.
+// The front door, and it stays a door for everybody. This page used to
+// `redirect("/dashboard")` the moment it saw a session, which meant a returning
+// member never laid eyes on ozark-open.com — they typed the domain and landed
+// mid-app. The homepage is the thing people are given ("go to ozark-open.com"),
+// so it renders for everyone; the CTA is what knows who you are.
+//
+// One CTA only, rendered as a plain <Link> styled by buttonVariants so
+// navigation works with zero client JS:
+//   signed out → /login  (magic-link screen)
+//   signed in  → /dashboard  (straight in, no login screen)
+//
+// Note the button could point at /login unconditionally — middleware bounces an
+// onboarded member from /login to /dashboard — but that's a wasted hop and a
+// button that lies about where it goes.
 export default async function Home() {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (user) redirect("/dashboard")
+  const signedIn = Boolean(user)
 
   return (
     <div className="mx-auto max-w-[var(--content-max,640px)] px-4 pt-14 pb-16 sm:pt-20">
@@ -39,16 +49,18 @@ export default async function Home() {
           No house, no rake, no profit.
         </p>
         <Link
-          href="/login"
+          href={signedIn ? "/dashboard" : "/login"}
           className={cn(
             buttonVariants({ variant: "gold", size: "lg" }),
             "mt-8 w-full sm:w-auto sm:px-10"
           )}
         >
-          Log in to place your bets
+          {signedIn ? "Enter the sportsbook" : "Log in to place your bets"}
         </Link>
         <p className="mt-3 text-sm text-text-muted">
-          Magic link, no passwords. Invite only.
+          {signedIn
+            ? "You're signed in. Pick up where you left off."
+            : "Magic link, no passwords. Invite only."}
         </p>
       </section>
 
