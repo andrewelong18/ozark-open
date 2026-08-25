@@ -923,25 +923,27 @@
    Everything here is scoped under `.ozk` so it cannot leak into the app.
    Nothing in this block touches `:root`.
 
-   COLOURS ARE PROVISIONAL. They are read visually from the logo art, not
-   sampled from source files (the logos arrived as chat attachments and were
-   never on disk). Swapping them is a one-line edit per token below.
+   COLOURS ARE SAMPLED from the real logo art in
+   public/tournament/ozark-open-logo.svg, not eyeballed. The tournament gold
+   turns out to be exactly the sportsbook's #FDDA00, which is what lets gold
+   carry across the brand boundary at the CTA.
    =================================================================== */
 
 .ozk {
-  /* Brand, provisional. See Item 3.2. */
-  --ozk-green: #00693e;
-  --ozk-green-mid: #005432;
+  /* Brand, sampled from the logo SVG. See Item 3.2. */
+  --ozk-green: #006747;
+  --ozk-green-mid: #00513a;
   --ozk-gold: #fdda00;
+  --ozk-red: #c20f2f;
   --ozk-cream: #f4f1e6;
 
   /* Page ground. Deep green-black, never pure #000 (taste skill 9.A). */
-  --ozk-ink: #071a12;
-  --ozk-ink-2: #0b2418;
+  --ozk-ink: #04211a;
+  --ozk-ink-2: #062c22;
 
   /* Text roles on the dark ground. */
   --ozk-text: #f4f1e6;
-  --ozk-text-dim: #a9bdb0;
+  --ozk-text-dim: #9fbcae;
   --ozk-rule: rgba(244, 241, 230, 0.16);
 
   background-color: var(--ozk-ink);
@@ -1025,8 +1027,8 @@ body:has(.ozk) header {
   z-index: 1;
   transform-origin: center;
   background:
-    linear-gradient(to bottom, rgba(7, 26, 18, 0.5) 0%, rgba(7, 26, 18, 0.12) 42%, rgba(7, 26, 18, 0.86) 100%),
-    linear-gradient(to right, rgba(0, 67, 42, 0.28), rgba(0, 67, 42, 0.1));
+    linear-gradient(to bottom, rgba(4, 33, 26, 0.5) 0%, rgba(4, 33, 26, 0.12) 42%, rgba(4, 33, 26, 0.86) 100%),
+    linear-gradient(to right, rgba(0, 103, 71, 0.26), rgba(0, 103, 71, 0.08));
 }
 
 /* Film grain. Fixed and pointer-events:none so it never repaints on scroll
@@ -1053,17 +1055,9 @@ body:has(.ozk) header {
    until then. No JavaScript, no broken-image icon. */
 .ozk-mark {
   display: block;
-  /* A replaced element with width:auto falls back to 300px, which floats the
-     mark off to one side of its centred box. Both dimensions are explicit. */
-  width: 5.5rem;
-  height: 5.5rem;
-  margin: 0 auto 1.5rem;
-  pointer-events: none;
-}
-
-.ozk-mark svg {
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: 5rem;
+  margin: 0 auto 1.25rem;
 }
 
 .ozk-eyebrow {
@@ -1083,7 +1077,7 @@ body:has(.ozk) header {
   align-items: center;
   gap: 0.02em;
   margin: 0.6rem 0 0;
-  font-size: clamp(2.75rem, 12vw, 8.5rem);
+  font-size: clamp(2.5rem, 10.5vw, 7.5rem);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   /* Uppercase has no descenders, but the line box still needs room or the
@@ -1399,9 +1393,12 @@ body:has(.ozk) header {
   }
 }
 
+/* The card starts large enough to hold the whole announcement stack. Below
+   about 0.58 the mark straddles the card's top edge, which reads as a bug
+   rather than a composition. */
 @keyframes ozk-expand {
   from {
-    transform: scale(0.44);
+    transform: scale(0.58);
   }
   to {
     transform: scale(1);

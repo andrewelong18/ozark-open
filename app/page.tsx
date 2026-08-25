@@ -3,7 +3,6 @@ import Link from "next/link"
 
 import { createClient } from "@/lib/supabase/server"
 import { EntryGate } from "@/components/landing/entry-gate"
-import { TournamentMark } from "@/components/landing/tournament-mark"
 
 /**
  * The Ozark Open landing page, the front door for members and visitors alike.
@@ -81,17 +80,18 @@ export default async function Home() {
             <div className="ozk-hero-scrim" aria-hidden />
 
             <div className="ozk-hero-inner">
-              {/* <object> renders its children only when the resource fails to
-                  load, so the real tournament logo takes over the instant the
-                  file exists and the drawn stand-in covers until then. */}
-              <object
+              {/* The real tournament logo: the Missouri silhouette with the
+                  flagstick planted at the Lake. Unoptimized because it is a
+                  flat four-colour SVG already in /public. */}
+              <Image
+                src="/tournament/ozark-open-logo.svg"
+                alt=""
+                width={818}
+                height={737}
+                unoptimized
+                priority
                 className="ozk-mark"
-                type="image/svg+xml"
-                data="/tournament/ozark-open-logo.svg"
-                aria-label="Ozark Open"
-              >
-                <TournamentMark className="h-16 w-auto" />
-              </object>
+              />
               <p className="ozk-eyebrow">5th Annual</p>
               <h1 className="ozk-display ozk-wordmark">
                 <span className="ozk-word ozk-word-a">Ozark</span>

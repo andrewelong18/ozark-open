@@ -754,6 +754,45 @@ Both hero and mark are wired to their eventual paths and will light up on drop:
 Until the aerial exists the fully expanded hero is an empty green field, which
 is the expansion working with nothing to reveal.
 
+#### Item 6 addendum 2: the logo is real, and the colours are sampled
+
+The tournament logo was never a chat attachment problem after all. It was in
+Andrew's Google Drive the whole time, and the Drive connector can return file
+bytes as base64, which decode straight to disk. **`public/tournament/ozark-open-logo.svg` is now the real art**, not a
+stand-in: the Missouri silhouette in forest green with a gold outline, the gold
+flagstick and red flag planted at the Lake. `components/landing/tournament-mark.tsx`
+is deleted.
+
+**The palette is now sampled, not eyeballed** (Item 3.2's numbers were guesses):
+
+| Role | Guessed | Actual, from the SVG |
+|---|---|---|
+| Forest green | `#00693E` | **`#006747`** |
+| Gold | `#FDDA00` | **`#FDDA00`** |
+| Flag red | `#C8102E` | **`#C20F2F`** |
+
+**Gold really is the bridge, and this is now a fact rather than a hypothesis.**
+`public/ozark-mark.svg` (sportsbook: indigo `#312F8C` with bright greens) and
+`public/tournament/ozark-open-logo.svg` (tournament: forest green) share exactly
+one colour, `#FDDA00`. The two brands are otherwise entirely separate palettes.
+That is what makes the gold CTA read as continuous across the handoff in beat C,
+and it settles the open question from Item 3.2.
+
+The page ground and scrim were retuned around `#006747`, and the hero card's
+start scale went from `0.44` to `0.58`, because below that the logo straddled the
+card's top edge and read as a bug rather than a composition.
+
+**The aerial is still missing.** It is not in Drive either (searched), so it
+remains the one outstanding asset. Any of these gets it in:
+
+1. Put it in Google Drive. The connector can then pull it directly, as it did for the logo.
+2. Commit it to the repo at `public/tournament/old-kinderhook-aerial.jpg`.
+3. Attach it in a form that lands on disk rather than being read as an image.
+
+Also still in Drive and not yet pulled, if wanted: the gold-fill logo variant
+(`alt full color logo.svg`) and the versions carrying the "OZARK OPEN" wordmark.
+The page sets that wordmark in type, so the mark-only file is the one it needs.
+
 ---
 
 ## Open questions
@@ -767,10 +806,10 @@ Item 2; what remains is listed here.
 2. **Client JS budget.** Decision 11 prefers CSS scroll-driven animation with no
    dependency. Only if that proves insufficient does decision 12 apply. Not yet
    tested against a real composition.
-3. **What is the tournament brand?** Largely answered by Item 3 — forest green,
-   gold, engraved serif, Masters lineage. Still open: exact hex values, the
-   wordmark's typeface, and whether the tournament gold is the sportsbook's
-   `#FDDA00` (which decides whether gold bridges the two brands).
+3. ~~What is the tournament brand?~~ — **settled.** Green `#006747`, gold
+   `#FDDA00`, flag red `#C20F2F`, sampled from the real logo. The gold is
+   confirmed identical to the sportsbook's, so gold bridges the two brands.
+   Only the wordmark's typeface is still unidentified.
 4. ~~What happens when the theme track ends~~ — **settled in Item 5.1.** The
    track is 3:48, longer than any realistic visit; let it end and stop, no loop.
 5. **Does the theme survive the route change to `/login`?** Decision 21 requires
