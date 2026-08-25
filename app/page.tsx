@@ -3,6 +3,7 @@ import Link from "next/link"
 
 import { createClient } from "@/lib/supabase/server"
 import { EntryGate } from "@/components/landing/entry-gate"
+import { Lake } from "@/components/landing/lake"
 
 /**
  * The Ozark Open landing page, the front door for members and visitors alike.
@@ -76,7 +77,9 @@ export default async function Home() {
                 and lives in CSS: until the file exists at
                 public/tournament/old-kinderhook-aerial.jpg this shows the
                 card's own ground rather than a broken image. */}
-            <div className="ozk-hero-media" aria-hidden />
+            <div className="ozk-hero-media" aria-hidden>
+              <Lake />
+            </div>
             <div className="ozk-hero-scrim" aria-hidden />
 
             <div className="ozk-hero-inner">

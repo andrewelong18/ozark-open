@@ -997,10 +997,9 @@ body:has(.ozk) header {
   place-items: center;
 }
 
-/* The aerial is a CSS background rather than <Image> on purpose: the file is
-   not in the repo yet, and a missing background silently shows the card's own
-   ground instead of a broken image box. Drop the photo at the path below and
-   the hero lights up with no code change.
+/* The lake is the hero's art now, not a placeholder for a photo that has not
+   arrived. It is the media that expands: a card at rest, full bleed by the
+   time you reach the card section.
 
    The shadow is static rather than animated. While the media is a small card
    the shadow reads; once it reaches full bleed the shadow falls outside the
@@ -1011,9 +1010,6 @@ body:has(.ozk) header {
   z-index: 0;
   transform-origin: center;
   background-color: var(--ozk-ink-2);
-  background-image: url("/tournament/old-kinderhook-aerial.jpg");
-  background-size: cover;
-  background-position: center 40%;
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
 }
 
@@ -1104,6 +1100,35 @@ body:has(.ozk) header {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--ozk-text-dim);
+}
+
+/* ---------- The lake ---------- */
+
+.ozk-lake {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Base state is the finished composition: shoreline fully drawn, sheen parked
+   off to one side, pins at rest. Motion is added on top further down. */
+.ozk-lake-shore {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  opacity: 0.9;
+}
+
+.ozk-lake-sheen {
+  opacity: 0;
+}
+
+.ozk-pin-ring {
+  fill: none;
+  stroke: var(--ozk-gold);
+  stroke-width: 1.5;
+  opacity: 0.5;
 }
 
 /* ---------- Shared section furniture ---------- */
@@ -1384,6 +1409,33 @@ body:has(.ozk) header {
       animation-range: 0 70vh;
     }
 
+    /* The shoreline draws itself once, the way a route is traced. The dash
+       length is a round over-estimate of the path length; the exact number
+       does not matter as long as it exceeds it. */
+    .ozk-lake-shore {
+      stroke-dasharray: 9000;
+      animation: ozk-draw 4.5s cubic-bezier(0.33, 0, 0.2, 1) 0.15s both;
+    }
+
+    /* The surface never sits still. Transform only, clipped to the water. */
+    .ozk-lake-sheen {
+      opacity: 1;
+      animation: ozk-sheen 11s linear 1.2s infinite;
+    }
+
+    /* A slow breath, so the whole thing is never quite static. */
+    .ozk-lake-drift {
+      animation: ozk-drift 26s ease-in-out infinite alternate;
+      transform-origin: 52% 48%;
+    }
+
+    /* The venues announce themselves in turn. */
+    .ozk-pin-ring {
+      animation: ozk-ping 3.4s ease-out infinite;
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+
     /* Sections arrive as they enter. Hierarchy: one idea at a time. */
     .ozk-reveal {
       animation: ozk-rise linear both;
@@ -1431,6 +1483,50 @@ body:has(.ozk) header {
   }
   to {
     transform: scale(1);
+  }
+}
+
+@keyframes ozk-draw {
+  from {
+    stroke-dashoffset: 9000;
+    opacity: 0.35;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 0.9;
+  }
+}
+
+@keyframes ozk-sheen {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(2400px);
+  }
+}
+
+@keyframes ozk-drift {
+  from {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.045) translate3d(-1.2%, 0.8%, 0);
+  }
+}
+
+@keyframes ozk-ping {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.75;
+  }
+  70% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
   }
 }
 

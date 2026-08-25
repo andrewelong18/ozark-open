@@ -793,6 +793,53 @@ Also still in Drive and not yet pulled, if wanted: the gold-fill logo variant
 (`alt full color logo.svg`) and the versions carrying the "OZARK OPEN" wordmark.
 The page sets that wordmark in type, so the mark-only file is the one it needs.
 
+#### Item 6 addendum 3: the lake becomes the hero, and it moves
+
+Andrew supplied a map of the Lake of the Ozarks and asked for an original
+stylization of the lake's shape as the hero background, alive rather than
+static. **Amended decision 8 is now built, and the lake replaces the aerial as
+the hero's art** rather than standing in for it.
+
+**The shoreline is real geometry, not drawn freehand.** Earlier notes deferred
+the map because an inaccurate hand-drawn Lake of the Ozarks would be worse than
+none. That objection is answered by tracing rather than drawing: the supplied
+map was masked on the water colour, the largest connected body was boundary
+traced, the contour was smoothed and simplified (Ramer-Douglas-Peucker), and
+curves were fitted through the result. 515 points, about 18KB of path data.
+Only the geography is taken; the styling is the tournament's own. The
+`components/landing/lake.tsx` header records the method.
+
+**Three motions, each with a job:**
+
+| Motion | What it is | Why |
+|---|---|---|
+| Shoreline draws itself | `stroke-dashoffset` over 4.5s, once | Arrival. A route being traced. |
+| Light band crosses the water | A gradient translating inside a clip of the lake | The surface never sits still. Transform only, so it rides the compositor. |
+| Venues pulse | Three rings scaling out on a stagger | Ties the map to the card: these are the three courses. |
+
+Plus a 26s drift on the whole group so it is never quite static. All of it sits
+inside the existing `@supports` and `prefers-reduced-motion: no-preference`
+block. **Verified**: under reduced motion the shoreline renders fully drawn at
+`stroke-dashoffset: 0` with no animation and the media at its natural
+transform, which is the finished composition rather than a broken one.
+
+**The expansion still works**: the lake is the media that expands, measured at
+634px, 997px and 1440px wide across the first 110vh of scroll.
+
+**A defect worth recording.** The logo shipped for several commits missing its
+gold border, because the SVG was hand-assembled into a shell heredoc and the
+21KB outline path was dropped in the process. It was subtle at desktop size and
+obvious on a phone. The border is now a stroke on the state silhouette with
+`paint-order="stroke"`, which reads the same at every size the page uses and
+does not depend on transcribing a large path by hand. Colours and geometry are
+the original's; swap in the source outline if exact vector fidelity is ever
+wanted. The lesson is the general one: do not rebuild binary assets by hand,
+and check the result against the source's byte count.
+
+**The aerial is no longer blocking anything.** The lake is the hero. If the
+photo arrives it now needs a deliberate decision about where it belongs rather
+than a slot waiting to be filled.
+
 ---
 
 ## Open questions
