@@ -932,6 +932,31 @@ in page flow on the hero section while the nudge itself is fixed. Verified both
 ways: it appears after stillness, and stays hidden for a viewer who scrolls at
 once.
 
+#### Item 6 addendum 6: the wordmark is small caps
+
+Andrew, on the logo art: the `ZARK` in Ozark and the `PEN` in Open sit lower
+than the leading `O`. That is small caps, and the page was setting
+`text-transform: uppercase`, which makes every letter full cap height.
+
+**Azalea has no `smcp` table.** Checked the font binary directly: `GSUB`,
+`GPOS` and `kern` are present, `smcp` and `c2sc` are not. So
+`font-variant-caps: small-caps` would only get browser-synthesised scaling,
+with no control over the ratio. Scaling `::first-letter` instead gives exact
+control, and `.ozk-word` is a block so the pseudo-element applies.
+
+**The ratio was measured, not guessed.** Masking the logo's green wordmark and
+segmenting the glyphs gives a leading `O` of 156px against small caps of 109px:
+**0.699**. The base font-size is therefore the *small-cap* size and the leading
+letter is scaled up from it.
+
+The arithmetic value would be 1/0.699 = 1.43, but rendering at 1.43 measured
+0.682. Azalea's `O` is a round letter with overshoot, so it reads taller than
+the flat-topped capitals beside it. Rendered and measured back until it landed:
+**1.4em gives 0.695**, against the logo's 0.699.
+
+The overall size was rebalanced at the same time, since the base clamp now
+describes the small caps rather than the full capitals.
+
 ---
 
 ## Open questions

@@ -1059,22 +1059,37 @@ body:has(.ozk) header {
   text-shadow: 0 1px 12px rgba(4, 33, 26, 0.95);
 }
 
+/* Small caps, matching the logo's wordmark: the leading letter at full cap
+   height and the rest as reduced capitals on a shared baseline.
+
+   Measured off the logo art, the small caps are 109px against the leading O's
+   156px, a ratio of 0.70. Azalea has no `smcp` table, so font-variant-caps
+   would only get browser-synthesised scaling with no control over that ratio.
+   Scaling ::first-letter instead hits it exactly: the base size below IS the
+   small-cap size, and the leading letter is scaled by 1/0.70. */
 .ozk-wordmark {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.02em;
+  gap: 0.06em;
   margin: 0.5rem 0 0;
-  font-size: clamp(2.9rem, 11.5vw, 8.5rem);
+  font-size: clamp(2.1rem, 8.3vw, 6.1rem);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  line-height: 1.08;
+  line-height: 1.12;
   text-shadow: 0 2px 30px rgba(4, 33, 26, 0.95), 0 0 60px rgba(4, 33, 26, 0.7);
 }
 
 .ozk-word {
   display: block;
   will-change: transform;
+}
+
+/* 1.40, not the arithmetic 1.43: Azalea's O is a round letter with overshoot,
+   so it measures taller than the flat-topped small caps beside it. Rendered
+   and measured back until the ratio matched the logo's 0.70. */
+.ozk-word::first-letter {
+  font-size: 1.4em;
 }
 
 .ozk-meta {
