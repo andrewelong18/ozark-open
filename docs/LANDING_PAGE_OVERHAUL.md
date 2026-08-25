@@ -350,8 +350,8 @@ decision 1 from a styling exception into a **brand boundary**:
 | | Front of house — `/` | Back of house — the app |
 |---|---|---|
 | Brand | **Ozark Open tournament** | Ozark Open **Sportsbook** |
-| Palette | Green-led *(pending)* | Indigo `#312F8C` + rationed gold |
-| Mark | Tournament logo *(pending)* | `ozark-mark.svg` / wordmark |
+| Palette | Forest green + gold (Item 3.2) | Indigo `#312F8C` + rationed gold |
+| Mark | `ozark-open-logo.svg` (Item 3.2) | `ozark-mark.svg` / wordmark |
 | Register | Cinematic, dark-capable | Flat cream, sunlight-legible |
 
 The underlying principle from 23 still holds — **one typeface doing something
@@ -374,10 +374,160 @@ makes video feel authored rather than licensed.
 
 #### Assets Andrew owes before this can be built
 
-1. **The tournament color palette** (green-led) and the **tournament logo** — blocks 23, and with it most of the visual direction.
+1. ~~The tournament colour palette and logo~~ — **supplied, see Item 3.** The
+   binaries still need committing to `public/tournament/`, and the exact hex
+   values still need confirming.
 2. **The three courses, three dates, and the format per round** (stroke play, scramble, etc.) — blocks beat B entirely; the scorecard is only as good as this data.
-3. **Any footage or photography from the first four years** — decides whether the hero is cinematic or typographic. Both can be excellent; they are different designs.
+3. **Any footage from the first four years** — the Old Kinderhook aerial (Item
+   3.3) means there is now a viable hero either way, so this decides between
+   *typographic over photograph* and *cinematic video*, rather than blocking.
 4. **The theme track**, full length, plus a decision on what happens when it ends.
+
+---
+
+### Item 3 — Supplied assets and how they are used (Aug 25, 2026)
+
+Andrew supplied four assets in conversation: the Old Kinderhook aerial, the
+Pace of Play badge, and three logo variants. **The binaries are not yet in the
+repo** — they arrived as chat attachments and were never written to disk, so
+every colour value below is eyeballed from the images and every path below is a
+proposal, not a fact. See "Still needed" at the end of this item.
+
+#### 3.1 Where tournament assets live
+
+`public/` already holds the **sportsbook** marks at its root (`ozark-mark.svg`,
+`ozark-wordmark.svg`). Tournament assets are a different brand (Item 2 §E), so
+they get their own namespace rather than sitting beside them:
+
+| Asset | Proposed path |
+|---|---|
+| Old Kinderhook aerial | `public/tournament/old-kinderhook-aerial.jpg` |
+| Logo, green (primary) | `public/tournament/ozark-open-logo.svg` |
+| Logo, gold (alt) | `public/tournament/ozark-open-logo-gold.svg` |
+| Mark only, no wordmark | `public/tournament/ozark-open-mark.svg` |
+| Pace of Play badge | `public/tournament/pace-of-play.svg` |
+
+The directory split physically encodes the front-of-house / back-of-house
+boundary, which makes the rule harder to violate by accident.
+
+#### 3.2 The logo — three variants
+
+A Missouri state silhouette with a flagstick planted around the Lake of the
+Ozarks, over a small-caps serif "OZARK OPEN" wordmark.
+
+| Variant | Description | Use |
+|---|---|---|
+| **Green (primary)** | Forest-green state, gold outline, gold pin, red flag, black cup, green wordmark | Default everywhere on `/` |
+| **Gold (alt)** | Inverted: gold state, green outline, green pin, red flag, white cup | Only over dark or photographic backgrounds where the green variant would disappear |
+| **Mark only** | State + pin, no wordmark | Tight spaces: the entry gate, favicon, the sticky header after scroll |
+
+**Palette read (eyeballed — confirm against source files):**
+
+| Role | Approx. | Notes |
+|---|---|---|
+| Forest green | `#00693E`-ish | State fill and wordmark. Much deeper than the Pace of Play badge greens. |
+| Gold | `#FDDA00`-ish | **Looks near-identical to the sportsbook's `--gold-400` `#FDDA00`.** |
+| Flag red | `#C8102E`-ish | Tiny-area accent only. Do not promote it to a UI colour; it collides with the DS's loss-red semantics. |
+
+**Gold is the bridge between the two brands.** If the tournament gold really is
+`#FDDA00`, the front/back-of-house boundary is *green vs. indigo* with gold
+crossing both — which means the gold CTA reads as continuous through the login,
+and the one-gold-moment rule survives the handoff intact. This is worth
+confirming precisely, because it is load-bearing for the whole colour strategy.
+
+**The wordmark is not Azalea.** It is an engraved Roman serif set in small caps
+(full-height `O`, reduced `ZARK`), higher contrast and more monumental than
+Azalea's warm serif. This settles the caution flagged under decision 23:
+**the sportsbook type stack does not carry over to the landing page.** Either
+identify the actual face from the source file or choose a deliberate match.
+
+**Brand lineage worth naming:** green + gold + red flag on an engraved serif is
+unmistakably Masters-derived. That is a gift, because it points the landing page
+at *tournament-classic* — engraved, ceremonial, restrained — rather than
+modern-sportsbook. It also supplies a far better reference than any of the
+resort sites reviewed in Item 2: the Masters' own site is famously austere. The
+lineage aligns exactly with decision 2 (ceremony, not persuasion) and with the
+Ohoopee finding that restraint is the exclusivity signal.
+
+**Amends decision 8.** The map section should not be a generic vector map. The
+logo already contains a Missouri silhouette, so the location section plots the
+three courses on **the brand's own geometry** — the same state shape, at a
+larger scale, with three pins instead of one. The mark becomes the map, and the
+map becomes a section. Strictly better than the original recommendation.
+
+#### 3.3 Old Kinderhook aerial — the hero image
+
+A wide fisheye drone shot: curved horizon, sky across roughly the top third,
+clubhouse and the Lake of the Ozarks in the mid-distance, fairways and cart
+paths sweeping through the foreground, a road bisecting the frame.
+
+**Why it works.** The curved horizon is genuinely distinctive and reads as
+authored rather than licensed. The sky band is natural negative space for the
+wordmark, and the curve frames a centred mark. It also confirms the venue:
+**Old Kinderhook, Camdenton, Missouri, at the Lake of the Ozarks** — real
+location data for the Announcement beat and the map.
+
+**Treatment required.** The photo's greens are bright and saturated; the logo's
+green is deep forest. Ungraded, the two will not sit together. Grade it down —
+desaturate, deepen the greens, pull the highlights — then apply the film grain
+from decision 24. This is also what lets a bright daylight photo carry a
+cinematic register.
+
+**Two flags:**
+
+1. **Rights.** The image is watermarked *Shawn Kober Photography* in the bottom
+   right. Using it needs either permission or a clean licensed copy. This is
+   worth settling before anyone builds against it, not after.
+2. **The watermark sits in the bottom-right corner**, which is exactly where a
+   full-bleed hero gets cropped hardest on mobile. Even with permission, a
+   clean copy is the better input.
+
+**Interaction with decisions 13, 14 and 22.** If no prior-year footage arrives
+(decision 22), this still becomes the hero and the design resolves as
+**typographic over photograph** rather than cinematic video — which decision 14
+already prefers for v1 anyway. The wordmark-split move (decision 13) works
+particularly well here: "OZARK / OPEN" parting to reveal the course behind it.
+
+#### 3.4 Pace of Play Awareness Month — the sponsor strip
+
+A parody awareness-ribbon badge: circular, pale mint field, mid-green ribbon,
+black "PACE OF PLAY" with "AWARENESS MONTH" curved along the bottom. The Ozark
+Open is a sponsor.
+
+**Amends decision 4.** The three-beat structure gains a thin divider between
+beats B and C. It is **a strip, not a beat** — full-bleed, short, quiet.
+
+```
+Beat A  The Announcement
+Beat B  The Card
+  ─────  Pace of Play sponsor strip  ─────
+Beat C  Entry
+```
+
+**Play it completely straight.** Golf tournaments have sponsor bars; rendering
+this one with a deadpan sponsor treatment is what makes the joke land. Winking
+at it kills it. This also satisfies the DS voice rule directly: *"Inside jokes
+are welcome in copy (fraternity crowd) but the UI itself stays sharp, not
+jokey."* The strip is the one place humour lives on this page.
+
+**Two craft notes:**
+
+- The badge introduces a **third green** — its pale mint field and mid-green
+  ribbon match neither the logo's forest green nor anything in the DS. Either
+  recolour it to the brand green, or keep the strip small and quiet on cream so
+  the mismatch never reads as a clash.
+- The curved "AWARENESS MONTH" lettering **goes illegible below roughly 80px**.
+  The strip should pair the badge with separately set type rather than relying
+  on the badge's own lettering to carry the line. It also needs real alt text,
+  since the joke is the content.
+
+#### 3.5 Still needed
+
+1. **The binaries themselves**, committed to `public/tournament/`. Nothing here can be built until the files exist in the repo.
+2. **Exact hex values** from the source files, especially whether the tournament gold is `#FDDA00`. Load-bearing per §3.2.
+3. **The wordmark's typeface**, identified or deliberately matched.
+4. **Clearance on the aerial**, plus an unwatermarked copy.
+5. **Logo file format** — the variants should be SVG. If they only exist as raster, that is a problem for the entry gate and the sticky header.
 
 ---
 
@@ -392,7 +542,10 @@ Item 2; what remains is listed here.
 2. **Client JS budget.** Decision 11 prefers CSS scroll-driven animation with no
    dependency. Only if that proves insufficient does decision 12 apply. Not yet
    tested against a real composition.
-3. **What is the tournament brand?** Blocked on the palette and logo. See Item 2 §E.
+3. **What is the tournament brand?** Largely answered by Item 3 — forest green,
+   gold, engraved serif, Masters lineage. Still open: exact hex values, the
+   wordmark's typeface, and whether the tournament gold is the sportsbook's
+   `#FDDA00` (which decides whether gold bridges the two brands).
 4. **What happens when the theme track ends** before the user logs in — stop, or
    loop? See decision 21.
 5. **Does the theme survive the route change to `/login`?** Decision 21 requires
@@ -411,6 +564,14 @@ Item 2; what remains is listed here.
 9. **Where does the sportsbook get explained now?** Decision 9 and the Format
    note move that job to after authentication. Nothing behind login currently
    does it. Likely a separate sprint item.
+10. **Clearance on the Old Kinderhook aerial.** It is watermarked *Shawn Kober
+    Photography*. Permission or a clean licensed copy is needed before it can
+    be built against. See Item 3.3.
+11. **Are the three courses all at Lake of the Ozarks?** The aerial confirms Old
+    Kinderhook in Camdenton. The other two venues are still unknown, and the map
+    section (amended decision 8) needs all three to be drawn.
+12. **Does the Pace of Play badge get recoloured** to the brand's forest green,
+    or stay as supplied and sit quietly? See Item 3.4.
 
 ---
 
