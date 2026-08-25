@@ -1,24 +1,135 @@
-# Landing Page Overhaul — Context & Preferences
+# Landing Page Overhaul
 
-**Status:** draft 1 built and pushed Aug 25, 2026 (Item 6). Still not a sprint.
-The page runs; the art does not exist in the repo yet.
-**Scope:** `ozark-open.com` root route only — the logged-out marketing page at
-[`app/page.tsx`](../app/page.tsx). Everything behind login is out of scope
-unless a context item below says otherwise.
+**Status:** shipped. Built, reviewed over several rounds, and merged to `main`
+as the production experience at `ozark-open.com`.
+**Scope:** the root route, [`app/page.tsx`](../app/page.tsx), plus the
+`.ozk`-scoped block in `app/globals.css` and `components/landing/*`. Everything
+behind login is out of scope.
 
-This file is the running record of what Andrew wants the overhaul to be. It is
-written **incrementally, one context item at a time**, in the order the items
-arrive. When the collection phase ends, this doc — plus
-`docs/DESIGN_SYSTEM.md` and the `ozark-open-design` skill — is the brief the
-implementation works from. Nothing here is built until the brief is closed.
-
-Item 1 is a reference Andrew supplied. **Item 2 is the decision log** — 24
-research recommendations with his verdict on each — and is the operative
-section. Where the two disagree, Item 2 wins.
+**How to read this file.** §3 is the as-built spec and is what you want if you
+are changing the page. Everything after it is the record of how it got there:
+Item 2 is the decision log (24 research recommendations and Andrew's verdict on
+each), Items 3 to 5 are the supplied assets and content, and Item 6 plus its
+addenda are the build, including the bugs found along the way and what they
+taught. That history is kept deliberately: several of the addenda record traps
+that are easy to fall into twice.
 
 ---
 
-## 1. What exists today
+## 3. The page as built
+
+### 3.1 Structure
+
+Three beats and a strip, one idea each, in this order:
+
+| | Section | Carries |
+|---|---|---|
+| A | The announcement | Tournament logo, "5th Annual", the wordmark, dates, location. Full-bleed living lake behind it. |
+| B | The Card | Three rounds as a scorecard: round, day, date, course, town. |
+| — | Sponsor strip | Pace of Play Awareness Month, with a drawn ribbon. Played straight. |
+| C | The handoff | The page changes brand to the sportsbook: indigo, Azalea, "Join the Sportsbook", one gold "Log In". |
+
+No feature grid, no explainer cards, **no names of people anywhere**.
+
+### 3.2 The brand boundary
+
+The page is front of house and wears the **tournament** brand; the app behind
+`/login` wears the **sportsbook** brand. Every tournament token is scoped under
+`.ozk` in `app/globals.css` and nothing touches `:root`, so the boundary cannot
+leak into the app.
+
+| | Front of house (`/`) | Back of house (the app) |
+|---|---|---|
+| Ground | Deep green `#04211a` | Warm cream |
+| Brand | Forest green `#006747` | Indigo `#312F8C` |
+| Accent | Gold `#FDDA00` | Gold `#FDDA00` |
+| Display face | Azalea, small caps | Azalea |
+
+**Gold is the bridge, and this is a fact rather than a preference.** The two
+marks in the repo share exactly one colour, `#FDDA00`, and nothing else. That
+is what lets the gold CTA read as continuous across the handoff in beat C.
+
+Colours are sampled from `public/tournament/ozark-open-logo.svg`, not eyeballed:
+green `#006747`, gold `#FDDA00`, flag red `#C20F2F`.
+
+### 3.3 The lake
+
+The hero's art. Three layers that must stay registered to each other:
+
+1. **`LakeFill`** (SVG, below) — gradient fill. This is the fallback that shows when WebGL is unavailable.
+2. **`LakeWater`** (canvas, middle) — the shader. Masked to `public/tournament/lake-mask.svg`.
+3. **`LakeShore`** (SVG, above) — the gold shoreline, which draws itself once then holds a slow glow.
+
+The shoreline **is real geography**. It was traced from a map of the Lake of the
+Ozarks: mask the water by colour, boundary-trace the largest connected body,
+smooth, simplify (Ramer-Douglas-Peucker), fit curves. 515 points, about 18KB.
+Only the geometry was taken; the styling is the tournament's own.
+
+The water is a WebGL fragment shader doing **domain-warped fractal noise**:
+noise is sampled, the result displaces the coordinates of the next sample, twice
+over, and the final field picks between four water tones. Each warp layer drifts
+on its own vector at its own rate, which is what makes colour melt in several
+directions at once instead of travelling one way. No dependency; plain WebGL.
+
+> **The rule that keeps it correct: nothing in the lake stack may carry a
+> transform the canvas does not also carry.** The three layers are registered to
+> each other by `slice`/`cover` alone. A drift animation on the SVG layers, but
+> not the canvas, is what made the shoreline slide off the water it encloses
+> (addendum 7). Verify registration by measurement, not by a single screenshot.
+
+### 3.4 Motion
+
+> **The rule that keeps it working: time-based animation must never live inside
+> `@supports (animation-timeline: ...)`.** That is a feature query for
+> scroll-driven animation. Safari skips the whole block, and the lake sat
+> completely dead on iOS while looking correct in headless Chromium (addendum 4).
+
+| Kind | Where it lives | Without scroll-driven support |
+|---|---|---|
+| Time-based (shader, shoreline draw, glow, nudge) | Outside any feature query, gated only on reduced-motion | Runs normally |
+| Scroll-linked (hero pull-back, wordmark parting, scrim lift, section reveals) | Inside `@supports` | Skipped; page still alive |
+
+Reduced motion resolves to the finished still composition, never a broken one:
+the base CSS *is* the end state and motion is added on top.
+
+### 3.5 Audio
+
+Browsers will not autoplay audio without a user gesture, and **scroll is not a
+gesture**. The entry gate turns that constraint into the ceremony: one tap
+starts the full 3:48 theme and opens the page. It does not loop. A persistent,
+keyboard-reachable mute sits top-right and remembers the choice.
+
+Known gap: the audio element unmounts on navigation to `/login`, so the theme
+stops there. Keeping it alive means hoisting it into a shared layout.
+
+### 3.6 Deliberate deviations from `design-taste-frontend`
+
+Each was a considered call, not an oversight:
+
+1. **Centred hero.** The skill's own exception is the launch-announcement brief where the message is the design.
+2. **Single dark theme.** The skill calls dark mode mandatory and also defers to a brand that insists on one mode. The sportsbook is light-only; this is its counterpart.
+3. **A serif display face.** Permitted where the brand is genuinely ceremonial, which the engraved wordmark makes true.
+4. **No CTA in the hero.** Decision 10 puts the only action at the end on purpose. The skill's rule protects conversion for strangers; this page has ~32 invited members.
+5. **A scroll cue.** The skill bans them outright. This hero fills the viewport with no visible seam, so nothing suggests the page continues. It earns its place by appearing only after four seconds of stillness and never for anyone who has already scrolled.
+
+### 3.7 Copy rules
+
+- Em-dashes and en-dashes are banned in page copy. The date reads "September 24-26, 2026" with a hyphen. (This applies to the page only, not to these docs or the app.)
+- No names of people.
+- The sportsbook is not explained here. That happens after authentication.
+
+### 3.8 What is still outstanding
+
+- **The Old Kinderhook aerial** is licensed and cleared but has never been a file in the repo. The lake is the hero now, so it is no longer blocking; if the photo arrives it needs a deliberate decision about where it belongs.
+- **The Pace of Play badge art.** The strip uses a drawn ribbon.
+- **The format per round** (stroke play, scramble) was dropped, not lost. It can return as a scorecard column.
+- **Nothing behind login explains the sportsbook**, which is the job beat C stopped doing.
+
+---
+
+## Appendix: history
+
+### 1. What the page was before this work
 
 `app/page.tsx` is a **server component**. It calls `supabase.auth.getUser()`
 and `redirect("/dashboard")` for authenticated members, so the landing page is
@@ -38,7 +149,7 @@ consciously break: no client JS on the critical path, one gold CTA per screen
 (the DS rations gold), single light theme (dark mode is intentionally dropped),
 and the auth redirect.
 
-## 2. Stack facts the overhaul must design around
+### 2. Stack facts the overhaul had to design around
 
 | Fact | Consequence |
 |---|---|
