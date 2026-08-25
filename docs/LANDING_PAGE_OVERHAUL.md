@@ -377,13 +377,12 @@ makes video feel authored rather than licensed.
 1. ~~The tournament colour palette and logo~~ — **supplied, see Item 3.** The
    binaries still need committing to `public/tournament/`, and the exact hex
    values still need confirming.
-2. **The format per round** (stroke play, scramble, etc.) — courses and dates
-   supplied in Item 4; the format column is all that is still missing, and beat
-   B cannot be built without it.
+2. ~~The format per round~~ — **dropped (Item 5.2).** Beat B is schedule only.
 3. **Any footage from the first four years** — the Old Kinderhook aerial (Item
    3.3) means there is now a viable hero either way, so this decides between
    *typographic over photograph* and *cinematic video*, rather than blocking.
-4. **The theme track**, full length, plus a decision on what happens when it ends.
+4. ~~The theme track~~ — **supplied and committed** to
+   `public/tournament/ozark-open-theme.mp3` (Item 5.1).
 
 ---
 
@@ -528,7 +527,8 @@ jokey."* The strip is the one place humour lives on this page.
 1. **The binaries themselves**, committed to `public/tournament/`. Nothing here can be built until the files exist in the repo.
 2. **Exact hex values** from the source files, especially whether the tournament gold is `#FDDA00`. Load-bearing per §3.2.
 3. **The wordmark's typeface**, identified or deliberately matched.
-4. **Clearance on the aerial**, plus an unwatermarked copy.
+4. ~~Clearance on the aerial~~ — settled (Item 5.3). An unwatermarked master is
+   still preferable if one exists.
 5. **Logo file format** — the variants should be SVG. If they only exist as raster, that is a problem for the entry gate and the sticky header.
 
 ---
@@ -601,6 +601,70 @@ section whose entire job is telling people where they are going.
 
 ---
 
+### Item 5 — The theme track, and two content decisions (Aug 25, 2026)
+
+#### 5.1 The track is in the repo
+
+**`public/tournament/ozark-open-theme.mp3`** — the first landing-page asset
+actually committed rather than described.
+
+| Property | Value |
+|---|---|
+| Duration | **3:48** (228.7s) |
+| Encoding | MPEG-1 Layer III, VBR averaging 189 kbps |
+| Sample rate / channels | 48 kHz stereo |
+| Size | 5.4 MB |
+| Provenance | Generated with Suno, 2026-06-08 (per the file's ID3 comment) |
+
+Committing a 5.4 MB binary is consistent with the repo's existing practice —
+`public/celebration/great-job.mp4` is already tracked — and with CLAUDE.md's
+"simplest thing that works." Re-encoding to ~96 kbps stereo would save roughly
+2.7 MB, but the track loads **after** the entry tap and so never touches LCP,
+which makes the saving close to worthless. Ship it as supplied.
+
+**Implementation notes:**
+
+- `preload="none"`. The file must not be fetched until the entry tap (decision
+  19), or it competes with the hero for the first bytes on LTE.
+- The audio element lives in a shared layout so it survives the client-side
+  navigation to `/login` (decision 21, open question 5).
+
+**3:48 largely settles open question 4.** A visitor who reads the page and logs
+in will be gone well before the track ends, so "what happens at the end" is an
+edge case, not a design problem. Recommendation: **let it end and stop.** Do not
+loop it. Looping a full 3:48 composition is conspicuous in a way looping a short
+bed is not, and the seam would land at exactly the moment someone has lingered
+long enough to notice.
+
+#### 5.2 Format per round is dropped
+
+Andrew: *"Let's ignore the format per round."*
+
+**Amends decision 6 and beat B.** The scorecard is now schedule only — Round ·
+Day · Date · Course · Town — with no Format column. This also retires the Item 2
+note that beat B should focus on the tournament format (stroke play, scramble,
+and so on); that content is **deferred, not deleted**, and can return as a
+column if Andrew wants it later.
+
+Consequence worth noting: the page now says nothing at all about how the golf is
+played. That is not a gap so much as a further step toward decision 2 — ceremony,
+not explanation. The card announces where everyone will be on three mornings.
+People who need to know the format already know it.
+
+#### 5.3 The aerial is cleared
+
+Andrew: *"you can ignore the watermark it is already paid for."* **Resolves open
+question 10** — the image is licensed and can be used.
+
+One half of the original note still stands, and it is compositional rather than
+legal: the *Shawn Kober Photography* mark is baked into the bottom-right pixels,
+which is where a full-bleed hero crops hardest on mobile. If an unwatermarked
+master exists it remains the better input. If not, the crop and the type
+placement need to account for it, and a photographer credit somewhere on the
+page would be a reasonable thing to carry anyway.
+
+---
+
 ## Open questions
 
 Carried forward until answered. The Item 1 questions are now mostly resolved by
@@ -616,8 +680,8 @@ Item 2; what remains is listed here.
    gold, engraved serif, Masters lineage. Still open: exact hex values, the
    wordmark's typeface, and whether the tournament gold is the sportsbook's
    `#FDDA00` (which decides whether gold bridges the two brands).
-4. **What happens when the theme track ends** before the user logs in — stop, or
-   loop? See decision 21.
+4. ~~What happens when the theme track ends~~ — **settled in Item 5.1.** The
+   track is 3:48, longer than any realistic visit; let it end and stop, no loop.
 5. **Does the theme survive the route change to `/login`?** Decision 21 requires
    it. Confirm the CTA is client-side navigation and the audio element lives in a
    shared layout, or accept that the music stops at the login page.
@@ -634,9 +698,9 @@ Item 2; what remains is listed here.
 9. **Where does the sportsbook get explained now?** Decision 9 and the Format
    note move that job to after authentication. Nothing behind login currently
    does it. Likely a separate sprint item.
-10. **Clearance on the Old Kinderhook aerial.** It is watermarked *Shawn Kober
-    Photography*. Permission or a clean licensed copy is needed before it can
-    be built against. See Item 3.3.
+10. ~~Clearance on the aerial~~ — **cleared, it is paid for (Item 5.3).** Still
+    open only as craft: is there an unwatermarked master, and does the page
+    carry a photographer credit?
 11. **Does the Pace of Play badge get recoloured** to the brand's forest green,
     or stay as supplied and sit quietly? See Item 3.4.
 
