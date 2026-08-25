@@ -1175,11 +1175,6 @@ body:has(.ozk) header {
       ozk-shore-glow 7s ease-in-out 5.2s infinite;
   }
 
-  .ozk-lake-drift {
-    animation: ozk-drift 30s ease-in-out infinite alternate;
-    transform-origin: 52% 48%;
-  }
-
 }
 
 @keyframes ozk-draw {
@@ -1200,15 +1195,6 @@ body:has(.ozk) header {
   }
   50% {
     opacity: 1;
-  }
-}
-
-@keyframes ozk-drift {
-  from {
-    transform: scale(1) translate3d(0, 0, 0);
-  }
-  to {
-    transform: scale(1.05) translate3d(-1.4%, 1%, 0);
   }
 }
 

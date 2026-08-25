@@ -12,7 +12,10 @@
  * is supposed to be contained by.
  *
  * All three use slice/cover centred, which is what keeps them registered to
- * each other at every viewport size.
+ * each other at every viewport size. Nothing here may carry a transform the
+ * canvas does not also carry: an earlier drift animation moved these two SVG
+ * layers but not the masked canvas, and the shoreline slowly slid off the
+ * water it is meant to enclose. The shader supplies the motion now.
  */
 
 const LAKE_D =
@@ -35,7 +38,7 @@ export function LakeFill() {
           <stop offset="100%" stopColor="#0a4740" />
         </linearGradient>
       </defs>
-      <g className="ozk-lake-drift">
+      <g>
         <path d={LAKE_D} fill="url(#ozk-water-fallback)" />
       </g>
     </svg>
@@ -46,7 +49,7 @@ export function LakeFill() {
 export function LakeShore() {
   return (
     <svg className="ozk-lake ozk-lake-shore-layer" {...SHARED} aria-hidden>
-      <g className="ozk-lake-drift">
+      <g>
         <path
           className="ozk-lake-shore"
           d={LAKE_D}

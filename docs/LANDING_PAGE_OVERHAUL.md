@@ -957,6 +957,37 @@ the flat-topped capitals beside it. Rendered and measured back until it landed:
 The overall size was rebalanced at the same time, since the base clamp now
 describes the small caps rather than the full capitals.
 
+#### Item 6 addendum 7: the shoreline slid off the lake, and the shader raced
+
+Two bugs from Andrew's review.
+
+**The gold outline no longer followed the lake.** Both SVG layers, fill and
+shoreline, carried an `ozk-drift` animation: a 30s scale to 1.05 with a small
+translate. The masked canvas carried no such transform. So the shoreline and the
+fill slowly slid off the water they enclose, by up to 5% of scale plus the
+translate, and returned, forever. It looked correct in any single screenshot
+taken early and wrong once it had been on screen a while, which is why it
+survived the previous round of verification.
+
+The drift is deleted rather than duplicated onto the canvas. The shader supplies
+the motion now, so a whole-lake drift was redundant as well as harmful.
+
+**The rule this establishes:** nothing in the lake stack may carry a transform
+the canvas does not also carry. The three layers are registered to each other by
+`slice`/`cover` alone, and any transform applied to one of them breaks that.
+Noted in the component header.
+
+Verified by measurement rather than by eye: with the type and scrim hidden,
+**99.8% of shoreline pixels lie within 5px of water**, and the shoreline's
+geometry is now static across time (the small residual difference between frames
+is the shoreline's opacity glow changing which pixels pass a brightness
+threshold, not movement).
+
+**The shader ran roughly ten times too fast.** Time is now fed in at
+`tMs * 0.0001` rather than `tMs * 0.001`, so a full fold of the noise field
+takes minutes. That is what water at distance looks like; faster reads as a
+screensaver.
+
 ---
 
 ## Open questions

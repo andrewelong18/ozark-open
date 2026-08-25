@@ -20,6 +20,10 @@ import * as React from "react"
  * `preserveAspectRatio="xMidYMid slice"`, which is what keeps the water
  * registered to its shoreline at every viewport size.
  *
+ * Speed is deliberately very low: at tMs * 0.0001 a full fold of the field
+ * takes minutes, which is what water at distance looks like. Anything faster
+ * reads as a screensaver.
+ *
  * Degrades in three steps: no WebGL, or reduced motion, or a hidden tab, and
  * the CSS gradient underneath is what shows. Nothing here is load-bearing for
  * legibility or content.
@@ -209,7 +213,7 @@ export function LakeWater() {
 
     const draw = (tMs: number) => {
       resize()
-      gl.uniform1f(u.time, tMs * 0.001)
+      gl.uniform1f(u.time, tMs * 0.0001)
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     }
 
