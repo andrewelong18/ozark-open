@@ -377,7 +377,9 @@ makes video feel authored rather than licensed.
 1. ~~The tournament colour palette and logo~~ — **supplied, see Item 3.** The
    binaries still need committing to `public/tournament/`, and the exact hex
    values still need confirming.
-2. **The three courses, three dates, and the format per round** (stroke play, scramble, etc.) — blocks beat B entirely; the scorecard is only as good as this data.
+2. **The format per round** (stroke play, scramble, etc.) — courses and dates
+   supplied in Item 4; the format column is all that is still missing, and beat
+   B cannot be built without it.
 3. **Any footage from the first four years** — the Old Kinderhook aerial (Item
    3.3) means there is now a viable hero either way, so this decides between
    *typographic over photograph* and *cinematic video*, rather than blocking.
@@ -531,6 +533,74 @@ jokey."* The strip is the one place humour lives on this page.
 
 ---
 
+### Item 4 — The card: three days, three courses (Aug 25, 2026)
+
+The content for beat B, supplied by Andrew. Days of week verified against the
+calendar; venue towns verified against the courses' own listings.
+
+| Round | Day | Date | Course | Town | Format |
+|---|---|---|---|---|---|
+| 1 | Thursday | Sept 24, 2026 | Old Kinderhook Golf Club | Camdenton, MO | *TBD* |
+| 2 | Friday | Sept 25, 2026 | Bear Creek Valley Golf Club | Osage Beach, MO | *TBD* |
+| 3 | Saturday | Sept 26, 2026 | Osage National Golf Course | Lake Ozark, MO | *TBD* |
+
+Dates match PRD §1 (Sept 24–26, 2026). **The Format column is the one piece
+still missing** — Item 2 established that beat B is about the golf (stroke play,
+scramble, and so on), and the scorecard cannot be built without it.
+
+**Naming.** Andrew wrote "Osage national golf course"; the venue trades as
+**Osage National Golf Resort** (PGA lists it as Osage National Golf Club). On a
+page whose whole register is engraved and ceremonial, the venue names should be
+their real, correct forms. Worth confirming which name to set for each of the
+three.
+
+#### 4.1 Thursday / Friday / Saturday is a typographic gift
+
+The three rounds fall on consecutive days with three-letter abbreviations of
+equal visual weight. Set `THU · FRI · SAT` in tabular figures and the scorecard
+gets a natural rhythm down the left edge, with the numerals `24 · 25 · 26`
+running in lockstep beside them. The DS already mandates tabular figures, so
+this costs nothing and is the kind of detail that makes the section feel set
+rather than laid out.
+
+**Column widths to plan for.** The venue names are long and uneven (17 to 27
+characters). On mobile they are the widest cell by a wide margin and will drive
+the layout. Expect the course name to want its own line under the round, with
+day/date/format on a tighter row above or below it.
+
+#### 4.2 The three courses are too close together for a state map
+
+**This amends the amended decision 8.** All three venues sit within the Lake of
+the Ozarks, spanning roughly 13 miles as the crow flies:
+
+Camdenton → Osage Beach → Lake Ozark, running southwest to northeast along the
+lake. Missouri is about 285 miles wide, so at state scale the three courses are
+inside ~5% of the silhouette's width. On a 400px-wide state outline the pins
+land roughly 18px apart. **They collapse into a single dot, and their labels
+collide outright.** Item 3.2's idea of reusing the logo's Missouri silhouette as
+the map is therefore not buildable as stated.
+
+Two ways out, in order of preference:
+
+1. **Draw the lake, not the state.** The Lake of the Ozarks has an unmistakable
+   serpentine shape that anyone who has been there recognises instantly. Three
+   pins sit comfortably on it at any size, the labels have room, and it reads as
+   *"we know this place"* rather than *"we are in Missouri."* It also gives the
+   page two map scales that work together rather than competing: **the logo says
+   Missouri, the map says the Lake.**
+2. **State silhouette with an inset.** Keep the logo's geometry, add a zoomed
+   detail of the lake region carrying the three pins. Preserves the brand echo
+   but is two drawings instead of one, and the inset is the part anyone actually
+   reads.
+
+Option 1 is the stronger design and the simpler build. Option 2 only wins if the
+brand echo turns out to matter more than legibility, which is unlikely on a
+section whose entire job is telling people where they are going.
+
+**Resolves open question 11.**
+
+---
+
 ## Open questions
 
 Carried forward until answered. The Item 1 questions are now mostly resolved by
@@ -567,10 +637,7 @@ Item 2; what remains is listed here.
 10. **Clearance on the Old Kinderhook aerial.** It is watermarked *Shawn Kober
     Photography*. Permission or a clean licensed copy is needed before it can
     be built against. See Item 3.3.
-11. **Are the three courses all at Lake of the Ozarks?** The aerial confirms Old
-    Kinderhook in Camdenton. The other two venues are still unknown, and the map
-    section (amended decision 8) needs all three to be drawn.
-12. **Does the Pace of Play badge get recoloured** to the brand's forest green,
+11. **Does the Pace of Play badge get recoloured** to the brand's forest green,
     or stay as supplied and sit quietly? See Item 3.4.
 
 ---
