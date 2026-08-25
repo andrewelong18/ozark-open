@@ -1,3 +1,4 @@
+import Image from "next/image"
 import Link from "next/link"
 
 import { createClient } from "@/lib/supabase/server"
@@ -69,22 +70,36 @@ export default async function Home() {
             editorial / launch-announcement brief where the message is the
             design, which is exactly this page. */}
         <section className="ozk-hero">
-          {/* The Old Kinderhook aerial. Decorative, so it carries no alt text
-              and lives in CSS: until the file exists at
-              public/tournament/old-kinderhook-aerial.jpg this degrades to the
-              green ground rather than a broken image. */}
-          <div className="ozk-hero-media" aria-hidden />
-          <div className="ozk-hero-scrim" aria-hidden />
+          {/* The stage is sticky inside a tall section, which is what gives the
+              media room to expand without anyone hijacking the scroll. */}
+          <div className="ozk-hero-stage">
+            {/* The Old Kinderhook aerial. Decorative, so it carries no alt text
+                and lives in CSS: until the file exists at
+                public/tournament/old-kinderhook-aerial.jpg this shows the
+                card's own ground rather than a broken image. */}
+            <div className="ozk-hero-media" aria-hidden />
+            <div className="ozk-hero-scrim" aria-hidden />
 
-          <div className="ozk-hero-inner">
-            <TournamentMark className="mx-auto mb-6 h-16 w-auto" />
-            <p className="ozk-eyebrow">5th Annual</p>
-            <h1 className="ozk-display ozk-wordmark">
-              <span className="ozk-word ozk-word-a">Ozark</span>
-              <span className="ozk-word ozk-word-b">Open</span>
-            </h1>
-            <p className="ozk-meta">September 24-26, 2026</p>
-            <p className="ozk-meta-sub">Lake of the Ozarks, Missouri</p>
+            <div className="ozk-hero-inner">
+              {/* <object> renders its children only when the resource fails to
+                  load, so the real tournament logo takes over the instant the
+                  file exists and the drawn stand-in covers until then. */}
+              <object
+                className="ozk-mark"
+                type="image/svg+xml"
+                data="/tournament/ozark-open-logo.svg"
+                aria-label="Ozark Open"
+              >
+                <TournamentMark className="h-16 w-auto" />
+              </object>
+              <p className="ozk-eyebrow">5th Annual</p>
+              <h1 className="ozk-display ozk-wordmark">
+                <span className="ozk-word ozk-word-a">Ozark</span>
+                <span className="ozk-word ozk-word-b">Open</span>
+              </h1>
+              <p className="ozk-meta">September 24-26, 2026</p>
+              <p className="ozk-meta-sub">Lake of the Ozarks, Missouri</p>
+            </div>
           </div>
         </section>
 
@@ -130,16 +145,25 @@ export default async function Home() {
           </p>
         </aside>
 
-        {/* Beat C: entry. The only action on the page, so it gets its own
-            viewport rather than a button tucked into the hero. Gold once, and
-            it knows who you are. */}
+        {/* Beat C: the handoff. The page changes brand here on purpose, from
+            the tournament to the sportsbook, because this is the doorway into
+            it. Real sportsbook assets: the indigo ground, the existing mark,
+            Azalea, and the one gold action. */}
         <section className="ozk-entry ozk-reveal">
           <div>
-            <p className="ozk-creed ozk-display">
-              No house, no rake, no profit.
-            </p>
+            <Image
+              src="/ozark-mark.svg"
+              alt=""
+              width={818}
+              height={747}
+              unoptimized
+              className="ozk-entry-mark"
+            />
+            <p className="ozk-entry-name">Ozark Open Sportsbook</p>
+            <h2 className="ozk-join">Join the Sportsbook</h2>
+            <p className="ozk-creed">No house, no rake, no profit.</p>
             <Link href={signedIn ? "/dashboard" : "/login"} className="ozk-cta">
-              {signedIn ? "Enter the sportsbook" : "Log in to place your bets"}
+              {signedIn ? "Enter" : "Log In"}
             </Link>
             <p className="ozk-footnote">Invite only</p>
           </div>

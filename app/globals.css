@@ -970,35 +970,60 @@ body:has(.ozk) header {
 
 /* ---------- Beat A: the announcement ---------- */
 
+/* The scroll-expansion hero. This is the choreography from the 21st.dev
+   reference (Item 1): the media starts as a card floating on the ground and
+   grows to full bleed as you scroll, while the wordmark halves part outward.
+
+   The difference from the reference is that nothing here hijacks scroll. The
+   section is simply tall, the stage inside it is sticky, and the scroll
+   position drives the animation directly. Keyboard scrolling works, the page
+   never fights the user, and it costs no JavaScript. */
 .ozk-hero {
   position: relative;
-  min-height: 100dvh;
+  /* Base height with no scroll runway: the media is already full bleed, which
+     is the finished state. The runway is added only where the animation can
+     actually run (see the motion block). */
+  height: 100dvh;
+}
+
+.ozk-hero-stage {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  overflow: hidden;
   display: grid;
   place-items: center;
-  overflow: hidden;
 }
 
 /* The aerial is a CSS background rather than <Image> on purpose: the file is
-   not in the repo yet, and a missing background silently shows the green
-   ground beneath instead of a broken image box. Drop the photo at the path
-   below and the hero lights up with no code change. */
+   not in the repo yet, and a missing background silently shows the card's own
+   ground instead of a broken image box. Drop the photo at the path below and
+   the hero lights up with no code change.
+
+   The shadow is static rather than animated. While the media is a small card
+   the shadow reads; once it reaches full bleed the shadow falls outside the
+   stage and is clipped, so it costs nothing and never repaints. */
 .ozk-hero-media {
   position: absolute;
   inset: 0;
   z-index: 0;
   transform-origin: center;
+  background-color: var(--ozk-ink-2);
   background-image: url("/tournament/old-kinderhook-aerial.jpg");
   background-size: cover;
   background-position: center 40%;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
 }
 
 /* Scrim. The aerial is a bright daylight photo and the logo green is deep
    forest; ungraded they fight. This grades the photo down in the browser
-   so the type has a ground to sit on (Item 3.3). */
+   so the type has a ground to sit on (Item 3.3). It scales with the media so
+   the card is graded too, not just the full-bleed state. */
 .ozk-hero-scrim {
   position: absolute;
   inset: 0;
   z-index: 1;
+  transform-origin: center;
   background:
     linear-gradient(to bottom, rgba(7, 26, 18, 0.5) 0%, rgba(7, 26, 18, 0.12) 42%, rgba(7, 26, 18, 0.86) 100%),
     linear-gradient(to right, rgba(0, 67, 42, 0.28), rgba(0, 67, 42, 0.1));
@@ -1020,6 +1045,25 @@ body:has(.ozk) header {
   z-index: 2;
   text-align: center;
   padding: 0 1.25rem;
+}
+
+/* The tournament mark. <object> is the right element here rather than <img>:
+   it renders its children as fallback when the resource fails to load, so the
+   real logo appears the moment the file lands and the drawn stand-in shows
+   until then. No JavaScript, no broken-image icon. */
+.ozk-mark {
+  display: block;
+  /* A replaced element with width:auto falls back to 300px, which floats the
+     mark off to one side of its centred box. Both dimensions are explicit. */
+  width: 5.5rem;
+  height: 5.5rem;
+  margin: 0 auto 1.5rem;
+  pointer-events: none;
+}
+
+.ozk-mark svg {
+  width: 100%;
+  height: 100%;
 }
 
 .ozk-eyebrow {
@@ -1202,7 +1246,17 @@ body:has(.ozk) header {
   color: var(--ozk-text);
 }
 
-/* ---------- Beat C: entry ---------- */
+/* ---------- Beat C: entry, and the handoff to the sportsbook ----------
+
+   This is the one place the page changes brand, and the switch is the point.
+   Everything above is the TOURNAMENT (forest green, gold, engraved serif).
+   This block is the SPORTSBOOK (indigo #312F8C, Azalea, gold CTA), because it
+   is the doorway into it. The taste skill allows exactly one deliberate
+   colour-block switch per page and this is it: not a section that wandered
+   off palette, but the moment you walk from the clubhouse into the book.
+
+   Gold is what carries across. It is the sportsbook's own accent and it reads
+   as continuous through the login. */
 
 .ozk-entry {
   min-height: 100dvh;
@@ -1210,12 +1264,38 @@ body:has(.ozk) header {
   place-items: center;
   text-align: center;
   padding: 4rem 1.25rem;
+  background: linear-gradient(to bottom, var(--ozk-ink) 0%, #262573 38%, #312f8c 100%);
+  color: #fff;
+}
+
+.ozk-entry-mark {
+  height: 4.5rem;
+  width: auto;
+  margin: 0 auto 1.25rem;
+}
+
+/* Azalea, not the tournament serif. This block belongs to the sportsbook and
+   wears the sportsbook's display face. */
+.ozk-entry-name {
+  font-family: var(--font-azalea), Georgia, serif;
+  font-size: clamp(1.1rem, 3.4vw, 1.5rem);
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.ozk-join {
+  font-family: var(--font-azalea), Georgia, serif;
+  font-size: clamp(2.25rem, 8vw, 4.5rem);
+  line-height: 1.05;
+  margin: 0.75rem 0 0;
+  color: #fff;
 }
 
 .ozk-creed {
-  font-size: clamp(1.5rem, 5vw, 2.75rem);
-  color: var(--ozk-text);
-  margin: 0 0 2.5rem;
+  margin: 1.25rem 0 2.5rem;
+  font-size: clamp(0.95rem, 2.6vw, 1.15rem);
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .ozk-cta {
@@ -1224,25 +1304,23 @@ body:has(.ozk) header {
   color: #1a1600;
   font-weight: 700;
   font-size: 1rem;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  padding: 1.15rem 2.75rem;
+  padding: 1.15rem 3.5rem;
   border-radius: var(--ozk-radius);
   text-decoration: none;
   white-space: nowrap;
   transition: transform 120ms ease, background-color 120ms ease;
 }
 
-/* The label is the brand's own line and stays intact, so the button adapts
-   instead: full width and tighter tracking on a phone, where "LOG IN TO PLACE
-   YOUR BETS" at desktop metrics runs past the right edge. */
+/* The label is two words now, so it fits at any width without special-casing
+   the phone. Full width on a phone anyway, because a lone centred button on a
+   390px screen reads as an afterthought. */
 @media (max-width: 640px) {
   .ozk-cta {
     display: block;
     width: 100%;
     padding: 1.15rem 1rem;
-    font-size: 0.82rem;
-    letter-spacing: 0.04em;
   }
 }
 
@@ -1255,7 +1333,7 @@ body:has(.ozk) header {
 }
 
 .ozk-cta:focus-visible {
-  outline: 3px solid var(--ozk-cream);
+  outline: 3px solid #fff;
   outline-offset: 3px;
 }
 
@@ -1264,7 +1342,7 @@ body:has(.ozk) header {
   font-size: 0.75rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ozk-text-dim);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 /* ---------- Motion ----------
@@ -1275,23 +1353,41 @@ body:has(.ozk) header {
 
 @media (prefers-reduced-motion: no-preference) {
   @supports (animation-timeline: view()) {
-    /* The wordmark parts as the first viewport scrolls. Storytelling: the
+    /* The scroll runway. Only exists where the animation can run; without it
+       the hero is one viewport tall and already in its finished state. */
+    .ozk-hero {
+      height: 220vh;
+    }
+
+    /* The expansion. The media and its scrim scale together from a centred
+       card to full bleed. Transform only, so it rides the compositor. */
+    .ozk-hero-media,
+    .ozk-hero-scrim {
+      animation: ozk-expand linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 110vh;
+    }
+
+    /* The wordmark parts as the media grows behind it. Storytelling: the
        curtain opens on the tournament. */
     .ozk-word-a,
     .ozk-word-b {
       animation: ozk-part linear both;
       animation-timeline: scroll(root block);
-      animation-range: 0 90vh;
+      animation-range: 0 110vh;
     }
     .ozk-word-b {
       animation-name: ozk-part-b;
     }
 
-    /* The photo settles in as the type clears. */
-    .ozk-hero-media {
-      animation: ozk-settle linear both;
+    /* The mark and the date lines clear out as the media takes over. */
+    .ozk-mark,
+    .ozk-meta,
+    .ozk-meta-sub,
+    .ozk-eyebrow {
+      animation: ozk-clear linear both;
       animation-timeline: scroll(root block);
-      animation-range: 0 90vh;
+      animation-range: 0 70vh;
     }
 
     /* Sections arrive as they enter. Hierarchy: one idea at a time. */
@@ -1300,6 +1396,21 @@ body:has(.ozk) header {
       animation-timeline: view();
       animation-range: entry 5% entry 55%;
     }
+  }
+}
+
+@keyframes ozk-expand {
+  from {
+    transform: scale(0.44);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes ozk-clear {
+  to {
+    opacity: 0;
   }
 }
 

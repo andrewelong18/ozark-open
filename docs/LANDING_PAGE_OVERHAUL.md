@@ -708,6 +708,52 @@ and a `.ozk`-scoped block appended to `app/globals.css`.
 
 **Verified:** `npm run build` clean, `npm run lint` clean, 397 unit tests pass, and the page was rendered in a real browser at 1440x900 and 390x844. Three defects were found that way and fixed: the wordmark's descender collided with the line beneath it (fixed by setting it uppercase, which also matches the logo's small caps), the scrim was heavy enough to hide the photo entirely, and the CTA overflowed the viewport on a phone.
 
+#### Item 6 addendum, same day: the expansion, the mark, the handoff
+
+Three corrections after Andrew reviewed draft 1.
+
+**The scroll expansion was missing, and that was a miss, not a blocker.** Draft
+1 shipped the wordmark parting and a scale-settle on the background, but not
+the reference pattern's actual signature: the media growing from a card to full
+bleed. Built now. `.ozk-hero` is a 220vh section containing a sticky stage; the
+media and its scrim scale from `0.44` to `1` across the first 110vh of scroll,
+driven by `animation-timeline: scroll(root)`. Measured in a browser at three
+scroll positions: 634px wide, then 997px, then 1440px. The mark, eyebrow and
+date lines fade out over the first 70vh so the media is alone by the time it
+fills the screen. Still no scroll hijacking and still no JS.
+
+The card's shadow is deliberately static rather than animated: while the media
+is small the shadow reads, and once it reaches full bleed the shadow falls
+outside the stage and is clipped. Same effect, no per-frame repaint.
+
+**The mark is now wired to the real logo.** It is an `<object>` pointing at
+`public/tournament/ozark-open-logo.svg` with the drawn stand-in as its child.
+`<object>` renders children only when the resource fails to load, so the real
+logo takes over the moment the file exists, with no JavaScript and no
+broken-image icon. (A replaced element with `width: auto` defaults to a 300px
+box, which floated the mark off-centre; both dimensions are explicit now.)
+
+**Beat C is now the sportsbook, on purpose.** Andrew: the tagline is *"Join the
+Sportsbook"*, the button is just *"Log In"*, and the section should carry
+sportsbook branding. So the page changes brand exactly once, at the end: the
+ground goes from forest green to indigo `#312F8C`, the real `/ozark-mark.svg`
+appears, and the type switches to Azalea. This is not a section wandering off
+palette, it is the doorway: you walk from the clubhouse into the book. The
+taste skill permits exactly one deliberate colour-block switch per page and
+this is it. **Gold is what carries across** the boundary, which is the argument
+Item 3.2 made for confirming the tournament gold really is `#FDDA00`.
+
+**Still blocked on files, not decisions.** The aerial and the logos have only
+ever arrived as chat attachments, which reach the model as images but never
+touch the filesystem. The theme mp3 worked because it was attached as a path.
+Both hero and mark are wired to their eventual paths and will light up on drop:
+
+- `public/tournament/old-kinderhook-aerial.jpg`
+- `public/tournament/ozark-open-logo.svg`
+
+Until the aerial exists the fully expanded hero is an empty green field, which
+is the expansion working with nothing to reveal.
+
 ---
 
 ## Open questions
