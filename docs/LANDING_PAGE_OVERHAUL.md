@@ -880,6 +880,58 @@ graded base fill, with the shoreline holding a slow glow after it draws.
 Note for future work: headless Chromium is not sufficient verification for
 motion. This bug was invisible there and obvious on a real phone.
 
+#### Item 6 addendum 5: real water, Azalea, and a conditional nudge
+
+Five changes from Andrew's review.
+
+**The water is a shader now.** The previous version slid three gradient bands
+across the shape, which read as exactly what it was: solid bars crossing left to
+right. `components/landing/lake-water.tsx` replaces it with a WebGL fragment
+shader doing **domain-warped fractal noise**: noise is sampled, the result
+displaces the coordinates of the next sample, twice over, and the final field
+picks between four water tones. Each warp layer drifts on its own vector at its
+own rate, so colour melts in several directions at once rather than travelling
+one way. No new dependency; it is plain WebGL.
+
+Clipping is a CSS mask (`public/tournament/lake-mask.svg`) rather than anything
+inside the canvas, which keeps the shader ignorant of the shape.
+`mask-size: cover` matches the SVG's `preserveAspectRatio="xMidYMid slice"`, and
+that is what keeps water registered to shoreline at every viewport size.
+
+The lake is **three layers** for a reason: gradient fill below, canvas between,
+gold shoreline above. Put the shoreline under the canvas and the water covers
+the outline it is meant to be held by.
+
+It degrades three ways, all to the CSS gradient underneath: no WebGL, a shader
+the driver rejects, or reduced motion (one frame, held). It also stops entirely
+on a hidden tab. Phones get three octaves and a 1.2 DPR cap instead of four and
+1.6, since a full-screen fragment shader is fill-rate bound.
+
+**Azalea is the tournament display face.** Item 3.2 had read the logo's wordmark
+as a different engraved Roman serif and set Cormorant Garamond as a stand-in.
+Andrew's call is Azalea, which the app already self-hosts. The Cormorant font
+request is removed entirely.
+
+**The venue dots are gone** from the lake.
+
+**The sponsor strip has a ribbon**, drawn rather than sourced, since the badge
+art is still not in the repo. Two crossing strokes, played straight in the
+strip's own colour.
+
+**A scroll nudge, conditional on its own necessity.** The taste skill bans
+scroll cues outright and it is usually right, but this hero fills the viewport
+edge to edge with no visible seam, so nothing suggests the page continues.
+Deliberate deviation. It earns its place by appearing only after four seconds of
+stillness and never appearing at all for anyone who has already scrolled.
+
+Detection is an IntersectionObserver on a sentinel, not a scroll listener. **The
+first version was broken**: the sentinel sat inside the sticky hero stage, which
+is pinned to the viewport and never scrolls out, so the observer never fired and
+the nudge showed to people who had scrolled immediately. The sentinel now sits
+in page flow on the hero section while the nudge itself is fixed. Verified both
+ways: it appears after stillness, and stays hidden for a viewer who scrolls at
+once.
+
 ---
 
 ## Open questions

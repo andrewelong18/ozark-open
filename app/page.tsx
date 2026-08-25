@@ -3,7 +3,10 @@ import Link from "next/link"
 
 import { createClient } from "@/lib/supabase/server"
 import { EntryGate } from "@/components/landing/entry-gate"
-import { Lake } from "@/components/landing/lake"
+import { AwarenessRibbon } from "@/components/landing/awareness-ribbon"
+import { LakeFill, LakeShore } from "@/components/landing/lake"
+import { LakeWater } from "@/components/landing/lake-water"
+import { ScrollNudge } from "@/components/landing/scroll-nudge"
 
 /**
  * The Ozark Open landing page, the front door for members and visitors alike.
@@ -73,12 +76,13 @@ export default async function Home() {
           {/* The stage is sticky inside a tall section, which is what gives the
               media room to expand without anyone hijacking the scroll. */}
           <div className="ozk-hero-stage">
-            {/* The Old Kinderhook aerial. Decorative, so it carries no alt text
-                and lives in CSS: until the file exists at
-                public/tournament/old-kinderhook-aerial.jpg this shows the
-                card's own ground rather than a broken image. */}
+            {/* The lake. The shader canvas carries the moving water, masked to
+                the same silhouette the SVG draws its shoreline from; the SVG's
+                gradient fill shows through if WebGL is unavailable. */}
             <div className="ozk-hero-media" aria-hidden>
-              <Lake />
+              <LakeFill />
+              <LakeWater />
+              <LakeShore />
             </div>
             <div className="ozk-hero-scrim" aria-hidden />
 
@@ -104,6 +108,10 @@ export default async function Home() {
               <p className="ozk-meta-sub">Lake of the Ozarks, Missouri</p>
             </div>
           </div>
+
+          {/* Outside the sticky stage on purpose: the nudge's sentinel has to
+              sit in page flow to detect that someone has scrolled. */}
+          <ScrollNudge />
         </section>
 
         {/* Beat B: the card. A scorecard, not a feature grid. Golf already has
@@ -142,6 +150,7 @@ export default async function Home() {
             bar for a joke sponsorship, and the deadpan is what makes it land.
             The badge art is not in the repo yet, so this is type only. */}
         <aside className="ozk-strip ozk-reveal">
+          <AwarenessRibbon className="ozk-ribbon" />
           <p className="ozk-strip-label">Proud sponsor of</p>
           <p className="ozk-strip-name ozk-display">
             Pace of Play Awareness Month

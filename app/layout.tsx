@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next"
-import { Cormorant_Garamond, Montserrat } from "next/font/google"
+import { Montserrat } from "next/font/google"
 import localFont from "next/font/local"
 import "./globals.css"
 import { Header } from "@/components/header"
@@ -11,18 +11,6 @@ const montserrat = Montserrat({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-montserrat",
-  display: "swap",
-})
-
-// Tournament display face — the LANDING PAGE only, never the app.
-// The tournament wordmark is an engraved Roman serif set in small caps, a
-// different brand from the sportsbook (docs/LANDING_PAGE_OVERHAUL.md item 3.2).
-// Cormorant Garamond is the closest Google-hosted analogue until the real face
-// is identified. Exposed as --font-cormorant and consumed only under `.ozk`.
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin"],
-  weight: ["500", "600"],
-  variable: "--font-cormorant",
   display: "swap",
 })
 
@@ -62,7 +50,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${montserrat.variable} ${azalea.variable} ${cormorant.variable}`}>
+    <html lang="en" className={`${montserrat.variable} ${azalea.variable}`}>
       <body className="font-sans antialiased">
         <PlayerProfileProvider>
           <Header />

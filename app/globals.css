@@ -963,9 +963,11 @@ body:has(.ozk) header {
   display: none;
 }
 
+/* Azalea, per Andrew. Item 3.2 had read the logo's wordmark as a different
+   engraved Roman serif and set Cormorant as a stand-in; Azalea is the call. */
 .ozk-display {
-  font-family: var(--font-cormorant), Georgia, "Times New Roman", serif;
-  font-weight: 600;
+  font-family: var(--font-azalea), Georgia, "Times New Roman", serif;
+  font-weight: 400;
   letter-spacing: 0.02em;
   line-height: 1.04;
 }
@@ -1009,10 +1011,10 @@ body:has(.ozk) header {
   background:
     radial-gradient(
       58% 46% at 50% 46%,
-      rgba(4, 33, 26, 0.93) 0%,
-      rgba(4, 33, 26, 0.8) 42%,
-      rgba(4, 33, 26, 0.32) 72%,
-      rgba(4, 33, 26, 0.06) 100%
+      rgba(4, 33, 26, 0.9) 0%,
+      rgba(4, 33, 26, 0.7) 40%,
+      rgba(4, 33, 26, 0.22) 70%,
+      rgba(4, 33, 26, 0.04) 100%
     ),
     linear-gradient(
       to bottom,
@@ -1095,6 +1097,27 @@ body:has(.ozk) header {
 
 /* ---------- The lake ---------- */
 
+/* The shader canvas, masked to the lake silhouette. cover + center matches the
+   sibling SVG's preserveAspectRatio="xMidYMid slice", which is what keeps the
+   water registered to its shoreline at every viewport size. */
+.ozk-water {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 1;
+  pointer-events: none;
+  -webkit-mask-image: url("/tournament/lake-mask.svg");
+  mask-image: url("/tournament/lake-mask.svg");
+  -webkit-mask-size: cover;
+  mask-size: cover;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
 .ozk-lake {
   position: absolute;
   inset: 0;
@@ -1103,26 +1126,22 @@ body:has(.ozk) header {
   display: block;
 }
 
+/* Fill below the canvas, shoreline above it. Without this the water covers
+   the very outline it is meant to be held by. */
+.ozk-lake-fill {
+  z-index: 0;
+}
+
+.ozk-lake-shore-layer {
+  z-index: 2;
+  pointer-events: none;
+}
+
 /* Base state is the finished composition: shoreline drawn, current parked,
    pins at rest. Motion is added below. */
 .ozk-lake-shore {
   stroke-dashoffset: 0;
   opacity: 0.85;
-}
-
-.ozk-lake-sheen {
-  opacity: 0;
-}
-
-.ozk-pin-ring {
-  fill: none;
-  stroke: var(--ozk-gold);
-  stroke-width: 1.6;
-  opacity: 0.45;
-}
-
-.ozk-pin-dot {
-  fill: var(--ozk-gold);
 }
 
 /* ---------- The lake, moving ----------
@@ -1141,38 +1160,11 @@ body:has(.ozk) header {
       ozk-shore-glow 7s ease-in-out 5.2s infinite;
   }
 
-  .ozk-lake-sheen {
-    opacity: 1;
-  }
-
-  /* Three crossings at different speeds. One band reads as a wipe; three at
-     different rates read as current. Transform only. */
-  .ozk-sheen-a {
-    animation: ozk-flow 9s linear 0.6s infinite;
-  }
-  .ozk-sheen-b {
-    animation: ozk-flow 15s linear infinite;
-  }
-  .ozk-sheen-c {
-    animation: ozk-flow 22s linear 3s infinite;
-  }
-
   .ozk-lake-drift {
     animation: ozk-drift 30s ease-in-out infinite alternate;
     transform-origin: 52% 48%;
   }
 
-  .ozk-pin-ring {
-    animation: ozk-ping 3.6s ease-out infinite;
-    transform-box: fill-box;
-    transform-origin: center;
-  }
-
-  .ozk-pin-dot {
-    animation: ozk-pin-breathe 3.6s ease-in-out infinite;
-    transform-box: fill-box;
-    transform-origin: center;
-  }
 }
 
 @keyframes ozk-draw {
@@ -1196,15 +1188,6 @@ body:has(.ozk) header {
   }
 }
 
-@keyframes ozk-flow {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(2600px);
-  }
-}
-
 @keyframes ozk-drift {
   from {
     transform: scale(1) translate3d(0, 0, 0);
@@ -1214,28 +1197,73 @@ body:has(.ozk) header {
   }
 }
 
-@keyframes ozk-ping {
-  0% {
-    transform: scale(0.7);
-    opacity: 0.7;
-  }
-  70% {
-    transform: scale(3);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(3);
-    opacity: 0;
+/* ---------- The scroll nudge ---------- */
+
+/* A 1px sentinel at the top of the hero SECTION, in page flow. It must not be
+   inside the sticky stage: that is pinned to the viewport and never scrolls
+   away, so the observer would never fire and the nudge would show to people
+   who had already scrolled. */
+.ozk-nudge-sentinel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+/* Fixed, so it stays at the bottom of the viewport while the sentinel moves. */
+.ozk-nudge {
+  position: fixed;
+  bottom: max(2.25rem, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 900ms ease;
+}
+
+.ozk-nudge[data-visible="true"] {
+  opacity: 1;
+}
+
+.ozk-nudge-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--ozk-text-dim);
+  text-shadow: 0 1px 12px rgba(4, 33, 26, 0.95);
+}
+
+/* A line that falls, rather than a bouncing chevron. */
+.ozk-nudge-line {
+  display: block;
+  width: 1px;
+  height: 2.75rem;
+  background: linear-gradient(to bottom, transparent, var(--ozk-gold));
+  transform-origin: top center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ozk-nudge[data-visible="true"] .ozk-nudge-line {
+    animation: ozk-nudge-fall 2.4s ease-in-out infinite;
   }
 }
 
-@keyframes ozk-pin-breathe {
+@keyframes ozk-nudge-fall {
   0%,
   100% {
-    transform: scale(1);
+    transform: scaleY(0.45);
+    opacity: 0.35;
   }
   50% {
-    transform: scale(1.25);
+    transform: scaleY(1);
+    opacity: 1;
   }
 }
 
@@ -1357,6 +1385,15 @@ body:has(.ozk) header {
   background: var(--ozk-ink-2);
   padding: 1.5rem 1.25rem;
   text-align: center;
+}
+
+.ozk-ribbon {
+  display: block;
+  width: auto;
+  height: 2.1rem;
+  margin: 0 auto 0.85rem;
+  color: var(--ozk-gold);
+  opacity: 0.9;
 }
 
 .ozk-strip-label {
