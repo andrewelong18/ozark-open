@@ -972,19 +972,11 @@ body:has(.ozk) header {
 
 /* ---------- Beat A: the announcement ---------- */
 
-/* The scroll-expansion hero. This is the choreography from the 21st.dev
-   reference (Item 1): the media starts as a card floating on the ground and
-   grows to full bleed as you scroll, while the wordmark halves part outward.
-
-   The difference from the reference is that nothing here hijacks scroll. The
-   section is simply tall, the stage inside it is sticky, and the scroll
-   position drives the animation directly. Keyboard scrolling works, the page
-   never fights the user, and it costs no JavaScript. */
+/* The lake fills the hero. It is not a card on a page: it runs off every edge
+   and the type sits on it. An earlier version boxed it into a small centred
+   card, which read as timid and left most of the viewport empty. */
 .ozk-hero {
   position: relative;
-  /* Base height with no scroll runway: the media is already full bleed, which
-     is the finished state. The runway is added only where the animation can
-     actually run (see the motion block). */
   height: 100dvh;
 }
 
@@ -997,38 +989,41 @@ body:has(.ozk) header {
   place-items: center;
 }
 
-/* The lake is the hero's art now, not a placeholder for a photo that has not
-   arrived. It is the media that expands: a card at rest, full bleed by the
-   time you reach the card section.
-
-   The shadow is static rather than animated. While the media is a small card
-   the shadow reads; once it reaches full bleed the shadow falls outside the
-   stage and is clipped, so it costs nothing and never repaints. */
 .ozk-hero-media {
   position: absolute;
   inset: 0;
   z-index: 0;
-  transform-origin: center;
-  background-color: var(--ozk-ink-2);
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+  transform-origin: 55% 45%;
+  background-color: var(--ozk-ink);
+  /* Overscaled at rest so the arms bleed past every edge. Scrolling pulls back
+     to reveal the whole lake, rather than growing a card. */
+  transform: scale(1.35);
 }
 
-/* Scrim. The aerial is a bright daylight photo and the logo green is deep
-   forest; ungraded they fight. This grades the photo down in the browser
-   so the type has a ground to sit on (Item 3.3). It scales with the media so
-   the card is graded too, not just the full-bleed state. */
+/* Legibility. The lake is busy exactly where the type sits, so a soft pool of
+   ground is pulled up under the announcement while the edges stay bright. */
 .ozk-hero-scrim {
   position: absolute;
   inset: 0;
   z-index: 1;
-  transform-origin: center;
   background:
-    linear-gradient(to bottom, rgba(4, 33, 26, 0.5) 0%, rgba(4, 33, 26, 0.12) 42%, rgba(4, 33, 26, 0.86) 100%),
-    linear-gradient(to right, rgba(0, 103, 71, 0.26), rgba(0, 103, 71, 0.08));
+    radial-gradient(
+      58% 46% at 50% 46%,
+      rgba(4, 33, 26, 0.93) 0%,
+      rgba(4, 33, 26, 0.8) 42%,
+      rgba(4, 33, 26, 0.32) 72%,
+      rgba(4, 33, 26, 0.06) 100%
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(4, 33, 26, 0.66) 0%,
+      rgba(4, 33, 26, 0) 30%,
+      rgba(4, 33, 26, 0) 66%,
+      rgba(4, 33, 26, 0.86) 100%
+    );
 }
 
-/* Film grain. Fixed and pointer-events:none so it never repaints on scroll
-   (taste skill 6.E). Decision 24. */
+/* Film grain. Fixed and pointer-events:none so it never repaints on scroll. */
 .ozk-grain {
   position: fixed;
   inset: 0;
@@ -1045,40 +1040,34 @@ body:has(.ozk) header {
   padding: 0 1.25rem;
 }
 
-/* The tournament mark. <object> is the right element here rather than <img>:
-   it renders its children as fallback when the resource fails to load, so the
-   real logo appears the moment the file lands and the drawn stand-in shows
-   until then. No JavaScript, no broken-image icon. */
 .ozk-mark {
   display: block;
   width: auto;
-  height: 5rem;
-  margin: 0 auto 1.25rem;
+  height: 4.5rem;
+  margin: 0 auto 1.1rem;
+  filter: drop-shadow(0 2px 14px rgba(4, 33, 26, 0.9));
 }
 
 .ozk-eyebrow {
-  font-size: 0.75rem;
-  letter-spacing: 0.34em;
+  font-size: 0.72rem;
+  letter-spacing: 0.36em;
   text-transform: uppercase;
   color: var(--ozk-gold);
   font-weight: 600;
+  text-shadow: 0 1px 12px rgba(4, 33, 26, 0.95);
 }
 
-/* The wordmark parts on scroll. This is decision 13: the signature move from
-   the reference component applied to the brand's own name rather than to a
-   generic headline. */
 .ozk-wordmark {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.02em;
-  margin: 0.6rem 0 0;
-  font-size: clamp(2.5rem, 10.5vw, 7.5rem);
+  margin: 0.5rem 0 0;
+  font-size: clamp(2.9rem, 11.5vw, 8.5rem);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  /* Uppercase has no descenders, but the line box still needs room or the
-     cap-height crowds whatever sits under the wordmark. */
-  line-height: 1.12;
+  letter-spacing: 0.05em;
+  line-height: 1.08;
+  text-shadow: 0 2px 30px rgba(4, 33, 26, 0.95), 0 0 60px rgba(4, 33, 26, 0.7);
 }
 
 .ozk-word {
@@ -1087,19 +1076,21 @@ body:has(.ozk) header {
 }
 
 .ozk-meta {
-  margin-top: 1.75rem;
+  margin-top: 1.5rem;
   font-size: clamp(0.95rem, 2.4vw, 1.15rem);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ozk-text);
+  text-shadow: 0 1px 16px rgba(4, 33, 26, 0.95);
 }
 
 .ozk-meta-sub {
   margin-top: 0.4rem;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--ozk-text-dim);
+  text-shadow: 0 1px 16px rgba(4, 33, 26, 0.95);
 }
 
 /* ---------- The lake ---------- */
@@ -1112,12 +1103,11 @@ body:has(.ozk) header {
   display: block;
 }
 
-/* Base state is the finished composition: shoreline fully drawn, sheen parked
-   off to one side, pins at rest. Motion is added on top further down. */
+/* Base state is the finished composition: shoreline drawn, current parked,
+   pins at rest. Motion is added below. */
 .ozk-lake-shore {
-  stroke-dasharray: 1;
   stroke-dashoffset: 0;
-  opacity: 0.9;
+  opacity: 0.85;
 }
 
 .ozk-lake-sheen {
@@ -1127,8 +1117,126 @@ body:has(.ozk) header {
 .ozk-pin-ring {
   fill: none;
   stroke: var(--ozk-gold);
-  stroke-width: 1.5;
-  opacity: 0.5;
+  stroke-width: 1.6;
+  opacity: 0.45;
+}
+
+.ozk-pin-dot {
+  fill: var(--ozk-gold);
+}
+
+/* ---------- The lake, moving ----------
+
+   THIS BLOCK IS DELIBERATELY OUTSIDE @supports (animation-timeline).
+   These are ordinary time-based animations and they must run everywhere. A
+   previous version nested them alongside the scroll-driven rules, so any
+   browser without scroll-driven animations dropped the lot and the water sat
+   dead still. Safari did exactly that. Only reduced-motion gates them now. */
+
+@media (prefers-reduced-motion: no-preference) {
+  .ozk-lake-shore {
+    stroke-dasharray: 9000;
+    animation:
+      ozk-draw 5s cubic-bezier(0.33, 0, 0.2, 1) 0.2s both,
+      ozk-shore-glow 7s ease-in-out 5.2s infinite;
+  }
+
+  .ozk-lake-sheen {
+    opacity: 1;
+  }
+
+  /* Three crossings at different speeds. One band reads as a wipe; three at
+     different rates read as current. Transform only. */
+  .ozk-sheen-a {
+    animation: ozk-flow 9s linear 0.6s infinite;
+  }
+  .ozk-sheen-b {
+    animation: ozk-flow 15s linear infinite;
+  }
+  .ozk-sheen-c {
+    animation: ozk-flow 22s linear 3s infinite;
+  }
+
+  .ozk-lake-drift {
+    animation: ozk-drift 30s ease-in-out infinite alternate;
+    transform-origin: 52% 48%;
+  }
+
+  .ozk-pin-ring {
+    animation: ozk-ping 3.6s ease-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .ozk-pin-dot {
+    animation: ozk-pin-breathe 3.6s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+}
+
+@keyframes ozk-draw {
+  from {
+    stroke-dashoffset: 9000;
+    opacity: 0.3;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 0.85;
+  }
+}
+
+@keyframes ozk-shore-glow {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes ozk-flow {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(2600px);
+  }
+}
+
+@keyframes ozk-drift {
+  from {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.05) translate3d(-1.4%, 1%, 0);
+  }
+}
+
+@keyframes ozk-ping {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(3);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+
+@keyframes ozk-pin-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
 }
 
 /* ---------- Shared section furniture ---------- */
@@ -1364,79 +1472,55 @@ body:has(.ozk) header {
   color: rgba(255, 255, 255, 0.6);
 }
 
-/* ---------- Motion ----------
-   Everything below is opt-in: the base styles above are the finished state,
-   and motion is added only when the user has not asked for less (decision 16,
-   taste skill 6.B). No scroll listeners anywhere; this is all compositor
-   driven (decision 11, taste skill 5.D). */
+/* ---------- Scroll-linked motion ----------
+
+   Progressive enhancement ONLY. Everything here is genuinely tied to scroll
+   position, so it needs animation-timeline. Nothing time-based belongs in this
+   block: a browser that skips it must still get a living page. */
 
 @media (prefers-reduced-motion: no-preference) {
   @supports (animation-timeline: view()) {
-    /* The scroll runway. Only exists where the animation can run; without it
-       the hero is one viewport tall and already in its finished state. */
+    /* The runway the parallax plays out over. */
     .ozk-hero {
-      height: 220vh;
+      height: 210vh;
     }
 
-    /* The expansion. The media and its scrim scale together from a centred
-       card to full bleed. Transform only, so it rides the compositor. */
-    .ozk-hero-media,
-    .ozk-hero-scrim {
-      animation: ozk-expand linear both;
+    /* Pull back from the overscaled rest state to reveal the whole lake. */
+    .ozk-hero-media {
+      animation: ozk-pullback linear both;
       animation-timeline: scroll(root block);
-      animation-range: 0 110vh;
+      animation-range: 0 105vh;
     }
 
-    /* The wordmark parts as the media grows behind it. Storytelling: the
-       curtain opens on the tournament. */
+    /* The wordmark parts as the water opens out behind it. */
     .ozk-word-a,
     .ozk-word-b {
       animation: ozk-part linear both;
       animation-timeline: scroll(root block);
-      animation-range: 0 110vh;
+      animation-range: 0 105vh;
     }
     .ozk-word-b {
       animation-name: ozk-part-b;
     }
 
-    /* The mark and the date lines clear out as the media takes over. */
+    /* The announcement clears so the lake is alone by the time it opens. */
     .ozk-mark,
     .ozk-meta,
     .ozk-meta-sub,
     .ozk-eyebrow {
       animation: ozk-clear linear both;
       animation-timeline: scroll(root block);
-      animation-range: 0 70vh;
+      animation-range: 0 62vh;
     }
 
-    /* The shoreline draws itself once, the way a route is traced. The dash
-       length is a round over-estimate of the path length; the exact number
-       does not matter as long as it exceeds it. */
-    .ozk-lake-shore {
-      stroke-dasharray: 9000;
-      animation: ozk-draw 4.5s cubic-bezier(0.33, 0, 0.2, 1) 0.15s both;
+    /* The legibility pool lifts with them. */
+    .ozk-hero-scrim {
+      animation: ozk-scrim-lift linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 95vh;
     }
 
-    /* The surface never sits still. Transform only, clipped to the water. */
-    .ozk-lake-sheen {
-      opacity: 1;
-      animation: ozk-sheen 11s linear 1.2s infinite;
-    }
-
-    /* A slow breath, so the whole thing is never quite static. */
-    .ozk-lake-drift {
-      animation: ozk-drift 26s ease-in-out infinite alternate;
-      transform-origin: 52% 48%;
-    }
-
-    /* The venues announce themselves in turn. */
-    .ozk-pin-ring {
-      animation: ozk-ping 3.4s ease-out infinite;
-      transform-box: fill-box;
-      transform-origin: center;
-    }
-
-    /* Sections arrive as they enter. Hierarchy: one idea at a time. */
+    /* Sections arrive as they enter. */
     .ozk-reveal {
       animation: ozk-rise linear both;
       animation-timeline: view();
@@ -1445,15 +1529,18 @@ body:has(.ozk) header {
   }
 }
 
-/* The card starts large enough to hold the whole announcement stack. Below
-   about 0.58 the mark straddles the card's top edge, which reads as a bug
-   rather than a composition. */
-@keyframes ozk-expand {
+@keyframes ozk-pullback {
   from {
-    transform: scale(0.58);
+    transform: scale(1.35);
   }
   to {
     transform: scale(1);
+  }
+}
+
+@keyframes ozk-scrim-lift {
+  to {
+    opacity: 0.28;
   }
 }
 
@@ -1466,67 +1553,14 @@ body:has(.ozk) header {
 @keyframes ozk-part {
   to {
     transform: translateX(-14vw);
-    opacity: 0.15;
+    opacity: 0.12;
   }
 }
 
 @keyframes ozk-part-b {
   to {
     transform: translateX(14vw);
-    opacity: 0.15;
-  }
-}
-
-@keyframes ozk-settle {
-  from {
-    transform: scale(1.12);
-  }
-  to {
-    transform: scale(1);
-  }
-}
-
-@keyframes ozk-draw {
-  from {
-    stroke-dashoffset: 9000;
-    opacity: 0.35;
-  }
-  to {
-    stroke-dashoffset: 0;
-    opacity: 0.9;
-  }
-}
-
-@keyframes ozk-sheen {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(2400px);
-  }
-}
-
-@keyframes ozk-drift {
-  from {
-    transform: scale(1) translate3d(0, 0, 0);
-  }
-  to {
-    transform: scale(1.045) translate3d(-1.2%, 0.8%, 0);
-  }
-}
-
-@keyframes ozk-ping {
-  0% {
-    transform: scale(0.7);
-    opacity: 0.75;
-  }
-  70% {
-    transform: scale(2.6);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(2.6);
-    opacity: 0;
+    opacity: 0.12;
   }
 }
 

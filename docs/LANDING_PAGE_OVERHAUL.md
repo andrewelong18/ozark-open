@@ -840,6 +840,46 @@ and check the result against the source's byte count.
 photo arrives it now needs a deliberate decision about where it belongs rather
 than a slot waiting to be filled.
 
+#### Item 6 addendum 4: the lake never animated, and why
+
+Andrew, testing on an iPhone: *"the lake does not animate at all"*, plus the
+hero read as *"too restricted to just the card"* and hard to read. All three
+were fair and all three are fixed.
+
+**The bug, which was mine and not a browser quirk.** Every time-based animation
+on the lake (the current, the shoreline draw, the drift, the venue pulses) had
+been written *inside* `@supports (animation-timeline: view())`, alongside the
+scroll-linked rules. That is a feature query for scroll-driven animations. Any
+browser without them, Safari included, skips the entire block, so the lake sat
+completely still on iOS while looking correct in headless Chromium. Flowing
+water was gated behind an unrelated feature.
+
+The two kinds of motion are now separated on principle:
+
+| | Where it lives | What happens without scroll-driven support |
+|---|---|---|
+| Time-based (current, draw, drift, pulses) | Outside any feature query, gated only on reduced-motion | Runs normally |
+| Scroll-linked (parallax, wordmark parting, scrim lift) | Inside `@supports` | Skipped, page still alive |
+
+Verified in the source: **zero** time-based animations remain inside the
+`@supports` block, and 26 animations report as running at runtime.
+
+**The hero is no longer a card.** The lake now fills the viewport and bleeds
+off every edge at a rest scale of 1.35; scrolling pulls back to 1.0 to reveal
+the whole lake, rather than growing a small centred card. The card framing left
+most of the screen empty and read as timid.
+
+**Legibility.** A radial pool of ground is pulled up under the announcement
+while the lake's edges stay bright, plus text shadows on the type. The type was
+previously competing with the shoreline directly behind it.
+
+**The current is layered.** One moving band reads as a wipe, so there are now
+three crossing at 9s, 15s and 22s at different widths and offsets, over a
+graded base fill, with the shoreline holding a slow glow after it draws.
+
+Note for future work: headless Chromium is not sufficient verification for
+motion. This bug was invisible there and obvious on a real phone.
+
 ---
 
 ## Open questions

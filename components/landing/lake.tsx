@@ -4,17 +4,19 @@
  * The shoreline is real geometry, not drawn freehand: it was traced from a map
  * of the lake by masking the water, following the boundary, simplifying it and
  * fitting curves through the result. Only the geography is borrowed; the
- * styling below is entirely the tournament's own.
+ * styling is entirely the tournament's own.
  *
- * Three things make it feel alive, and each one is doing a job:
- *   1. The shoreline draws itself once on arrival, the way a route is traced.
- *   2. A light band travels the length of the water, so the surface never sits
- *      still. This is a translated gradient inside a clip, so it is transform
- *      only and rides the compositor.
- *   3. The three venues pulse in place, which is what ties the map to the card.
+ * The water is layered rather than flat, because one moving band reads as a
+ * gimmick and three at different speeds read as current: a deep base fill,
+ * three sheen bands crossing at different widths, speeds and offsets, and a
+ * shoreline that draws itself on arrival and then holds a slow glow.
  *
- * All of it is gated on prefers-reduced-motion in globals.css: the static
- * composition below is the finished state and motion is added on top.
+ * Every one of those is a TIME-BASED css animation, which matters. An earlier
+ * version nested them inside @supports (animation-timeline: view()) next to the
+ * scroll-driven work, so any browser without scroll-driven animations dropped
+ * the whole block and the lake sat completely still. Safari did exactly that.
+ * Time-based motion lives outside that query now; only the scroll-linked
+ * parallax is inside it.
  */
 
 const LAKE_D =
@@ -22,8 +24,16 @@ const LAKE_D =
 
 const VENUES = [
   { name: "Old Kinderhook, Camdenton", x: 659.8, y: 658.8, delay: "0s" },
-  { name: "Bear Creek Valley, Osage Beach", x: 847.1, y: 406.1, delay: "1.1s" },
-  { name: "Osage National, Lake Ozark", x: 847.1, y: 342.9, delay: "2.2s" },
+  { name: "Bear Creek Valley, Osage Beach", x: 847.1, y: 406.1, delay: "1.15s" },
+  { name: "Osage National, Lake Ozark", x: 847.1, y: 342.9, delay: "2.3s" },
+]
+
+// Three passes at different speeds is what stops the current reading as a
+// single sweeping wipe.
+const SHEEN = [
+  { cls: "ozk-sheen-a", y: -260, h: 1500 },
+  { cls: "ozk-sheen-b", y: -120, h: 1200 },
+  { cls: "ozk-sheen-c", y: 40, h: 1000 },
 ]
 
 export function Lake() {
@@ -36,39 +46,61 @@ export function Lake() {
       focusable="false"
     >
       <defs>
-        {/* The travelling light band. It is wider than the viewBox so the
-            translate never exposes an edge. */}
-        <linearGradient id="ozk-sheen" x1="0" y1="0" x2="1" y2="0.35">
-          <stop offset="0%" stopColor="#2f9c86" stopOpacity="0" />
-          <stop offset="45%" stopColor="#57cbb0" stopOpacity="0.85" />
-          <stop offset="55%" stopColor="#57cbb0" stopOpacity="0.85" />
-          <stop offset="100%" stopColor="#2f9c86" stopOpacity="0" />
+        <linearGradient id="ozk-water" x1="0" y1="0" x2="0.55" y2="1">
+          <stop offset="0%" stopColor="#0b4f45" />
+          <stop offset="55%" stopColor="#12705c" />
+          <stop offset="100%" stopColor="#0a4740" />
         </linearGradient>
-        <linearGradient id="ozk-water" x1="0" y1="0" x2="0.6" y2="1">
-          <stop offset="0%" stopColor="#0a4a41" />
-          <stop offset="100%" stopColor="#0f6a55" />
+
+        {/* The bright narrow band carries the highlight; the wide dim ones give
+            it depth behind. */}
+        <linearGradient id="ozk-sheen-1" x1="0" y1="0" x2="1" y2="0.5">
+          <stop offset="0%" stopColor="#7fe6c6" stopOpacity="0" />
+          <stop offset="48%" stopColor="#8ff0d2" stopOpacity="0.95" />
+          <stop offset="52%" stopColor="#8ff0d2" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="#7fe6c6" stopOpacity="0" />
         </linearGradient>
+        <linearGradient id="ozk-sheen-2" x1="0" y1="0" x2="1" y2="0.25">
+          <stop offset="0%" stopColor="#3fbf9f" stopOpacity="0" />
+          <stop offset="50%" stopColor="#54d6b4" stopOpacity="0.5" />
+          <stop offset="100%" stopColor="#3fbf9f" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="ozk-sheen-3" x1="0" y1="0" x2="1" y2="0.7">
+          <stop offset="0%" stopColor="#2aa88c" stopOpacity="0" />
+          <stop offset="50%" stopColor="#6fe0c0" stopOpacity="0.34" />
+          <stop offset="100%" stopColor="#2aa88c" stopOpacity="0" />
+        </linearGradient>
+
         <clipPath id="ozk-lake-clip">
           <path d={LAKE_D} />
         </clipPath>
       </defs>
 
       <g className="ozk-lake-drift">
-        {/* The water body. */}
         <path d={LAKE_D} fill="url(#ozk-water)" />
 
-        {/* The sheen, clipped to the water so it only ever moves on the lake. */}
+        {/* The current. Clipped to the water so it only ever moves on the lake. */}
         <g clipPath="url(#ozk-lake-clip)">
-          <rect className="ozk-lake-sheen" x="-1200" y="-200" width="1200" height="1400" fill="url(#ozk-sheen)" />
+          {SHEEN.map((s, i) => (
+            <rect
+              key={s.cls}
+              className={`ozk-lake-sheen ${s.cls}`}
+              x="-1400"
+              y={s.y}
+              width="1400"
+              height={s.h}
+              fill={`url(#ozk-sheen-${i + 1})`}
+            />
+          ))}
         </g>
 
-        {/* The shoreline, which draws itself on arrival. */}
-        <path className="ozk-lake-shore" d={LAKE_D} fill="none" stroke="var(--ozk-gold)" strokeWidth="1.7" />
+        {/* The shoreline: draws itself, then holds a slow glow. */}
+        <path className="ozk-lake-shore" d={LAKE_D} fill="none" stroke="var(--ozk-gold)" strokeWidth="1.9" />
 
         {VENUES.map((v) => (
-          <g key={v.name} className="ozk-pin" style={{ animationDelay: v.delay }}>
-            <circle className="ozk-pin-ring" cx={v.x} cy={v.y} r="7" />
-            <circle cx={v.x} cy={v.y} r="4.5" fill="var(--ozk-gold)" />
+          <g key={v.name}>
+            <circle className="ozk-pin-ring" cx={v.x} cy={v.y} r="7" style={{ animationDelay: v.delay }} />
+            <circle className="ozk-pin-dot" cx={v.x} cy={v.y} r="4.5" />
           </g>
         ))}
       </g>
