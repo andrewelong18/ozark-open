@@ -1,5 +1,13 @@
 # Sprint 14 — Announcement Banner (Bonus)
 
+> ## ❌ CUT — Aug 31, 2026 (Andrew)
+>
+> Never started. It is past the Aug 28 feature freeze, the group dry run is
+> still unrun, and nothing else depends on this. The remaining days before the
+> tournament are worth more spent proving what already exists than adding a
+> surface nobody has asked for twice. Left in the repo as a record of the idea;
+> do not work it without a fresh decision.
+
 > Part of the [Ozark Open roadmap](../ROADMAP.md). **Bonus wish-list sprint (added Jul 18, 2026)** — an enhancement, never an MVP blocker. Work it only when no MVP sprint (0–9) is waiting.
 
 **Goal:** a site-wide announcement banner at the top of every logged-in page. Admins turn it on/off and set the text; users can dismiss it with an ×, but it comes back on their next login.
