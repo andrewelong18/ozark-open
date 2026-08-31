@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # One-command local DB verification: spins up a throwaway Postgres cluster,
 # applies every migration + the Phase 1 seed over the stub Supabase auth
-# schema, runs the four round-trip harnesses (import, placement RLS,
-# payout view, onboarding guard), and smoke-tests the admin chase SQL. No Supabase creds,
+# schema, runs the round-trip harnesses (import, placement RLS,
+# users RLS, activity feed, payout view, onboarding guard), and smoke-tests the admin chase SQL. No Supabase creds,
 # no TCP port (unix socket only), no leftovers — the cluster is deleted
 # on exit. This is the recipe from the round-trip scripts' headers, scripted.
 #
@@ -81,6 +81,9 @@ node --experimental-strip-types "$REPO/scripts/placement-roundtrip.ts"
 # GUC-backed auth.uid() these scripts share. Covers the POLICY layer;
 # onboarding-guard-roundtrip below covers the guard TRIGGER layer.
 node --experimental-strip-types "$REPO/scripts/users-rls-roundtrip.ts"
+# The activity feed's SECURITY DEFINER read. Runs after users-rls-roundtrip for
+# the same reason it does: the GUC-backed auth.uid() is installed by then.
+node --experimental-strip-types "$REPO/scripts/activity-rls-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/payout-view-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/onboarding-guard-roundtrip.ts"
 # Sprint 11's "Done when", run rather than asserted: snapshot → mangle → restore
