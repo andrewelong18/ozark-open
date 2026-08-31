@@ -35,10 +35,11 @@ export const ACTIVITY_LIMIT = 40
  * supabase/migrations/20260831000000_activity_feed.sql for why that list is
  * load-bearing.
  *
- * A failed read yields an empty feed rather than throwing: this is ambient
- * colour in a rail beside the money, and a dashboard that 500s because the
- * quips didn't load would be a worse outcome than a quiet feed. The caller
- * logs; nothing here is a number anyone acts on.
+ * EVERY read here is allowed to fail, and each failure costs only its own part
+ * of the rail — the wagers, the profile links, or the phase-open line. This is
+ * ambient colour beside the money, and a dashboard that breaks because the feed
+ * could not load is the worse outcome by a distance. Nothing here is a number
+ * anyone acts on.
  */
 export async function loadActivityFeed(
   supabase: SupabaseClient,
@@ -48,16 +49,29 @@ export async function loadActivityFeed(
   now: Date,
   limit: number = ACTIVITY_LIMIT
 ): Promise<ActivityEvent[]> {
-  // Two reads, in parallel — one for the wagers, one to give the house lines
-  // their profile links. public.users has been authenticated-read-all since
-  // 20260717000002, and this is ~32 rows, so it costs a round trip and exposes
-  // nothing the app doesn't already show on every closed bet.
-  const [placements, members] = await Promise.all([
+  // Three reads, in parallel, and EVERY ONE of them is allowed to fail. The
+  // caller is a page full of money; this is a rail of ambient colour beside it,
+  // so nothing here may take that page down. That is not a hypothetical: the
+  // dashboard briefly read `opened_at` itself for the phase events, shipped
+  // ahead of the migration adding the column, and every member got an error
+  // card where their dashboard should have been (Aug 31, 2026).
+  //
+  //   - the wagers, through the definer RPC
+  //   - the roster, to give the house lines their profile links
+  //     (public.users is authenticated-read-all since 20260717000002, ~32 rows)
+  //   - opened_at, which is the feed's own column and is read HERE rather than
+  //     by the page, so a database that doesn't have it yet costs one line of
+  //     the feed instead of the whole dashboard
+  const [placements, members, stamps] = await Promise.all([
     supabase.rpc("activity_placements", {
       p_tournament_id: tournamentId,
       p_limit: limit,
     }),
     supabase.from("users").select("id, display_name, avatar_url"),
+    supabase
+      .from("bets")
+      .select("phase, status, opened_at")
+      .eq("tournament_id", tournamentId),
   ])
 
   // A failed member read costs the links, not the feed: the lines still render
@@ -68,14 +82,23 @@ export async function loadActivityFeed(
   }
   const roster = (members.data ?? []) as FeedMember[]
 
+  // A failed stamp read costs the "Phase N is open" line and nothing else: the
+  // caller's rows still carry phase and status, so the phase CLOSE events (which
+  // come from the clock, not the column) and every wager row survive it.
+  if (stamps.error) {
+    console.error("[activity] opened_at read failed:", stamps.error.message)
+  }
+  const stamped = stamps.error ? bets : ((stamps.data ?? []) as FeedBet[])
+  const phases = phaseEvents(stamped, clock, now)
+
   if (placements.error) {
     console.error("[activity] placement read failed:", placements.error.message)
-    return buildFeed(phaseEvents(bets, clock, now), ACTIVITY_QUIPS, roster)
+    return buildFeed(phases, ACTIVITY_QUIPS, roster)
   }
 
   const rows = (placements.data ?? []) as PlacementActivityRow[]
   return buildFeed(
-    [...placementEvents(rows), ...phaseEvents(bets, clock, now)],
+    [...placementEvents(rows), ...phases],
     ACTIVITY_QUIPS,
     roster
   )

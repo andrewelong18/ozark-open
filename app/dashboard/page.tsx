@@ -163,12 +163,19 @@ export default async function DashboardPage() {
     tournamentData as unknown as Record<string, unknown>
   )
   const now = new Date()
-  // opened_at rides along for the activity feed's "Phase N is open" event
-  // (20260831000000_activity_feed.sql) rather than costing a second query — the
-  // badge below ignores it, and lib/activity.ts is the only reader.
+  // `phase, status` and NOTHING the activity feed wants. This read gates the
+  // betting badge, so a column it doesn't need is a column that can take the
+  // whole dashboard down — which is exactly what happened on Aug 31, 2026: it
+  // briefly selected `opened_at` for the feed, shipped ahead of the migration
+  // that adds it, and every member got "We couldn't load the betting status"
+  // instead of a dashboard. The feed reads its own columns now
+  // (lib/activity-source.ts), where a failure costs one line of ambient colour.
+  //
+  // The rule that came out of it: a core read on this page may only select
+  // columns the page itself needs.
   const { data: phaseBetsData, error: phaseBetsError } = await supabase
     .from("bets")
-    .select("phase, status, opened_at")
+    .select("phase, status")
     .eq("tournament_id", tournament.id)
   if (phaseBetsError) {
     console.error("[dashboard] phase bets read failed:", phaseBetsError.message)

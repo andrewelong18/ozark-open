@@ -45,9 +45,11 @@ export async function GET() {
   const tournament = tournamentData as unknown as Record<string, unknown>
   const tournamentId = String(tournament.id)
 
+  // `phase, status` only — loadActivityFeed reads opened_at itself, where a
+  // missing column degrades to a quieter feed rather than a 500.
   const { data: betsData, error: betsError } = await supabase
     .from("bets")
-    .select("phase, status, opened_at")
+    .select("phase, status")
     .eq("tournament_id", tournamentId)
 
   if (betsError) {
