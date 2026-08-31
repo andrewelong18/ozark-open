@@ -22,6 +22,9 @@ import {
   type PlacementQueryRow,
 } from "@/lib/placements"
 import { ComplianceBanner } from "@/components/modules/compliance-banner"
+import { ActivityFeed } from "@/components/modules/activity-feed"
+import { loadActivityFeed } from "@/lib/activity-source"
+import type { FeedBet } from "@/lib/activity"
 import { buildComplianceSummary, buildRulesModel } from "@/lib/my-bets"
 
 // Dashboard (reworked in Sprint 5, closing #23): pool total, the
@@ -160,9 +163,12 @@ export default async function DashboardPage() {
     tournamentData as unknown as Record<string, unknown>
   )
   const now = new Date()
+  // opened_at rides along for the activity feed's "Phase N is open" event
+  // (20260831000000_activity_feed.sql) rather than costing a second query — the
+  // badge below ignores it, and lib/activity.ts is the only reader.
   const { data: phaseBetsData, error: phaseBetsError } = await supabase
     .from("bets")
-    .select("phase, status")
+    .select("phase, status, opened_at")
     .eq("tournament_id", tournament.id)
   if (phaseBetsError) {
     console.error("[dashboard] phase bets read failed:", phaseBetsError.message)
@@ -172,12 +178,21 @@ export default async function DashboardPage() {
       </div>
     )
   }
-  const badge = bettingBadge(
+  const phaseBets = (phaseBetsData ?? []) as FeedBet[]
+  const badge = bettingBadge(clock, phaseBets, now)
+  const upcoming = clock.show_countdown ? nextDeadline(clock, now) : null
+
+  // The activity feed's first page, rendered server-side so the rail is
+  // populated on first paint; the component polls /api/activity from there.
+  // It never throws and never blocks the page — a quiet feed beside working
+  // money numbers is the right failure mode (lib/activity-source.ts).
+  const activity = await loadActivityFeed(
+    supabase,
+    tournament.id,
     clock,
-    (phaseBetsData ?? []) as { phase: number; status: string }[],
+    phaseBets,
     now
   )
-  const upcoming = clock.show_countdown ? nextDeadline(clock, now) : null
   const myRules = participant ? buildRulesModel(participant, rules) : null
 
   // Compliance items behind one collapsed header. Only the warnings count —
@@ -323,10 +338,12 @@ export default async function DashboardPage() {
               </CardContent>
             </Card>
           )}
-          <EmptyState
-            glyph="📣"
-            title="No activity yet"
-            message="Bets, line moves, and pool news will show up here."
+          {/* The feed itself. Names and moments only — who is playing, never
+              what they played; the position half stays behind the bet closing
+              (PRD §8, §12). It renders its own empty state. */}
+          <ActivityFeed
+            initialEvents={activity}
+            serverNow={now.toISOString()}
           />
         </section>
 
