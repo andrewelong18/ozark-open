@@ -163,7 +163,7 @@ The suite is **13 specs across 7 journeys**:
 | `bets-menu` | The Sprint 24 UX: favourites-first ordering, the stroke badge, the collapsed reveal, the default filter |
 | `on-behalf` | `/bets?for=<userId>` — asserts the request goes to the admin route with the **member's** id, and lands on their slate, not the admin's |
 | `results-and-reveal` | A wager hidden while its bet is open, revealed once an admin closes it by upload; then the four-upload lifecycle to final payouts |
-| `activity-feed` | The dashboard feed: a wager appears as a name and a moment, a *second* member sees it while the bet is still open (the `activity_placements()` definer read, which RLS alone can't do), and the rail carries no `$` and no pick label anywhere — the leak canary for PRD §12 A16 |
+| `activity-feed` | The dashboard feed: a wager appears as a name and a moment, a *second* member sees it while the bet is still open (the `activity_placements()` definer read, which RLS alone can't do), and no *wager* row (`activity-bet-row`) says more than a name, "placed a bet" and a stamp, with no `$` anywhere in the rail — the leak canary for PRD §12 A16, scoped to real rows because the house lines legitimately name the same golfers |
 
 Notes worth knowing before you touch it:
 
