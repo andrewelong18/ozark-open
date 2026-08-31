@@ -557,6 +557,12 @@ export type BetWrite = {
   round: string
   status: string
   total_probability: number | null
+  /** Set ONLY on the upload that moves this bet into `open` — the activity
+   *  feed's "Phase N is open" event reads the earliest one in the phase
+   *  (20260831000000_activity_feed.sql). Absent from every other write, so a
+   *  re-upload of an already-open bet leaves the original stamp alone and the
+   *  timeline keeps saying when the phase actually opened. */
+  opened_at?: string
 }
 
 export type PickWrite = {
@@ -621,7 +627,10 @@ export function buildImportPlan(
   existingBets: ExistingBet[],
   existingPicks: ExistingPick[],
   categories: CategoryRow[],
-  users: UserRow[]
+  users: UserRow[],
+  // Injected rather than read from the ambient clock, the rule lib/phases.ts
+  // follows: the opened_at stamp below is otherwise untestable.
+  now: Date = new Date()
 ): ImportPlan {
   const categoryIdByName = new Map(categories.map((c) => [c.name, c.id]))
   const userIdByName = new Map(
@@ -663,8 +672,18 @@ export function buildImportPlan(
     }
 
     const existing = existingBetBySheetId.get(row.sheetBetId)
+    // The transition into `open`, and only the transition. A bet that was
+    // already open takes no stamp — either it produces no write at all, or it
+    // is being updated for some other field and must keep the moment it first
+    // opened. Stamping on every upload would walk the feed's phase-open event
+    // forward to the last upload of the weekend.
+    const opening = write.status === "open" && existing?.status !== "open"
+    const stamped: BetWrite = opening
+      ? { ...write, opened_at: now.toISOString() }
+      : write
+
     if (!existing) {
-      plan.bets.create.push(write)
+      plan.bets.create.push(stamped)
     } else if (
       existing.category_id !== write.category_id ||
       existing.title !== write.title ||
@@ -673,8 +692,11 @@ export function buildImportPlan(
       existing.status !== write.status ||
       !numbersEqual(existing.total_probability, write.total_probability)
     ) {
-      plan.bets.update.push({ ...write, id: existing.id })
+      plan.bets.update.push({ ...stamped, id: existing.id })
     } else {
+      // Unchanged, so unstamped: `opening` is false here by construction (an
+      // unchanged bet has existing.status === write.status), which is what
+      // keeps a re-upload of an identical sheet a true no-op.
       plan.bets.unchanged++
     }
   }
