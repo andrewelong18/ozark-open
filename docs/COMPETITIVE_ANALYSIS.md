@@ -107,12 +107,14 @@ requires a new bet type.
 - **DK/FanDuel:** rich standings with projections. **Ozark:** Sprint 8 mirrors the workbook read-only; enrich it with **projected pari-mutuel standings** ("who's winning the pool right now" from `lib/payouts.ts` theoretical numbers), not just golf scores. Design ref (`Leaderboard` screen) already exists in the design kit.
 - **Impact:** High · **Effort:** M · **Scope-fit:** ✅ — **augments Sprint 8**, doesn't replace it. ⚠️ Note the whole leaderboard is itself an open call (`OUTSTANDING_DECISIONS.md` §1: Pat floated dropping it); confirm it's staying before investing here.
 
-### 2.4 Activity feed
+### 2.4 Activity feed — ✅ **built Aug 31, 2026**
 - **DK:** social feeds of friends' activity. **Ozark:** "3 people have placed Phase 2 bets" builds pre-close momentum **without** leaking positions (counts/anonymized before close, full detail after). A dashboard strip, not a full feed.
 - **Impact:** Med · **Effort:** M · **Scope-fit:** ✅ — must honor hidden-until-close (aggregate only pre-close).
+- **As built,** with one deliberate widening of the line above (PRD §12 A16): the rows are **named** rather than anonymized — "Avery Approved placed a bet", linked to the profile modal, with a relative timestamp — because a name carrying no position leaks nothing to trade on, while the pick and the amount stay behind the close exactly as this section requires. Three event kinds: a wager, a phase opening or closing, and a house quip rolled in deterministically (`lib/activity-quips.ts`). Newest at top, arriving rows animating in and pushing the timeline down. The pre-close containment is a database boundary, not a UI decision — `public.activity_placements()` (`20260831000000_activity_feed.sql`) returns `(id, user_id, display_name, avatar_url, created_at)` and nothing else, and `scripts/activity-rls-roundtrip.ts` asserts that signature on every `local-db-verify` run. §2.2's consensus percentages are still **not** built and still belong after the close.
 
 ### 2.5 Live-update polish
 - **DK:** live everything. **Ozark:** Andrew flagged live updates as fair game — but the "real-time tote board" is permanently out (§4). The middle ground: light polling / refresh-on-focus so pool total, placement counts, and results don't show stale on a phone left open. Refresh-on-focus + a manual refresh affordance, not websockets.
+- **Partially built Aug 31, 2026:** the activity feed polls `/api/activity` every 20s and refetches when the tab regains focus — this section's "light polling / refresh-on-focus", scoped to the feed rather than the whole page. The pool total, placement counts and results still refresh on navigation only.
 - **Impact:** Low–Med · **Effort:** S · **Scope-fit:** ✅ — stops well short of real-time odds. PRD §3's "no real-time page updates" is about a live tote board that moves odds with pool weight; a stale-data refresh is a different thing — worth a one-line confirm with Pat before building.
 
 ---
