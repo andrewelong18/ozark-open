@@ -5,6 +5,10 @@
 // run. `now` is always a parameter, the same rule lib/phases.ts follows, so
 // every state below is reachable without waiting for September.
 //
+// The house lines are fiction and are meant to read as fact — same row shape as
+// a wager, same linked name, same stamp (lib/activity-quips.ts). Nothing about
+// them is derived from data, which is why they cost the section below nothing.
+//
 // WHAT THE FEED SAYS, and the line it does not cross: a bet event carries the
 // bettor's NAME and the MOMENT, and nothing else. No pick, no amount, no odds,
 // no bet title. PRD §8 gates (participant, pick, amount) together behind a bet
@@ -19,7 +23,7 @@ import {
   type PhaseBet,
   type PhaseClock,
 } from "./phases.ts"
-import { ACTIVITY_QUIPS } from "./activity-quips.ts"
+import { ACTIVITY_QUIPS, type Quip } from "./activity-quips.ts"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,12 +47,20 @@ export type PhaseEvent = {
   phase: 1 | 2
 }
 
-/** A house line. Carries no information, by design (lib/activity-quips.ts). */
+/**
+ * A house line, dressed as an event: the member it names, what it claims they
+ * did, and the profile it links to when that member has an account. Fiction —
+ * nothing here is read from a placement (lib/activity-quips.ts).
+ */
 export type QuipEvent = {
   kind: "quip"
   id: string
   at: string
-  text: string
+  name: string
+  line: string
+  /** Null when the name matches no member — the row renders as plain text. */
+  userId: string | null
+  avatarUrl: string | null
 }
 
 /** Events that actually happened — everything except the quips. */
@@ -63,6 +75,13 @@ export type PlacementActivityRow = {
   display_name: string | null
   avatar_url: string | null
   created_at: string
+}
+
+/** A member, for matching a house line's name to a profile. */
+export type FeedMember = {
+  id: string
+  display_name: string | null
+  avatar_url?: string | null
 }
 
 /** The minimum a bet has to expose for the phase events. A superset of
@@ -204,13 +223,15 @@ function ascending(a: RealEvent, b: RealEvent): number {
  */
 export function buildFeed(
   real: RealEvent[],
-  quips: readonly string[] = ACTIVITY_QUIPS
+  quips: readonly Quip[] = ACTIVITY_QUIPS,
+  members: FeedMember[] = []
 ): ActivityEvent[] {
   const ordered = [...real].sort(ascending)
+  const byName = memberIndex(members)
   const out: ActivityEvent[] = []
 
   let sinceQuip = 0
-  let lastQuip: string | null = null
+  let lastLine: string | null = null
 
   for (const event of ordered) {
     out.push(event)
@@ -222,24 +243,61 @@ export function buildFeed(
     if (roll >= QUIP_CHANCE && sinceQuip < QUIP_FORCE_EVERY) continue
 
     let index = hash(`${event.id}:quip`) % quips.length
-    // Never the same line twice running — with sixteen lines the collision is
+    // Never the same line twice running — with nineteen lines the collision is
     // rare, and back-to-back repetition is the one way a deterministic joke
     // reads as a bug.
-    if (quips.length > 1 && quips[index] === lastQuip) {
+    if (quips.length > 1 && quips[index].line === lastLine) {
       index = (index + 1) % quips.length
     }
+
+    const quip = quips[index]
+    const member = byName.get(matchKey(quip.name))
 
     out.push({
       kind: "quip",
       id: `quip-${event.id}`,
+      // The preceding event's moment, which is what drops the line BETWEEN the
+      // real ones and keeps it there. A generated-at-render stamp would move on
+      // every 20-second poll, and the row would re-animate each time.
       at: event.at,
-      text: quips[index],
+      name: quip.name,
+      line: quip.line,
+      userId: member?.id ?? null,
+      avatarUrl: member?.avatar_url ?? null,
     })
-    lastQuip = quips[index]
+    lastLine = quip.line
     sinceQuip = 0
   }
 
   return out.reverse()
+}
+
+/**
+ * The name a house line is matched to a member by: trimmed and lowercased,
+ * the same key lib/import.ts matches pick labels to display names with (ADR
+ * 0001 §11). Sharing the convention is the point — a member who links from a
+ * pick links from a joke, and neither has to be maintained separately.
+ */
+function matchKey(name: string): string {
+  return name.trim().toLowerCase()
+}
+
+/** First row wins on a duplicate display name: two members with one name is a
+ *  data fault for /admin/people, and picking one is better than dropping the
+ *  link. */
+function memberIndex(members: FeedMember[]): Map<string, FeedMember> {
+  const index = new Map<string, FeedMember>()
+  for (const member of members) {
+    const key = matchKey(member.display_name ?? "")
+    if (!key || !member.id || index.has(key)) continue
+    index.set(key, member)
+  }
+  return index
+}
+
+/** The line as written, for a plain-text render or an assertion. */
+export function quipText(event: QuipEvent): string {
+  return `${event.name} ${event.line}`
 }
 
 // ---------------------------------------------------------------------------

@@ -13,8 +13,10 @@ import {
   placementEvents,
   type ActivityEvent,
   type FeedBet,
+  type FeedMember,
   type PlacementActivityRow,
 } from "./activity.ts"
+import { ACTIVITY_QUIPS } from "./activity-quips.ts"
 import type { PhaseClock } from "./phases.ts"
 
 /** How many placements the feed reaches back for. The function clamps to 100;
@@ -46,19 +48,35 @@ export async function loadActivityFeed(
   now: Date,
   limit: number = ACTIVITY_LIMIT
 ): Promise<ActivityEvent[]> {
-  const { data, error } = await supabase.rpc("activity_placements", {
-    p_tournament_id: tournamentId,
-    p_limit: limit,
-  })
+  // Two reads, in parallel — one for the wagers, one to give the house lines
+  // their profile links. public.users has been authenticated-read-all since
+  // 20260717000002, and this is ~32 rows, so it costs a round trip and exposes
+  // nothing the app doesn't already show on every closed bet.
+  const [placements, members] = await Promise.all([
+    supabase.rpc("activity_placements", {
+      p_tournament_id: tournamentId,
+      p_limit: limit,
+    }),
+    supabase.from("users").select("id, display_name, avatar_url"),
+  ])
 
-  if (error) {
-    console.error("[activity] placement read failed:", error.message)
-    return buildFeed(phaseEvents(bets, clock, now))
+  // A failed member read costs the links, not the feed: the lines still render
+  // with plain-text names, which is the same fallback a member without an
+  // account gets.
+  if (members.error) {
+    console.error("[activity] member read failed:", members.error.message)
+  }
+  const roster = (members.data ?? []) as FeedMember[]
+
+  if (placements.error) {
+    console.error("[activity] placement read failed:", placements.error.message)
+    return buildFeed(phaseEvents(bets, clock, now), ACTIVITY_QUIPS, roster)
   }
 
-  const rows = (data ?? []) as PlacementActivityRow[]
-  return buildFeed([
-    ...placementEvents(rows),
-    ...phaseEvents(bets, clock, now),
-  ])
+  const rows = (placements.data ?? []) as PlacementActivityRow[]
+  return buildFeed(
+    [...placementEvents(rows), ...phaseEvents(bets, clock, now)],
+    ACTIVITY_QUIPS,
+    roster
+  )
 }

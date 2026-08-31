@@ -1,37 +1,60 @@
-// The house quips — the third event kind in the dashboard activity feed.
+// The house lines — the third event kind in the dashboard activity feed.
 //
 // Editing this list is the whole authoring interface. No table, no admin page:
-// a quip is a string in an array, and changing one is a one-line commit.
+// a line is an entry in this array, and changing one is a one-line commit.
 //
-// TWO RULES, both load-bearing rather than stylistic:
+// THEY ARE MEANT TO PASS FOR REAL EVENTS (Andrew, Aug 31, 2026). Same row as a
+// wager: the member's linked profile name, their avatar, a timestamp, dropped
+// in between the real ones. An earlier version rendered them muted and italic
+// with no name and no stamp precisely so they could NOT be mistaken for
+// something that happened — that was the wrong call for this pool. The joke is
+// that they read as fact.
 //
-//   1. A quip carries NO betting information. Not a pick, not a name, not an
-//      amount, not a count, not "someone just took the Field" — the feed's
-//      entire licence to exist pre-close is that it says who is playing and
-//      never what they played (PRD §8, and the §12 entry for this feature).
-//      A joke that implies a position is a leak wearing a costume.
+// TWO RULES survive that, and both are load-bearing:
 //
-//   2. A quip never imitates a real event. It must be impossible to misread as
-//      something that happened, which is also why the feed renders these in a
-//      visually distinct row — muted, italic, no name, no profile link.
+//   1. A line never encodes REAL data. Nothing here is derived from a
+//      placement, a pick, an amount, a count or a result — these are fiction
+//      typed by hand. The lines may SAY anything; they may not KNOW anything.
+//      "Garrett Klenke bet on himself again" is a running joke, not a read of
+//      the book: the feed's licence to exist mid-phase is that it never
+//      publishes a position (PRD §8, §12 A16), and that holds because no line
+//      here has ever touched the database.
 //
-// Tone: the book's own voice — dry, fond of these people, never urgent. No
-// countdown anxiety (the brand rule), no goading anyone into betting more.
-export const ACTIVITY_QUIPS: readonly string[] = [
-  "The book never sleeps. The book does, however, nap.",
-  "Odds are locked. Opinions are not.",
-  "No house, no rake, no refunds. Just Pat and a spreadsheet.",
-  "Somewhere out there, a putt is being badly over-read.",
-  "A reminder that the lake remains undefeated.",
-  "Every wager here is a receipt for a story told at the turn.",
-  "Handicaps are a suggestion. The scorecard is not.",
-  "The pool does not care how confident you sounded in the group chat.",
-  "Course conditions: warm, humid, mildly hostile.",
-  "Par is a number, not a promise.",
-  "This message contains no inside information. Nobody here has any.",
-  "The range balls are optimistic. So are we.",
-  "Statistically, someone is about to blame the wind.",
-  "Wagers cost money. Confidence is free.",
-  "Pace of play: still a theoretical concept.",
-  "If you are reading this instead of practicing — same.",
+//   2. No "$" in a line. e2e/activity-feed.spec.ts asserts the whole rail
+//      carries no dollar sign — the cheap canary for a stake leaking into a
+//      surface that is readable while a bet is still open. A line with a price
+//      in it would blunt that check rather than trip it. Pinned by a unit test
+//      in lib/activity.test.ts, so this is enforced and not merely requested.
+//
+// The names are matched to members by display_name (see lib/activity.ts), the
+// same key the importer matches pick names with. A name with no account yet
+// renders as plain text — the joke still lands, it just doesn't link.
+
+/** A house line: the member it is about, and what it claims they did. Rendered
+ *  as `${name} ${line}`, which is the sentence as written. */
+export type Quip = { name: string; line: string }
+
+export const ACTIVITY_QUIPS: readonly Quip[] = [
+  { name: "Rob Vemmer", line: "shit his pants." },
+  { name: "Mike Yenzer", line: "cracked open another beer." },
+  { name: "Evan Shippee", line: "rode a ripsrick in the lake." },
+  { name: "Steve Esswein", line: "hacked the mainframe." },
+  { name: "Auben Mitchell", line: "tripped on his laces." },
+  { name: "Mike Cimo", line: "snapped his putter." },
+  { name: "Dan Mercer", line: "got cum on his green jacket." },
+  { name: "Devin Arand", line: "became super gay." },
+  { name: "Joey Suntrup", line: "lost a ball in the fairway." },
+  {
+    name: "Jake Kohne",
+    line: "took out a second mortgage for more sportsbook bets.",
+  },
+  { name: "Brendan Nulsen", line: "was caught by a fisherman." },
+  { name: "Andrew Long", line: "threw a club into the water." },
+  { name: "Garrett Klenke", line: "bet on himself again." },
+  { name: "Steve Jones", line: "was acting kinda fruity." },
+  { name: "Hayden Schiller", line: "lost four balls on one hole." },
+  { name: "Austin Davis", line: "learned a new 5th grade vocabulary word." },
+  { name: "Pat Leicht", line: "used his pocket pussy in the AirBNB bedroom." },
+  { name: "Ethan Kipping", line: "tripped over the tee box marker." },
+  { name: "Dustin Scheller", line: "drove the cart into a bunker." },
 ] as const

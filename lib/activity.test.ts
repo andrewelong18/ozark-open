@@ -13,11 +13,15 @@ import {
   phaseEventText,
   phaseEvents,
   placementEvents,
+  quipText,
   type ActivityEvent,
   type FeedBet,
+  type FeedMember,
   type PlacementActivityRow,
+  type QuipEvent,
   type RealEvent,
 } from "./activity.ts"
+import { ACTIVITY_QUIPS, type Quip } from "./activity-quips.ts"
 import type { PhaseClock } from "./phases.ts"
 
 // The 2026 deadlines as seeded by 20260810000000_phase_clock.sql: Round 1 and
@@ -52,6 +56,13 @@ function betRun(count: number, from = Date.parse("2026-09-20T12:00:00Z")): RealE
 }
 
 const isQuip = (e: ActivityEvent) => e.kind === "quip"
+const quipsOf = (feed: ActivityEvent[]) => feed.filter(isQuip) as QuipEvent[]
+
+/** Two house lines, for the interleave tests that don't care what they say. */
+const TWO_QUIPS: Quip[] = [
+  { name: "Member One", line: "did the first thing." },
+  { name: "Member Two", line: "did the second thing." },
+]
 
 // ---------------------------------------------------------------------------
 // placementEvents
@@ -248,8 +259,8 @@ test("buildFeed survives an empty quip list", () => {
 })
 
 test("buildFeed never repeats a quip back to back", () => {
-  const feed = buildFeed(betRun(80), ["one", "two"]).reverse()
-  const lines = feed.filter(isQuip).map((e) => (e as { text: string }).text)
+  const feed = buildFeed(betRun(80), TWO_QUIPS).reverse()
+  const lines = quipsOf(feed).map((e) => e.line)
   for (let i = 1; i < lines.length; i++) {
     assert.notEqual(lines[i], lines[i - 1])
   }
@@ -281,4 +292,101 @@ test("phaseEventText names the round a close hands off to", () => {
     phaseEventText({ kind: "phase_open", id: "x", at: "", phase: 2 }),
     /Phase 2 is open/
   )
+})
+
+// ---------------------------------------------------------------------------
+// The house lines
+//
+// They are meant to pass for real events — same row, linked name, timestamp —
+// so what is worth pinning is the part a reader can't check: that the list
+// itself stays inert (no real data, nothing that blunts the e2e leak canary)
+// and that a name resolves to the right member or gracefully to none.
+// ---------------------------------------------------------------------------
+
+const MEMBERS: FeedMember[] = [
+  { id: "u-mercer", display_name: "Dan Mercer", avatar_url: "dan.png" },
+  { id: "u-yenzer", display_name: "  mike yenzer  ", avatar_url: null },
+]
+
+/** The quips this feed actually produced, oldest first. */
+function quipsFrom(real: RealEvent[], quips: Quip[], members: FeedMember[] = []) {
+  return quipsOf(buildFeed(real, quips, members).reverse())
+}
+
+test("the shipped list is the nineteen lines, in order", () => {
+  const sentence = (q: Quip) => `${q.name} ${q.line}`
+  assert.equal(ACTIVITY_QUIPS.length, 19)
+  assert.equal(sentence(ACTIVITY_QUIPS[0]), "Rob Vemmer shit his pants.")
+  assert.equal(
+    sentence(ACTIVITY_QUIPS[18]),
+    "Dustin Scheller drove the cart into a bunker."
+  )
+})
+
+test("no house line carries a dollar sign", () => {
+  // e2e/activity-feed.spec.ts asserts the whole rail contains no "$" — the
+  // cheap canary for a stake reaching a surface that is readable while a bet is
+  // open. A line with a price in it would blunt that check instead of tripping
+  // it, so the rule is enforced here rather than only asked for in a comment.
+  for (const quip of ACTIVITY_QUIPS) {
+    assert.ok(!`${quip.name} ${quip.line}`.includes("$"), quip.line)
+  }
+})
+
+test("no house line is empty or missing its member", () => {
+  for (const quip of ACTIVITY_QUIPS) {
+    assert.ok(quip.name.trim().length > 0)
+    assert.ok(quip.line.trim().length > 0)
+  }
+})
+
+test("a house line links to the member it names", () => {
+  const [quip] = quipsFrom(betRun(6), [ACTIVITY_QUIPS[6]], MEMBERS)
+  assert.equal(quip.name, "Dan Mercer")
+  assert.equal(quip.userId, "u-mercer")
+  assert.equal(quip.avatarUrl, "dan.png")
+})
+
+test("matching ignores case and surrounding space, like the importer's", () => {
+  const [quip] = quipsFrom(betRun(6), [ACTIVITY_QUIPS[1]], MEMBERS)
+  assert.equal(quip.name, "Mike Yenzer")
+  assert.equal(quip.userId, "u-yenzer")
+})
+
+test("a name with no account still renders — unlinked", () => {
+  const [quip] = quipsFrom(betRun(6), [ACTIVITY_QUIPS[0]], MEMBERS)
+  assert.equal(quip.name, "Rob Vemmer")
+  assert.equal(quip.userId, null)
+  assert.equal(quip.avatarUrl, null)
+  assert.equal(quipText(quip), "Rob Vemmer shit his pants.")
+})
+
+test("a house line takes the timestamp of the event it follows", () => {
+  // What drops it BETWEEN the real events and keeps it there across polls.
+  const feed = buildFeed(betRun(20), ACTIVITY_QUIPS, MEMBERS).reverse()
+  for (let i = 1; i < feed.length; i++) {
+    if (!isQuip(feed[i])) continue
+    assert.equal(feed[i].at, feed[i - 1].at)
+  }
+})
+
+test("resolving names changes nothing about the interleave", () => {
+  // The member list is a lookup, not an input to the roll: the same feed comes
+  // out whether or not anyone has an account.
+  const real = betRun(30)
+  const withMembers = buildFeed(real, ACTIVITY_QUIPS, MEMBERS)
+  const without = buildFeed(real, ACTIVITY_QUIPS)
+  assert.deepEqual(
+    quipsOf(withMembers).map((q) => q.line),
+    quipsOf(without).map((q) => q.line)
+  )
+})
+
+test("a duplicate display name resolves to one member, not none", () => {
+  const twins: FeedMember[] = [
+    { id: "first", display_name: "Dan Mercer", avatar_url: null },
+    { id: "second", display_name: "Dan Mercer", avatar_url: null },
+  ]
+  const [quip] = quipsFrom(betRun(6), [ACTIVITY_QUIPS[6]], twins)
+  assert.equal(quip.userId, "first")
 })
