@@ -1,9 +1,11 @@
-// Unit tests for lib/format.ts — probability display plus the relative/absolute
-// timestamp pair /admin/roster renders. Zero-dependency: node:test via npm test.
+// Unit tests for lib/format.ts — probability display, the relative/absolute
+// timestamp pair /admin/roster renders, and the compact stamp the activity feed
+// puts at the end of a chat row. Zero-dependency: node:test via npm test.
 
 import test from "node:test"
 import assert from "node:assert/strict"
 import {
+  formatElapsedShort,
   formatProbability,
   formatRelativeTime,
   formatTimestamp,
@@ -83,4 +85,30 @@ test("formatTimestamp is empty for a missing or unparseable stamp", () => {
   assert.equal(formatTimestamp(undefined), "")
   assert.equal(formatTimestamp(""), "")
   assert.equal(formatTimestamp("garbage"), "")
+})
+
+// ---------------------------------------------------------------------------
+// formatElapsedShort — the activity feed's chat-row stamp
+// ---------------------------------------------------------------------------
+
+test("formatElapsedShort buckets to now / m / h / d", () => {
+  assert.equal(formatElapsedShort(ago(5 * SECOND), NOW), "now")
+  assert.equal(formatElapsedShort(ago(59 * SECOND), NOW), "now")
+  assert.equal(formatElapsedShort(ago(MINUTE), NOW), "1m")
+  assert.equal(formatElapsedShort(ago(59 * MINUTE), NOW), "59m")
+  assert.equal(formatElapsedShort(ago(HOUR), NOW), "1h")
+  assert.equal(formatElapsedShort(ago(23 * HOUR), NOW), "23h")
+  assert.equal(formatElapsedShort(ago(DAY), NOW), "1d")
+  assert.equal(formatElapsedShort(ago(9 * DAY), NOW), "9d")
+})
+
+test("formatElapsedShort reads a future stamp as now, never as a negative age", () => {
+  const ahead = new Date(NOW.getTime() + 30 * SECOND).toISOString()
+  assert.equal(formatElapsedShort(ahead, NOW), "now")
+})
+
+test("formatElapsedShort is empty for a missing or unparseable stamp", () => {
+  assert.equal(formatElapsedShort(null, NOW), "")
+  assert.equal(formatElapsedShort(undefined, NOW), "")
+  assert.equal(formatElapsedShort("garbage", NOW), "")
 })

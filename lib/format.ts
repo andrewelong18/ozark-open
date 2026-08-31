@@ -42,6 +42,36 @@ export function formatRelativeTime(
 }
 
 /**
+ * The compact elapsed stamp for the activity feed — "now", "4m", "2h", "3d".
+ *
+ * Separate from formatRelativeTime rather than a mode of it: that one is prose
+ * for an admin table ("3 days ago") and this one has to sit at the end of a
+ * chat row in a 350px rail without pushing the name off the line. Same
+ * injectable `now`, same hand-rolled buckets — Intl.RelativeTimeFormat's output
+ * shifts between ICU builds, which would move this between the Vercel server
+ * and the browser.
+ *
+ * A missing or unparseable stamp renders as "" rather than a guess: the row
+ * still reads correctly without it.
+ */
+export function formatElapsedShort(
+  iso: string | null | undefined,
+  now: number | Date = Date.now()
+): string {
+  if (!iso) return ""
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return ""
+
+  // A clock skew that puts the event slightly in the future reads as "now",
+  // never as a negative age.
+  const elapsed = Math.max(0, (now instanceof Date ? now.getTime() : now) - then)
+  if (elapsed < MINUTE) return "now"
+  if (elapsed < HOUR) return `${Math.floor(elapsed / MINUTE)}m`
+  if (elapsed < DAY) return `${Math.floor(elapsed / HOUR)}h`
+  return `${Math.floor(elapsed / DAY)}d`
+}
+
+/**
  * The absolute stamp shown on hover next to a relative one. Pinned to the
  * tournament's clock so a server render doesn't print UTC and the string
  * doesn't shift between server and client. "" for a missing stamp.
