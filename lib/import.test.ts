@@ -11,9 +11,11 @@ import test from "node:test"
 import assert from "node:assert/strict"
 
 import {
+  buildImportPlan,
   clockStaleOpenWarnings,
   parseSheet,
   validateSheet,
+  type ExistingBet,
 } from "./import.ts"
 import type { PhaseClock } from "./phases.ts"
 
@@ -307,4 +309,93 @@ test("clock warning: the deadline boundary is inclusive, like the rest of the cl
   const rows = await rowsFor([{ pickId: 1 }])
   const exactly = new Date(DEADLINE)
   assert.equal(clockStaleOpenWarnings(rows, clock(DEADLINE), exactly).length, 1)
+})
+
+// ---------------------------------------------------------------------------
+// opened_at — the stamp the activity feed's "Phase N is open" event reads
+//
+// The rule is "on the transition into open, and only then". Everything here is
+// a way of getting that wrong: stamping a hidden bet, re-stamping on the next
+// upload, or letting an unrelated edit move the moment the phase opened.
+// ---------------------------------------------------------------------------
+
+const NOW = new Date("2026-09-18T15:00:00Z")
+const CATEGORY_ROWS = [{ id: "cat-1", name: "Top Finisher" }]
+
+/** The DB row for bet 1 as the sheet fixtures above describe it. */
+function existingBet(status: string, title = "Bet 1"): ExistingBet {
+  return {
+    id: "bet-uuid-1",
+    sheet_bet_id: 1,
+    category_id: "cat-1",
+    title,
+    phase: 1,
+    round: "round_1",
+    status,
+    total_probability: 1,
+  }
+}
+
+async function planFor(
+  specs: RowSpec[],
+  existingBets: ExistingBet[] = [],
+  now: Date = NOW
+) {
+  const validation = await validate(specs)
+  assert.ok(validation.ok, "fixture sheet should validate")
+  return buildImportPlan(
+    validation.rows,
+    existingBets,
+    [],
+    CATEGORY_ROWS,
+    [],
+    now
+  )
+}
+
+test("opened_at: a bet created as open is stamped", async () => {
+  const plan = await planFor([{ pickId: 1, status: "open" }])
+  assert.equal(plan.bets.create[0].opened_at, NOW.toISOString())
+})
+
+test("opened_at: a bet created hidden is not stamped", async () => {
+  const plan = await planFor([{ pickId: 1, status: "hidden" }])
+  assert.equal(plan.bets.create[0].opened_at, undefined)
+})
+
+test("opened_at: the hidden → open transition stamps — this is Phase 2", async () => {
+  const plan = await planFor(
+    [{ pickId: 1, status: "open" }],
+    [existingBet("hidden")]
+  )
+  assert.equal(plan.bets.update[0].opened_at, NOW.toISOString())
+})
+
+test("opened_at: an already-open bet edited for something else keeps its stamp", async () => {
+  // The one that would walk the feed's phase-open event forward to the last
+  // upload of the weekend: absent from the write, so the stored value stands.
+  const plan = await planFor(
+    [{ pickId: 1, status: "open", title: "Renamed" }],
+    [existingBet("open")]
+  )
+  assert.equal(plan.bets.update.length, 1)
+  assert.equal(plan.bets.update[0].opened_at, undefined)
+})
+
+test("opened_at: an identical re-upload stays a true no-op", async () => {
+  const plan = await planFor(
+    [{ pickId: 1, status: "open" }],
+    [existingBet("open")]
+  )
+  assert.equal(plan.bets.unchanged, 1)
+  assert.equal(plan.bets.update.length, 0)
+  assert.equal(plan.bets.create.length, 0)
+})
+
+test("opened_at: reopening a closed bet stamps again", async () => {
+  const plan = await planFor(
+    [{ pickId: 1, status: "open" }],
+    [existingBet("closed")]
+  )
+  assert.equal(plan.bets.update[0].opened_at, NOW.toISOString())
 })
