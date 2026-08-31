@@ -25,8 +25,16 @@ const APPROVED_NAME = "Avery Approved"
 
 // Two picks on bet 1, which is a Top Finisher — multiple picks allowed, so the
 // second wager is a NEW placement row (and a new feed event) rather than an
-// edit of the first. They double as leak canaries: neither label may ever
-// appear inside the activity rail.
+// edit of the first. They double as leak canaries: neither label may appear in
+// a row that reports a real wager.
+//
+// Note where that check is scoped, because it moved for a reason. Both of these
+// names are also SUBJECTS of house lines ("Dan Mercer got cum on his green
+// jacket", "Garrett Klenke bet on himself again"), which are fiction and are
+// meant to appear in the rail. A rail-wide assertion would therefore fail
+// whenever one of those two lines happened to be on screen — an intermittent
+// failure that reads like a flake and would be "fixed" by deleting the check
+// that matters.
 const PICK = "Dan Mercer"
 const OTHER_PICK = "Garrett Klenke"
 
@@ -52,16 +60,34 @@ async function placeAWager(page: Page, pick: string, amount: string) {
 /**
  * Everything the feed is forbidden to say, asserted in one place.
  *
- * The dollar check is the sharp one: the rail carries no money at all, so any
- * "$" inside it means a stake, a payout or an entry fee has leaked into a
- * surface that is readable while the bet is still open.
+ * The dollar check stays rail-wide and is the sharp one: nothing in this rail
+ * carries money — not a row, not a house line (pinned by a unit test on the
+ * quip list) — so any "$" inside it means a stake, a payout or an entry fee has
+ * reached a surface that is readable while the bet is still open.
+ *
+ * The rest is scoped to rows that report a REAL wager, found by the testid the
+ * row renderer stamps on them. Those rows may say a name, "placed a bet" and a
+ * relative stamp, and nothing else — asserted as a SHAPE rather than as a list
+ * of forbidden words, so it catches an amount or an odds chip appearing just as
+ * surely as it catches a pick label I happened to think of.
  */
 async function expectNoPositions(page: Page) {
   const rail = feed(page)
   await expect(rail).not.toContainText("$")
-  await expect(rail).not.toContainText(PICK)
-  await expect(rail).not.toContainText(OTHER_PICK)
   await expect(rail).not.toContainText("Win Tournament")
+
+  const betRows = rail.getByTestId("activity-bet-row")
+  for (const raw of await betRows.allInnerTexts()) {
+    const text = raw.replace(/\s+/g, " ").trim()
+    // "<display name><avatar initials> placed a bet 4m" — the avatar renders
+    // initials as text when a member has no photo, so the head of the row is
+    // deliberately unconstrained; everything after the name is not.
+    expect(text, `a wager row said more than it should: ${text}`).toMatch(
+      /placed a bet (now|\d+[mhd])$/
+    )
+    expect(text).not.toContain(PICK)
+    expect(text).not.toContain(OTHER_PICK)
+  }
 }
 
 test.afterAll(async () => {
@@ -76,7 +102,25 @@ test("a wager reaches the feed as a name and a moment", async ({ page }) => {
 
   await page.goto("/dashboard")
   await expect(feed(page).getByText(APPROVED_NAME).first()).toBeVisible()
-  await expect(feed(page).getByText("placed a bet").first()).toBeVisible()
+  await expect(feed(page).getByTestId("activity-bet-row").first()).toBeVisible()
+  await expectNoPositions(page)
+})
+
+test("the house lines sit in the feed dressed as real rows", async ({ page }) => {
+  // They are supposed to be indistinguishable to a reader (Andrew, Aug 31,
+  // 2026), so the only thing a spec can check is that they are THERE and carry
+  // the same furniture — a name and a stamp — rather than the muted aside they
+  // used to be. One is guaranteed within five wagers, and the fixture's seeded
+  // placements are enough to force one.
+  await signInAs(page, ACCOUNTS.approved)
+  await page.goto("/dashboard")
+
+  const quips = feed(page).getByTestId("activity-quip-row")
+  await expect(quips.first()).toBeVisible()
+  const text = (await quips.first().innerText()).replace(/\s+/g, " ").trim()
+  expect(text, `a house line lost its stamp: ${text}`).toMatch(
+    /(now|\d+[mhd])$/
+  )
   await expectNoPositions(page)
 })
 
@@ -96,7 +140,7 @@ test("another member sees it while the bet is still open", async ({ page }) => {
 test("the feed catches up on a tab wake, without a reload", async ({ page, context }) => {
   await signInAs(page, ACCOUNTS.approved)
   await page.goto("/dashboard")
-  const rows = feed(page).getByText("placed a bet")
+  const rows = feed(page).getByTestId("activity-bet-row")
   const before = await rows.count()
 
   // A second wager placed in another tab of the SAME session — the realistic
