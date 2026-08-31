@@ -25,6 +25,15 @@ export type StakeInputProps = {
  * disabled (a write in flight, or another pick of a pick-one bet already
  * carries the wager). Whole dollars only. `onPlace` fires on Enter or the
  * check button.
+ *
+ * The control is the amount and nothing else. It carried a "Bet placed" caption
+ * until Aug 31, 2026: the green border, the green ✓ and the gold flash already
+ * said the wager landed, and the caption said it a fourth time while pushing
+ * the row's locked-in receipt another line down the card. The one-line receipt
+ * under the row is now the only prose a placement gets.
+ *
+ * `error` still only reddens the border — the message itself is the menu's
+ * floating toast, so the input never reflows.
  */
 export function StakeInput({
   value = "",
@@ -51,7 +60,7 @@ export function StakeInput({
   }
 
   return (
-    <div className={cn("inline-flex flex-col gap-1", className)}>
+    <div className={cn("inline-flex", className)}>
       <div
         title={disabled && disabledReason ? disabledReason : undefined}
         className={cn(
@@ -119,13 +128,6 @@ export function StakeInput({
           {placed ? "✓" : "↵"}
         </button>
       </div>
-      {/* The error message itself is surfaced by the menu's floating toast so
-          the input never reflows — here `error` only reddens the border above. */}
-      {!error && placed && (
-        <span className="text-[11px] font-semibold text-win-strong">
-          Bet placed
-        </span>
-      )}
     </div>
   )
 }

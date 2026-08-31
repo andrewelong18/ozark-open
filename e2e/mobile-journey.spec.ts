@@ -65,9 +65,15 @@ test("place a bet with a thumb, end to end", async ({ page }) => {
   await confirm.tap()
 
   // The locked-odds receipt is the confirmation, and it's what proves the write
-  // landed rather than the button merely accepting a tap.
-  await expect(card.getByText("✓ Locked in")).toBeVisible()
-  await expect(card.getByText("odds locked at placement")).toBeVisible()
+  // landed rather than the button merely accepting a tap. One line now: the
+  // stake and the odds that were snapshotted, and nothing else. The "· odds
+  // locked at placement" tail it used to carry was cut as a restatement of
+  // "Locked in … at" (Aug 31, 2026), so the assertion is on the line's own
+  // content — the stake it names — rather than on that sentence.
+  const receipt = card.getByText("✓ Locked in").locator("..")
+  await expect(receipt).toBeVisible()
+  await expect(receipt).toContainText("$4")
+  await expect(receipt).toContainText("at")
 
   // The pick-one rule, as the rows now express it: the wager holds the bet, so
   // every other pick's box is disabled rather than refusing a tap (#162).

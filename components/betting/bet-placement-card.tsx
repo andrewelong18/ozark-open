@@ -320,30 +320,34 @@ export function BetPlacementCard({
             )}
           >
             <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
-              {/* A named golfer's name links to their profile; an unnamed pick
-                  ("Field", "Yes") is plain text. Choosing is the stake box to
-                  the right in every category now — the label was only ever a
-                  selection target because the radio needed a partner for
-                  unlinked picks (#162). The stroke handicap is a badge beside
-                  the name either way, never inside the link (#102). */}
-              <PickLabel
-                label={pick.label}
-                playerUserId={pick.player_user_id}
-                playerAvatarUrl={pick.player_avatar_url}
-                className="min-w-0"
-                nameClassName="text-base leading-snug font-medium text-text-strong"
-              />
-              <OddsChip
-                odds={pick.american_odds}
-                size="sm"
-                fractional={pick.fractional_odds}
-                probability={pick.probability}
-              />
-            </div>
+              <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+                {/* A named golfer's name links to their profile; an unnamed pick
+                    ("Field", "Yes") is plain text. Choosing is the stake box to
+                    the right in every category now — the label was only ever a
+                    selection target because the radio needed a partner for
+                    unlinked picks (#162). The stroke handicap is a badge beside
+                    the name either way, never inside the link (#102). */}
+                <PickLabel
+                  label={pick.label}
+                  playerUserId={pick.player_user_id}
+                  playerAvatarUrl={pick.player_avatar_url}
+                  className="min-w-0"
+                  nameClassName="text-base leading-snug font-medium text-text-strong"
+                />
+                <OddsChip
+                  odds={pick.american_odds}
+                  size="sm"
+                  fractional={pick.fractional_odds}
+                  probability={pick.probability}
+                />
+              </div>
 
-            <div className="flex shrink-0 flex-col items-end gap-1">
+              {/* The stake box is the only control in the row now — the remove
+                  link that used to stack under it moved to the receipt line
+                  below, so the row is one line tall whether or not it carries
+                  a wager. */}
               <StakeInput
+                className="shrink-0"
                 value={state.value}
                 placed={state.placed}
                 error={state.error}
@@ -359,17 +363,6 @@ export function BetPlacementCard({
                 }
                 onPlace={() => requestPlace(pick)}
               />
-              {hasPlacement && state.confirming !== "remove" && (
-                <button
-                  type="button"
-                  onClick={() => requestRemove(pick)}
-                  disabled={busy === pick.id}
-                  className="-mr-2 inline-flex min-h-11 cursor-pointer items-center px-2 text-[11px] font-medium text-loss transition-colors duration-fast ease-standard hover:text-loss-strong"
-                >
-                  ✕ Remove bet
-                </button>
-              )}
-            </div>
             </div>
 
             {/* Explicit place-confirm: locking in a wager takes a second,
@@ -449,21 +442,71 @@ export function BetPlacementCard({
               </div>
             </Collapse>
 
-            {/* Locked-odds receipt (§1.5): the snapshotted odds + stake behind
-                this placement — the confirmation that odds lock at write.
+            {/* The placement footer (§1.5): one line, and the whole of what a
+                placed row says in prose — "✓ Locked in $5 at +110", then the
+                way out. Three restatements were cut from it on Aug 31, 2026:
+                the stake box's "Bet placed" caption (its green ✓ says that),
+                the second OddsChip (the row already wears one — this line only
+                needs the NUMBER that was snapshotted), and the trailing
+                "· odds locked at placement", which is what "Locked in … at"
+                already means. The remove link moved onto this line from a stack
+                under the stake box; that stack was the 44px column of air that
+                used to sit above this receipt, and it made the line wrap.
+
+                Both values are the SNAPSHOT, never the row's live state, so the
+                line keeps reading $5 at the odds that were locked while the box
+                above is edited to something else — the one place on the row
+                that says what is actually on the books.
+
+                Open on any placement, not just one with a receipt: without the
+                odds it renders as the ✓ and the remove link alone, which is the
+                way out, and that must not depend on the snapshot arriving.
                 Hidden while a confirm strip owns the row. */}
             <Collapse
-              open={hasPlacement && state.receipt != null && state.confirming === null}
-              className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+              open={hasPlacement && state.confirming === null}
+              className="mt-0.5 -mb-1.5 flex items-center justify-between gap-3 sm:mt-1 sm:mb-0"
             >
-              {state.receipt && (
-                <>
-                  <span className="font-semibold text-win-strong">✓ Locked in</span>
-                  <OddsChip odds={state.receipt.odds} size="sm" />
-                  <MoneyDisplay value={state.receipt.amount} size="xs" weight="bold" />
-                  <span className="text-text-muted">· odds locked at placement</span>
-                </>
-              )}
+              <div className="flex min-w-0 items-center gap-1.5 text-xs whitespace-nowrap">
+                <span className="font-semibold text-win-strong">✓ Locked in</span>
+                {state.receipt && (
+                  <>
+                    <MoneyDisplay
+                      value={state.receipt.amount}
+                      size="xs"
+                      weight="bold"
+                      className="text-text-strong"
+                    />
+                    <span className="text-text-muted">at</span>
+                    <span
+                      className={cn(
+                        "tabular font-bold",
+                        state.receipt.odds > 0
+                          ? "text-odds-positive"
+                          : "text-odds-negative"
+                      )}
+                    >
+                      {state.receipt.odds > 0
+                        ? `+${state.receipt.odds}`
+                        : state.receipt.odds}
+                    </span>
+                  </>
+                )}
+              </div>
+              {/* 44px on a phone (the sweep in e2e/mobile-layout.spec.ts
+                  measures where taps land, and this is a destructive control),
+                  compact once there's a pointer. The strip's negative bottom
+                  margin lets that 44px box spend the row's own padding instead
+                  of adding a third band of air under the receipt — it eats
+                  6px of the row's 12px pad, so the hit area never reaches the
+                  next pick. */}
+              <button
+                type="button"
+                onClick={() => requestRemove(pick)}
+                disabled={busy === pick.id}
+                className="-mr-2 inline-flex min-h-11 shrink-0 cursor-pointer items-center px-2 text-[11px] font-medium text-loss transition-colors duration-fast ease-standard hover:text-loss-strong sm:min-h-8"
+              >
+                ✕ Remove bet
+              </button>
             </Collapse>
           </div>
         )
