@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { formatElapsedShort, formatTimestamp } from "@/lib/format"
 import { phaseEventText, type ActivityEvent } from "@/lib/activity"
 import { PlayerNameLink } from "@/components/player/player-name-link"
+import { Avatar } from "@/components/avatar"
 import { Card } from "@/components/ui/card"
 import { Collapse } from "@/components/ui/collapse"
 import { EmptyState } from "@/components/modules/empty-state"
@@ -18,6 +19,11 @@ import { EmptyState } from "@/components/modules/empty-state"
  * timestamp — deliberately NOT the pick, the amount or the odds, which stay
  * behind the bet closing (PRD §8, §12; the column list in
  * public.activity_placements() is what actually enforces it).
+ *
+ * The house lines (lib/activity-quips.ts) render through that same row, on
+ * purpose: linked name, avatar, stamp, indistinguishable from a wager. They are
+ * fiction and read as fact — that is the joke, and it costs the paragraph above
+ * nothing, because no line is derived from data.
  *
  * "Real time" here is a 20-second poll plus a refetch when the tab comes back,
  * which is the boundary COMPETITIVE_ANALYSIS §2.5 draws: PRD §3's ban is on a
@@ -193,9 +199,8 @@ function FeedRow({
   return (
     <Collapse open={open}>
       <div
-        // No dividers: a chat is a stream, not a table, and the three row
-        // shapes (linked name / bold milestone / muted italic) already carry
-        // the rhythm a rule would.
+        // No dividers: a chat is a stream, not a table, and the member rows
+        // and phase milestones already carry the rhythm a rule would.
         className={cn(
           "py-1.5",
           arriving && "motion-safe:animate-fade-in-soft"
@@ -214,33 +219,39 @@ function RowBody({
   event: ActivityEvent
   serverNow: string
 }) {
-  // A quip is the one row with no timestamp and no name. It has to be
-  // unmistakably not-an-event: italic, muted, unattributed. The lines
-  // themselves carry no betting information either (lib/activity-quips.ts).
-  if (event.kind === "quip") {
+  // A wager and a house line render through the SAME component, differing only
+  // in the words after the name and in a testid nobody can see. That is
+  // deliberate (Andrew, Aug 31, 2026): the lines are supposed to pass for real
+  // events, and one renderer is the only way "identical" stays true as either
+  // one changes. The testids exist so e2e/activity-feed.spec.ts can still tell
+  // them apart when it checks that no REAL row leaks a position.
+  if (event.kind === "bet") {
     return (
-      <p className="px-1 text-[11px] leading-snug text-text-muted italic">
-        {event.text}
-      </p>
+      <MemberRow
+        testId="activity-bet-row"
+        userId={event.userId}
+        name={event.name}
+        avatarUrl={event.avatarUrl}
+        // General on purpose: there is no pick and no amount to say, and there
+        // won't be one until the bet closes and /bets reveals the lot.
+        text="placed a bet"
+        at={event.at}
+        serverNow={serverNow}
+      />
     )
   }
 
-  // The whole of what a bet event says: who, and when. The message is general
-  // on purpose — there is no pick and no amount to say, and there won't be one
-  // until the bet closes and /bets reveals the lot.
-  if (event.kind === "bet") {
+  if (event.kind === "quip") {
     return (
-      <div className="flex items-center gap-1.5 px-1">
-        <PlayerNameLink
-          userId={event.userId}
-          label={event.name}
-          avatarUrl={event.avatarUrl}
-          className="min-w-0 shrink"
-          nameClassName="text-xs font-semibold text-text-strong"
-        />
-        <span className="shrink-0 text-xs text-text-muted">placed a bet</span>
-        <RelativeStamp at={event.at} serverNow={serverNow} className="ml-auto" />
-      </div>
+      <MemberRow
+        testId="activity-quip-row"
+        userId={event.userId}
+        name={event.name}
+        avatarUrl={event.avatarUrl}
+        text={event.line}
+        at={event.at}
+        serverNow={serverNow}
+      />
     )
   }
 
@@ -257,6 +268,63 @@ function RowBody({
         {phaseEventText(event)}
       </span>
       <RelativeStamp at={event.at} serverNow={serverNow} />
+    </div>
+  )
+}
+
+/**
+ * A member did a thing: their name, what they did, when.
+ *
+ * `items-start` with the text in a flowing column rather than a single-line
+ * flex, because a house line runs long ("took out a second mortgage for more
+ * sportsbook bets") and has to wrap under the name in a 357px rail while the
+ * stamp stays pinned to the first line. PlayerNameLink is inline-flex, so the
+ * name and its avatar sit in that flow rather than beside it.
+ *
+ * An unlinked name is plain text at the same size and weight — the same thing
+ * PickLabel does for a pick that matches no member, so a joke about someone
+ * without an account still reads, it just doesn't open a profile.
+ */
+function MemberRow({
+  testId,
+  userId,
+  name,
+  avatarUrl,
+  text,
+  at,
+  serverNow,
+}: {
+  testId: string
+  userId: string | null
+  name: string
+  avatarUrl: string | null
+  text: string
+  at: string
+  serverNow: string
+}) {
+  return (
+    <div data-testid={testId} className="flex items-start gap-1.5 px-1">
+      <p className="min-w-0 flex-1 text-xs leading-snug text-pretty text-text-muted">
+        {userId ? (
+          <PlayerNameLink
+            userId={userId}
+            label={name}
+            avatarUrl={avatarUrl}
+            className="mr-1 align-middle"
+            nameClassName="text-xs font-semibold text-text-strong"
+          />
+        ) : (
+          // No account yet, so no profile to open — but it still gets the
+          // initials avatar, because a row that looks different is a row a
+          // reader treats differently, and these are meant to read alike.
+          <span className="mr-1 inline-flex items-center gap-1.5 align-middle">
+            <span className="text-xs font-semibold text-text-strong">{name}</span>
+            <Avatar name={name} size="xs" />
+          </span>
+        )}
+        {text}
+      </p>
+      <RelativeStamp at={at} serverNow={serverNow} className="mt-px" />
     </div>
   )
 }
