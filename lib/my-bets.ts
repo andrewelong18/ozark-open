@@ -239,25 +239,60 @@ export function buildRulesModel(
 // ---------------------------------------------------------------------------
 
 export type ComplianceItem = {
-  tone: "warning" | "success"
+  /** `info` is NOT a lesser warning. Per PRD Q2 a member with no wagers is not
+   *  in violation until the Phase 2 close, and the dashboard's "Alerts (n)"
+   *  badge counts warnings only — so telling them what they still owe must not
+   *  put a red number on a page where nothing is wrong yet. */
+  tone: "warning" | "success" | "info"
   title: string
   message: string
 }
 
 /**
- * Banner items for the participant's current standing. With no placements at
- * all there is nothing to warn about yet — the empty state carries that
- * message. Once they've bet: one warning if they're short of the
- * tournament-wide pick minimum (#96 — the count spans both phases, so a
- * one-phase slate of 5 is complete), one for an off-exact total, or a single
- * success banner when every check passes.
+ * Banner items for the participant's current standing.
+ *
+ * Once they've bet: one warning if they're short of the tournament-wide pick
+ * minimum (#96 — the count spans both phases, so a one-phase slate of 5 is
+ * complete), one for an off-exact total, or a single success banner when every
+ * check passes.
+ *
+ * AT ZERO PLACEMENTS this used to return nothing at all, and that was the
+ * blind spot. The member who has done the least — registered, paid, never
+ * opened the menu — was the only one the app told nothing. The dry run has two
+ * of them on the record (`OUTSTANDING_DECISIONS.md` §2b): Steve paid his entry,
+ * never wagered, and finished at −$20.00.
+ *
+ * So they now get ONE `info` item naming what they still owe. Deliberately
+ * `info` and not `warning`, for a rule rather than a taste reason: PRD Q2 says
+ * they are not in violation until the Phase 2 close, and the dashboard's
+ * "Alerts (n)" badge counts warnings — a red 1 on a dashboard where nothing is
+ * yet wrong is the kind of alert people learn to ignore.
+ *
+ * `wageringOver` suppresses it entirely. After the Phase 2 deadline there is
+ * nothing they can do about it, and telling someone to go place bets on
+ * results night is worse than saying nothing.
+ *
+ * checkPickMinimum()'s own zero-pick exemption is NOT touched: it is
+ * deliberate, cited to PRD Q2 in lib/chase.ts, mirrored in
+ * docs/admin/phase-compliance.sql, and relied on by scripts/dry-run-verify.ts.
+ * This is a display gap, and the fix belongs here.
  */
 export function buildComplianceSummary(
   existing: ExistingPlacement[],
   entryFee: number,
-  rules: TournamentRules
+  rules: TournamentRules,
+  options: { wageringOver?: boolean } = {}
 ): ComplianceItem[] {
-  if (existing.length === 0) return []
+  if (existing.length === 0) {
+    if (options.wageringOver) return []
+    return [
+      {
+        tone: "info",
+        title: "No bets placed yet",
+        message: `You'll need at least ${rules.min_picks_per_tournament} picks totalling exactly $${entryFee} by the Phase 2 deadline.`,
+      },
+    ]
+  }
   const items: ComplianceItem[] = []
   const picks = checkPickMinimum(existing, rules)
   if (!picks.meets_minimum && picks.message)

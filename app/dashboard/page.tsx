@@ -12,7 +12,12 @@ import { LoadError } from "@/components/modules/load-error"
 import { HowItWorksLauncher } from "@/components/onboarding/how-it-works-launcher"
 import { Countdown } from "@/components/countdown"
 import Link from "next/link"
-import { bettingBadge, formatDeadline, nextDeadline } from "@/lib/phases"
+import {
+  bettingBadge,
+  formatDeadline,
+  nextDeadline,
+  phaseClosedByClock,
+} from "@/lib/phases"
 import {
   normalizeExistingPlacements,
   toPhaseClock,
@@ -206,9 +211,22 @@ export default async function DashboardPage() {
   // the "you're balanced" item is the summary's way of saying there are none,
   // and counting it would put a "1" on a page with nothing wrong.
   const alerts = myRules
-    ? buildComplianceSummary(existing, myRules.entry_fee, rules)
+    ? buildComplianceSummary(existing, myRules.entry_fee, rules, {
+        // Past the Phase 2 deadline nobody can place anything, so the
+        // zero-placement nudge is suppressed — telling someone to go bet on
+        // results night is worse than saying nothing.
+        wageringOver: phaseClosedByClock(2, clock, now),
+      })
     : []
   const alertCount = alerts.filter((a) => a.tone === "warning").length
+  // "You're balanced" is the SUCCESS item's header, not "no warnings". A member
+  // who hasn't wagered now gets an info item, and calling that balanced would
+  // be the app congratulating them for the one thing they still have to do.
+  const balanced = alerts.length > 0 && alerts.every((a) => a.tone === "success")
+  // No warnings and not the success item = the single zero-placement info item,
+  // whose title becomes the section header below. Rendering it on the banner
+  // too would print the same short phrase twice, one above the other.
+  const soloInfo = alerts.length > 0 && alertCount === 0 && !balanced
 
   return (
     <div className="mx-auto grid max-w-[var(--container-max,1120px)] grid-cols-1 gap-4 px-4 py-6 lg:grid-cols-3 lg:gap-6">
@@ -268,17 +286,23 @@ export default async function DashboardPage() {
               as "Alerts 0". */}
           {alerts.length > 0 && (
             <AccordionSection
-              title={alertCount > 0 ? "Alerts" : "You're balanced"}
-              glyph={alertCount > 0 ? "⚠️" : "✓"}
+              title={
+                alertCount > 0
+                  ? "Alerts"
+                  : balanced
+                    ? "You're balanced"
+                    : alerts[0].title
+              }
+              glyph={alertCount > 0 ? "⚠️" : balanced ? "✓" : "ℹ️"}
               count={alertCount > 0 ? alertCount : undefined}
-              tone={alertCount > 0 ? "caution" : "win"}
+              tone={alertCount > 0 ? "caution" : balanced ? "win" : "indigo"}
               bodyClassName="flex flex-col gap-2 p-3"
             >
               {alerts.map((item) => (
                 <ComplianceBanner
                   key={item.title}
                   tone={item.tone}
-                  title={item.title}
+                  title={soloInfo ? undefined : item.title}
                 >
                   {item.message}
                 </ComplianceBanner>
