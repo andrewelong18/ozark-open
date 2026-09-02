@@ -71,6 +71,34 @@ function toClientPlacement(row: PlacementReturnRow) {
   return placement
 }
 
+/**
+ * SQLSTATE raised by public.enforce_placement_total() (migration
+ * 20260902000001) when a write would take the bettor over their entry.
+ *
+ * That trigger is the same rule as validateRunningTotal() above, enforced
+ * where it can actually be guaranteed: the TypeScript check reads, decides and
+ * writes without a lock, so two concurrent placements on different picks can
+ * both pass it. The trigger locks the bettor's participant row and re-sums.
+ *
+ * Reaching this branch therefore means a genuine race, not a bug — and the
+ * loser must not see "Placing the bet failed: …" for a rule they broke. The
+ * trigger raises validateRunningTotal()'s exact sentence, so mapping the code
+ * to a 400 makes a raced write read identically to a validated one.
+ */
+const OVER_ENTRY_SQLSTATE = "OZ001"
+
+type WriteError = { code?: string | null; message: string }
+
+/** The over-the-entry raise, told apart from a real failure. Falls back to the
+ *  message because a client that drops `code` would otherwise turn a rule the
+ *  member broke into a 500 they can do nothing about. */
+function overEntry(error: WriteError): boolean {
+  return (
+    error.code === OVER_ENTRY_SQLSTATE ||
+    /Over your \$\d+ entry/.test(error.message)
+  )
+}
+
 /** True when an admin is acting for somebody else. Drives both the audit stamp
  * and which "not registered" message the caller sees. */
 function onBehalf(identity: PlacementIdentity): boolean {
@@ -233,6 +261,9 @@ export async function placeOrEditPlacement(
       .select(PLACEMENT_RETURN_COLUMNS)
       .single()
     if (error) {
+      if (overEntry(error)) {
+        return { status: 400, body: { errors: [error.message] } }
+      }
       return { status: 500, body: { error: `Placing the bet failed: ${error.message}` } }
     }
     return {
@@ -248,6 +279,9 @@ export async function placeOrEditPlacement(
     .select(PLACEMENT_RETURN_COLUMNS)
     .single()
   if (error) {
+    if (overEntry(error)) {
+      return { status: 400, body: { errors: [error.message] } }
+    }
     return { status: 500, body: { error: `Updating the bet failed: ${error.message}` } }
   }
   return {

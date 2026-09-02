@@ -224,6 +224,15 @@ const payload = `(SELECT payload FROM public.snapshots WHERE id = ${sqlLiteral(s
 const restoreSql = `
 BEGIN;
 
+-- Stand the entry-fee guard down for the restore (migration 20260902000001).
+-- A restore reproduces a state that already existed; re-litigating whether it
+-- was reachable is not its job. A snapshot taken before that trigger shipped
+-- can hold an over-cap row from the very race the trigger now prevents, and a
+-- guard that refused to put it back would have broken the undo button on
+-- exactly the disaster it was built for. SET LOCAL, so it lasts one
+-- transaction and no longer.
+SET LOCAL ozark.restoring = 'on';
+
 -- Not part of the payload, and would be cascaded away by the DELETE below.
 CREATE TEMP TABLE _kept_invites ON COMMIT DROP AS
   SELECT * FROM public.tournament_invites;
