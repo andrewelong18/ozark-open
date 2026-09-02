@@ -222,6 +222,26 @@ export type ResultsRow = {
   pending: number
 }
 
+/**
+ * What a bettor actually receives: their share of the pool PLUS the voided
+ * stakes refunded out of band. Cash, not winnings.
+ *
+ * It exists because two surfaces disagreed about the same person. A voided
+ * stake is carved out of the pool (pool = Σ entry fees − Σ voided stakes, ADR
+ * 0001 §9) and handed back, so `actual` alone is not what changes hands.
+ * `lib/settlement.ts` printed `actual + refunded` — the text people PAY FROM
+ * had to add up — while /results showed bare `actual` under "Payout", so a
+ * bettor with a $6 void read "$20 in, $10.00 back, −$4.00" on screen and
+ * something else in the message (#157). One function, both call sites, and the
+ * row reconciles: entry_fee + profit_loss === cashReturned(row).
+ */
+export function cashReturned(row: {
+  actual: number
+  refunded: number
+}): number {
+  return row.actual + row.refunded
+}
+
 export type ResultsTable = {
   /** Void-adjusted pool: Σ entry fees − Σ voided stakes. */
   pool: number

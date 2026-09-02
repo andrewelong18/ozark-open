@@ -9,6 +9,7 @@ import { MoneyDisplay } from "@/components/betting/money-display"
 import { SettlementSummary } from "@/components/results/settlement-summary"
 import {
   buildResultsTable,
+  cashReturned,
   normalizePayoutRows,
   type PayoutViewQueryRow,
 } from "@/lib/payouts"
@@ -194,7 +195,16 @@ export default async function ResultsPage() {
             </div>
             <div className="text-right">
               <MoneyDisplay
-                value={winner.actual}
+                // The same figure as the winner's Payout cell below. Showing
+                // `actual` here while the row shows actual + refunded would put
+                // two different numbers against one name on one screen.
+                //
+                // The table is still ORDERED by `actual` — the pool share is
+                // what the competition is about, and a refund is your own money
+                // coming back, not a winning. So on the rare row with a void,
+                // Payout is not strictly descending; that row says "incl. $X
+                // refunded" directly underneath, which is the explanation.
+                value={cashReturned(winner)}
                 cents
                 size="xl"
                 className="text-gold-400"
@@ -255,13 +265,7 @@ export default async function ResultsPage() {
                     avatarUrl={row.avatar_url}
                     className="min-w-0"
                     nameClassName="text-sm font-semibold text-text-strong"
-                  >
-                    {row.refunded > 0 && (
-                      <span className="ml-1.5 text-xs font-normal text-text-muted">
-                        (${row.refunded} refunded)
-                      </span>
-                    )}
-                  </PlayerChip>
+                  />
                   {/* The four money columns wrap under the name on a phone,
                       each labelled since the header row is sm+ only; at sm+
                       `contents` dissolves this and they are columns again. */}
@@ -284,7 +288,34 @@ export default async function ResultsPage() {
                       />
                     </MoneyCell>
                     <MoneyCell label="Payout">
-                      <MoneyDisplay value={row.actual} cents size="sm" weight="bold" />
+                      {/* actual + refunded: the cash that changes hands, not
+                          the pool share alone (#157). A voided stake was
+                          handed back out of band, so a row showing bare
+                          `actual` read "$20 in, $10.00 back, −$4.00" — six
+                          dollars unaccounted for, on the page people open to
+                          find out what they are owed. With the refund folded
+                          in, every row reconciles across, and the table agrees
+                          with the settlement text that gets pasted into the
+                          group thread. */}
+                      <MoneyDisplay
+                        value={cashReturned(row)}
+                        cents
+                        size="sm"
+                        weight="bold"
+                      />
+                      {row.refunded > 0 && (
+                        <span className="block text-[11px] font-normal text-text-muted">
+                          incl.{" "}
+                          <MoneyDisplay
+                            value={row.refunded}
+                            cents
+                            size="xs"
+                            weight="regular"
+                            className="text-text-muted"
+                          />{" "}
+                          refunded
+                        </span>
+                      )}
                     </MoneyCell>
                     <MoneyCell label="P/L">
                       <MoneyDisplay
@@ -310,8 +341,9 @@ export default async function ResultsPage() {
 
           <p className="text-center text-xs text-text-muted">
             Actual share = your theoretical payout ÷ everyone&apos;s theoretical
-            × the ${table.pool} pool. Voided stakes were refunded and removed
-            from the pool. No house, no rake — the pool pays itself out.
+            × the ${table.pool} pool. Voided stakes were refunded, removed
+            from the pool, and are included in the Payout above. No house, no
+            rake — the pool pays itself out.
           </p>
         </>
       )}

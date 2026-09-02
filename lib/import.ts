@@ -622,6 +622,37 @@ function numbersEqual(
   return Number(a) === Number(b)
 }
 
+/**
+ * Did a write actually land?
+ *
+ * PostgREST answers a write that RLS filtered to zero rows with
+ * `error === null` — success, nothing written. So `if (error)` is not a check,
+ * it is half of one, and the missing half is what let #99 report "saved" for a
+ * month while changing nothing (`CLAUDE.md`: a write that matches zero rows is
+ * a success, not an error).
+ *
+ * Returns null when the write is fine, or a sentence naming what didn't land.
+ * A sentence rather than a boolean because the caller's job is to hand the
+ * admin a list they can act on: which bet, which pick, and why.
+ *
+ * `written` is the length of the `.select()` the write returned — which is why
+ * every call site has to ask for one. `expected` is how many rows should have
+ * come back: 1 for an update by id, the batch size for a bulk insert.
+ */
+export function unlandedWrite(
+  what: string,
+  error: { message: string } | null,
+  written: number,
+  expected: number
+): string | null {
+  if (error) return `${what}: ${error.message}`
+  if (written === expected) return null
+  if (written === 0) {
+    return `${what}: the database accepted the write and changed nothing — the row is gone, or a policy filtered it out.`
+  }
+  return `${what}: only ${written} of ${expected} rows were written.`
+}
+
 export function buildImportPlan(
   rows: SheetRow[],
   existingBets: ExistingBet[],

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { requireAdminRoute } from "@/lib/admin-gate"
 import {
   buildImportPlan,
+  unlandedWrite,
   clockStaleOpenWarnings,
   parseSheet,
   validateSheet,
@@ -182,6 +183,14 @@ export async function POST(request: Request) {
     existingBets.map((b) => [b.sheet_bet_id, b.id])
   )
 
+  // Every write below is checked for having actually LANDED, not merely for
+  // not erroring (#159). PostgREST answers a write that RLS filtered to zero
+  // rows with error === null, so `if (error)` alone is how a bet's status can
+  // silently fail to change — a closed bet staying open is members still
+  // betting on it. Failures accumulate rather than aborting at the first, so
+  // one upload tells the admin about every row that didn't take.
+  const unlanded: string[] = []
+
   if (plan.bets.create.length > 0) {
     const { data: created, error } = await supabase
       .from("bets")
@@ -189,11 +198,17 @@ export async function POST(request: Request) {
         plan.bets.create.map((b) => ({ ...b, tournament_id: tournamentId }))
       )
       .select("id, sheet_bet_id")
-    if (error) {
-      return NextResponse.json(
-        { error: `Creating bets failed: ${error.message}` },
-        { status: 500 }
-      )
+    // The one write that still aborts on the spot: every pick below is
+    // addressed by the id map this fills, so carrying on would bury the real
+    // fault under a pile of undefined bet_ids.
+    const missing = unlandedWrite(
+      `creating ${plan.bets.create.length} bet(s)`,
+      error,
+      ((created ?? []) as unknown[]).length,
+      plan.bets.create.length
+    )
+    if (missing) {
+      return NextResponse.json({ error: missing }, { status: 500 })
     }
     for (const b of (created ?? []) as { id: string; sheet_bet_id: number }[]) {
       betIdBySheetId.set(b.sheet_bet_id, b.id)
@@ -202,44 +217,71 @@ export async function POST(request: Request) {
 
   for (const bet of plan.bets.update) {
     const { id, ...fields } = bet
-    const { error } = await supabase.from("bets").update(fields).eq("id", id)
-    if (error) {
-      return NextResponse.json(
-        { error: `Updating bet ${bet.sheet_bet_id} failed: ${error.message}` },
-        { status: 500 }
-      )
-    }
+    const { data, error } = await supabase
+      .from("bets")
+      .update(fields)
+      .eq("id", id)
+      .select("id")
+    const missing = unlandedWrite(
+      `bet ${bet.sheet_bet_id} ("${bet.title}")`,
+      error,
+      ((data ?? []) as unknown[]).length,
+      1
+    )
+    if (missing) unlanded.push(missing)
   }
 
   if (plan.picks.create.length > 0) {
-    const { error } = await supabase.from("bet_picks").insert(
-      plan.picks.create.map(({ sheet_bet_id, ...pick }) => ({
-        ...pick,
-        bet_id: betIdBySheetId.get(sheet_bet_id)!,
-      }))
-    )
-    if (error) {
-      return NextResponse.json(
-        { error: `Creating picks failed: ${error.message}` },
-        { status: 500 }
+    const { data, error } = await supabase
+      .from("bet_picks")
+      .insert(
+        plan.picks.create.map(({ sheet_bet_id, ...pick }) => ({
+          ...pick,
+          bet_id: betIdBySheetId.get(sheet_bet_id)!,
+        }))
       )
-    }
+      .select("id")
+    const missing = unlandedWrite(
+      `creating ${plan.picks.create.length} pick(s)`,
+      error,
+      ((data ?? []) as unknown[]).length,
+      plan.picks.create.length
+    )
+    if (missing) unlanded.push(missing)
   }
 
   for (const pick of plan.picks.update) {
     const { id, sheet_bet_id, ...fields } = pick
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("bet_picks")
       .update({ ...fields, bet_id: betIdBySheetId.get(sheet_bet_id)! })
       .eq("id", id)
-    if (error) {
-      return NextResponse.json(
-        {
-          error: `Updating pick ${pick.sheet_pick_id} failed: ${error.message}`,
-        },
-        { status: 500 }
-      )
-    }
+      .select("id")
+    const missing = unlandedWrite(
+      `pick ${pick.sheet_pick_id} ("${pick.label}")`,
+      error,
+      ((data ?? []) as unknown[]).length,
+      1
+    )
+    if (missing) unlanded.push(missing)
+  }
+
+  // Every write attempted, so the list below is the whole truth about this
+  // upload rather than its first casualty. It is a FAILURE and not a warning:
+  // the sheet is the menu, and a row that quietly didn't take leaves the app
+  // showing something the admin believes they changed.
+  if (unlanded.length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          `${unlanded.length} write(s) did not land. The rest of the upload WAS applied and ` +
+          `nothing was rolled back — restore save state ${snapshot.id} to undo it, or fix the ` +
+          `cause and re-upload (the sheet-key upsert is idempotent, so a re-upload heals a ` +
+          `partial one).`,
+        errors: unlanded,
+      },
+      { status: 500 }
+    )
   }
 
   // Odds-changed-with-live-placements warning. Harmless for payouts —

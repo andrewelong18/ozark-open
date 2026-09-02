@@ -18,7 +18,9 @@
 // If a figure here disagrees with /results, lib/payouts.ts is the one that's
 // right and this file is the bug.
 
-import { roundCents, type ResultsTable } from "./payouts.ts"
+import { roundCents, type ResultsTable,
+  cashReturned,
+} from "./payouts.ts"
 
 /** U+2212 MINUS SIGN, matching MoneyDisplay rather than a hyphen. Reads as a
  *  minus at text size instead of as a dash between two numbers. */
@@ -100,7 +102,7 @@ export function buildSettlementSummary(
   // re-sorted here: the text and the page have to agree, and someone reading
   // both would notice immediately.
   table.rows.forEach((row, i) => {
-    const back = row.actual + row.refunded
+    const back = cashReturned(row)
     const parts = [
       `${i + 1}. ${row.display_name} — ${money(row.entry_fee)} in → ${money(back)} back (${signedNet(row.profit_loss)})`,
     ]
