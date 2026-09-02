@@ -12,6 +12,7 @@ import assert from "node:assert/strict"
 
 import {
   buildImportPlan,
+  unlandedWrite,
   clockStaleOpenWarnings,
   parseSheet,
   validateSheet,
@@ -398,4 +399,31 @@ test("opened_at: reopening a closed bet stamps again", async () => {
     [existingBet("closed")]
   )
   assert.equal(plan.bets.update[0].opened_at, NOW.toISOString())
+})
+
+// ---------------------------------------------------------------------------
+// unlandedWrite — the half of a write check that `if (error)` misses (#159)
+// ---------------------------------------------------------------------------
+
+test("unlandedWrite passes a write that touched the rows it should have", () => {
+  assert.equal(unlandedWrite("bet 3", null, 1, 1), null)
+  assert.equal(unlandedWrite("12 picks", null, 12, 12), null)
+})
+
+test("unlandedWrite reports a database error, naming the row", () => {
+  const out = unlandedWrite("bet 3", { message: "permission denied" }, 0, 1)
+  assert.match(out!, /^bet 3: permission denied/)
+})
+
+test("unlandedWrite catches the silent one: success, zero rows", () => {
+  // The #99 shape. No error, nothing written, and every check that only reads
+  // `error` calls it a success.
+  const out = unlandedWrite("bet 3", null, 0, 1)
+  assert.match(out!, /^bet 3: /)
+  assert.match(out!, /changed nothing/)
+})
+
+test("unlandedWrite catches a partial batch", () => {
+  const out = unlandedWrite("12 picks", null, 9, 12)
+  assert.match(out!, /only 9 of 12/)
 })

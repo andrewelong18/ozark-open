@@ -111,7 +111,12 @@ export function ImportForm() {
       if (!res.ok) {
         if (Array.isArray(json?.errors)) {
           setContractErrors(json.errors)
-          setError("The file was rejected — nothing was imported.")
+          // The headline is the server's when it sends one. A contract failure
+          // rejects the file before a single write; a write that didn't land
+          // (#159) happens AFTER the sheet was accepted and partly applied, and
+          // telling an admin "nothing was imported" in that case would send
+          // them looking for a problem in the spreadsheet.
+          setError(json?.error ?? "The file was rejected — nothing was imported.")
         } else {
           setError(json?.error ?? `Upload failed (${res.status})`)
         }
