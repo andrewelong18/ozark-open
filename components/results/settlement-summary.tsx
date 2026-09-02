@@ -20,7 +20,18 @@ import { Card } from "@/components/ui/card"
 // Pressed on a phone, at night, at the end of the weekend. See close-console.
 const TOUCH = "h-11 sm:h-9"
 
-export function SettlementSummary({ text }: { text: string }) {
+// The labels are props because /results renders this twice: once for the
+// payouts every member sees, and once, for an admin only, for the entry
+// collection. Two components would have been two copy behaviours.
+export function SettlementSummary({
+  text,
+  title = "Send the payouts",
+  hint = "The whole table as text — paste it into the group thread. Venmo happens off this.",
+}: {
+  text: string
+  title?: string
+  hint?: string
+}) {
   const [copied, setCopied] = useState(false)
 
   return (
@@ -28,12 +39,9 @@ export function SettlementSummary({ text }: { text: string }) {
       <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
         <div>
           <span className="text-sm font-semibold text-text-strong">
-            Send the payouts
+            {title}
           </span>
-          <span className="mt-0.5 block text-xs text-text-muted">
-            The whole table as text — paste it into the group thread. Venmo
-            happens off this.
-          </span>
+          <span className="mt-0.5 block text-xs text-text-muted">{hint}</span>
         </div>
         <Button
           variant="secondary"

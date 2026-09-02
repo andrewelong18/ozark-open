@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { EmptyState } from "@/components/modules/empty-state"
 import { formatRelativeTime, formatTimestamp } from "@/lib/format"
 import { funnelStage, type RosterPerson } from "@/lib/roster"
+import { collectionStanding, isPaidInFull } from "@/lib/collection"
 import type { SkippedLine } from "@/lib/invites"
 
 // The admin people console (Sprint 20) — the client half of /admin/people.
@@ -252,6 +253,12 @@ function EditPanel({
   const [name, setName] = useState(person.name)
   const [entryFee, setEntryFee] = useState(String(person.entry_fee ?? entryFeeMin))
   const [isPlayer, setIsPlayer] = useState(person.is_player !== false)
+  // Entry collection. Recorded here, decided nowhere: whether the money comes
+  // out of the house deposit or by Venmo is still Pat's call
+  // (OUTSTANDING_DECISIONS.md §3), and the note is where that goes in whatever
+  // words the admin used that day.
+  const [paidAmount, setPaidAmount] = useState(String(person.paid_amount))
+  const [paidNote, setPaidNote] = useState(person.paid_note ?? "")
   const [busy, setBusy] = useState(false)
   const [confirmingRevoke, setConfirmingRevoke] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
@@ -259,7 +266,9 @@ function EditPanel({
   const dirty =
     name.trim() !== person.name ||
     Number(entryFee) !== person.entry_fee ||
-    isPlayer !== (person.is_player !== false)
+    isPlayer !== (person.is_player !== false) ||
+    Number(paidAmount) !== person.paid_amount ||
+    paidNote.trim() !== (person.paid_note ?? "")
 
   async function save() {
     setBusy(true)
@@ -269,6 +278,8 @@ function EditPanel({
       displayName: name,
       entryFee: Number(entryFee),
       isPlayer,
+      paidAmount,
+      paidNote,
     })
     setBusy(false)
     if (errs) {
@@ -318,6 +329,42 @@ function EditPanel({
         entryFeeMin={entryFeeMin}
         entryFeeMax={entryFeeMax}
       />
+
+      {/* Entry collection. Nothing here moves money: the pool is built from
+          entry fees whether or not they've been handed over (ADR 0001 §9), so
+          this is bookkeeping an admin can act on, not a rule. */}
+      <div className="flex flex-col gap-1.5 border-t border-border pt-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`edit-${person.key}-paid`}>Entry collected</Label>
+            <Input
+              id={`edit-${person.key}-paid`}
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={paidAmount}
+              onChange={(e) => setPaidAmount(e.target.value)}
+              className="w-28"
+            />
+          </div>
+          <div className="flex min-w-40 flex-1 flex-col gap-1.5">
+            <Label htmlFor={`edit-${person.key}-paid-note`}>
+              How it came in
+            </Label>
+            <Input
+              id={`edit-${person.key}-paid-note`}
+              value={paidNote}
+              onChange={(e) => setPaidNote(e.target.value)}
+              placeholder="Venmo 9/2 · from the deposit"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-text-muted">
+          Their ${person.entry_fee ?? 0} entry counts in the pool either way —
+          this only tracks what&rsquo;s actually been handed over. Partial
+          amounts are fine.
+        </p>
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={save} disabled={busy || !dirty}>
@@ -655,6 +702,50 @@ function AddMemberBox({
   )
 }
 
+/**
+ * The collection headline — what's in against what's owed, over the table the
+ * admin is already reading.
+ *
+ * Counted over APPROVED bettors only (`status === "ready"`), which is the same
+ * set /results builds the pool from: a live participant row with a fee and no
+ * revoke. Someone still awaiting approval owes nothing yet.
+ *
+ * The number is deliberately not a rule anywhere. An unpaid member still funds
+ * the pool on paper (ADR 0001 §9) — which is exactly why an admin needs to see
+ * the gap, and exactly why nothing downstream reads it.
+ */
+function CollectionStrip({ people }: { people: RosterPerson[] }) {
+  const approved = people.filter((p) => p.status === "ready")
+  if (approved.length === 0) return null
+
+  const standing = collectionStanding(
+    approved.map((p) => ({
+      display_name: p.name,
+      entry_fee: p.entry_fee ?? 0,
+      paid_amount: p.paid_amount,
+    }))
+  )
+  const short = standing.expected - standing.collected
+
+  return (
+    <Card className="flex-row items-center justify-between gap-3 px-4 py-3">
+      <div>
+        <span className="text-sm font-semibold text-text-strong">
+          ${standing.collected} of ${standing.expected} collected
+        </span>
+        <span className="mt-0.5 block text-xs text-text-muted">
+          {short > 0
+            ? `${standing.outstanding.length} ${standing.outstanding.length === 1 ? "entry" : "entries"} still out — $${short}. The pool counts all ${approved.length} either way.`
+            : `All ${approved.length} ${approved.length === 1 ? "entry" : "entries"} are in.`}
+        </span>
+      </div>
+      <Badge variant={short > 0 ? "amber" : "green"} uppercase>
+        {short > 0 ? `$${short} out` : "Settled"}
+      </Badge>
+    </Card>
+  )
+}
+
 export function PeopleConsole({
   people,
   hasInvites,
@@ -673,6 +764,7 @@ export function PeopleConsole({
     <div className="flex flex-col gap-4">
       <InviteBox />
       <AddMemberBox entryFeeMin={entryFeeMin} entryFeeMax={entryFeeMax} />
+      <CollectionStrip people={people} />
 
       {people.length === 0 ? (
         <EmptyState
@@ -748,6 +840,20 @@ export function PeopleConsole({
                         <span className="ml-1.5">· not on the invite list</span>
                       )}
                     </div>
+                    {/* Only for approved bettors, and only when they're
+                        short: a row that says nothing has nothing owing. */}
+                    {person.status === "ready" &&
+                      !isPaidInFull({
+                        display_name: person.name,
+                        entry_fee: person.entry_fee ?? 0,
+                        paid_amount: person.paid_amount,
+                      }) && (
+                        <div className="text-xs text-caution-strong">
+                          Owes ${(person.entry_fee ?? 0) - person.paid_amount}
+                          {person.paid_amount > 0 &&
+                            ` · $${person.paid_amount} in`}
+                        </div>
+                      )}
                     <div className="text-xs text-text-muted sm:hidden">
                       <LastLogin person={person} />
                     </div>

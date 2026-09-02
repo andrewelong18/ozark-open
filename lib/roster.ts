@@ -50,6 +50,9 @@ export type ParticipantQueryRow = {
   is_player?: boolean | null
   /** Non-null = access revoked; the row and its fee are kept (Sprint 21 / #91). */
   revoked_at?: string | null
+  /** Entry money collected. Absent on a database that predates the column. */
+  paid_amount?: number | string | null
+  paid_note?: string | null
 }
 
 export type AuthActivityQueryRow = {
@@ -75,6 +78,12 @@ export type RosterPerson = {
   entry_fee: number | null
   /** null when there's no participant row; the edit form pre-fills from it. */
   is_player: boolean | null
+  /** Entry money collected, in whole dollars. 0 when nothing is recorded and
+   *  when there's no participant row — "hasn't paid" and "isn't approved yet"
+   *  are told apart by entry_fee, not by this. NEVER a pool input. */
+  paid_amount: number
+  /** How it arrived, in the admin's own words. */
+  paid_note: string | null
   last_sign_in_at: string | null
   status: RosterStatus
   reason: RosterReason
@@ -219,6 +228,8 @@ export function buildRoster(input: {
       entry_fee: hasFee ? fee : null,
       // Undefined on the row means the schema default (true) applied.
       is_player: participant === undefined ? null : participant.is_player !== false,
+      paid_amount: Math.max(0, Number(participant?.paid_amount) || 0),
+      paid_note: trimmed(participant?.paid_note) || null,
       last_sign_in_at: lastSignInByUser.get(user.id) ?? null,
       status,
       reason,
@@ -256,6 +267,8 @@ export function buildRoster(input: {
       onboarded: false,
       entry_fee: null,
       is_player: null,
+      paid_amount: 0,
+      paid_note: null,
       last_sign_in_at: null,
       status: "not_registered",
       reason: "no_account",

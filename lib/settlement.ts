@@ -21,6 +21,7 @@
 import { roundCents, type ResultsTable,
   cashReturned,
 } from "./payouts.ts"
+import type { CollectionStanding } from "./collection.ts"
 
 /** U+2212 MINUS SIGN, matching MoneyDisplay rather than a hyphen. Reads as a
  *  minus at text size instead of as a dash between two numbers. */
@@ -121,6 +122,66 @@ export function buildSettlementSummary(
     }
     lines.push(parts.join(", "))
   })
+
+  return lines.join("\n")
+}
+
+/** Whole dollars, matching how entry money is entered and handed over. Cents
+ *  belong to payouts; nobody Venmos $20.00 for an entry. */
+function dollars(value: number): string {
+  return `$${Math.round(value)}`
+}
+
+/**
+ * The entry-collection block — **admin-only, and deliberately its own string.**
+ *
+ * It is NOT appended to `buildSettlementSummary()`, and that is the one
+ * decision in this function worth defending. `/results` has no admin gate: the
+ * settlement text is rendered to all ~32 members, and it sits behind a Copy
+ * button pointed at the group thread. A "who still owes" block merged into it
+ * would be published to everyone by a single tap, which is the opposite of
+ * what an admin wants from it. So the page renders this as a second,
+ * separately-copyable block that only an admin sees, and the text people are
+ * paid from is byte-for-byte what it was.
+ *
+ * It still lives in this module rather than beside its component, for the
+ * `cashReturned()` reason: the console and this text answer the same question,
+ * and two surfaces computing the same money differently is a bug this project
+ * has already shipped once (#157).
+ *
+ * Nothing here touches pool math. The pool is Σ entry fees whether or not the
+ * money arrived (ADR 0001 §9) — see the header of lib/collection.ts.
+ */
+export function buildCollectionSummary(
+  standing: CollectionStanding,
+  tournamentName: string
+): string {
+  const lines: string[] = [`${tournamentName} — entry collection`, ""]
+
+  if (standing.expected === 0) {
+    lines.push("Nobody was registered for this tournament.")
+    return lines.join("\n")
+  }
+
+  const short = standing.expected - standing.collected
+  lines.push(
+    `${dollars(standing.collected)} of ${dollars(standing.expected)} collected` +
+      (short > 0 ? ` · ${dollars(short)} still out` : "")
+  )
+
+  if (standing.outstanding.length === 0) {
+    lines.push("")
+    lines.push("Every entry is in.")
+    return lines.join("\n")
+  }
+
+  lines.push("")
+  lines.push("Still owed:")
+  // collectionStanding's order — biggest gap first, ties by name. Not
+  // re-sorted, so the text and the console read the same way down the page.
+  for (const person of standing.outstanding) {
+    lines.push(`  ${person.name} — ${dollars(person.owed)}`)
+  }
 
   return lines.join("\n")
 }

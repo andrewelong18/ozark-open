@@ -10,7 +10,8 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { buildResultsTable, type PayoutRow, type ResultsParticipant } from "./payouts.ts"
-import { buildSettlementSummary } from "./settlement.ts"
+import { buildCollectionSummary, buildSettlementSummary } from "./settlement.ts"
+import { collectionStanding } from "./collection.ts"
 
 function participant(
   user_id: string,
@@ -272,4 +273,53 @@ test("a pool with no winning wagers still lists everyone", () => {
   const lines = text.split("\n").filter((l) => /^\d+\. /.test(l))
   assert.equal(lines.length, 3)
   for (const line of lines) assert.match(line, /→ \$0\.00 back \(−\$20\.00\)/)
+})
+
+// ---------------------------------------------------------------------------
+// buildCollectionSummary — the admin-only entry-collection block
+// ---------------------------------------------------------------------------
+
+test("the collection block names the gap and who it's from", () => {
+  const text = buildCollectionSummary(
+    collectionStanding([
+      { display_name: "Paid Pat", entry_fee: 30, paid_amount: 30 },
+      { display_name: "Half Hayden", entry_fee: 30, paid_amount: 12 },
+      { display_name: "Owes Olivia", entry_fee: 20, paid_amount: 0 },
+    ]),
+    "Ozark Open 2026"
+  )
+  assert.match(text, /^Ozark Open 2026 — entry collection$/m)
+  assert.match(text, /\$42 of \$80 collected · \$38 still out/)
+  // The order is collectionStanding's, biggest gap first — not re-sorted.
+  assert.ok(text.indexOf("Owes Olivia — $20") < text.indexOf("Half Hayden — $18"))
+})
+
+test("fully collected says so instead of printing an empty list", () => {
+  const text = buildCollectionSummary(
+    collectionStanding([
+      { display_name: "Paid Pat", entry_fee: 30, paid_amount: 30 },
+    ]),
+    "T"
+  )
+  assert.match(text, /\$30 of \$30 collected/)
+  assert.doesNotMatch(text, /still out/)
+  assert.match(text, /Every entry is in\./)
+  assert.doesNotMatch(text, /Still owed:/)
+})
+
+test("an empty roster reads as a sentence, not a blank block", () => {
+  const text = buildCollectionSummary(collectionStanding([]), "T")
+  assert.match(text, /Nobody was registered/)
+})
+
+// The reason the two texts are separate functions: /results is member-visible
+// and the settlement block sits behind a Copy button aimed at the group thread.
+// If collection ever leaks into it, this fails.
+test("the member-facing settlement text carries no collection data", () => {
+  const table = buildResultsTable(
+    [participant("u1", "Ann", 30), participant("u2", "Bob", 20)],
+    []
+  )
+  const text = buildSettlementSummary(table, "T")
+  assert.doesNotMatch(text, /collect|still out|still owed|owes/i)
 })

@@ -13,7 +13,9 @@ import {
   normalizePayoutRows,
   type PayoutViewQueryRow,
 } from "@/lib/payouts"
-import { buildSettlementSummary } from "@/lib/settlement"
+import { buildCollectionSummary, buildSettlementSummary } from "@/lib/settlement"
+import { collectionStanding, type CollectionParticipant } from "@/lib/collection"
+import { viewerIsAdmin } from "@/lib/admin-gate"
 
 // Stacked on a phone, six columns at sm+ — see the note on the header row.
 const GRID =
@@ -129,6 +131,48 @@ export default async function ResultsPage() {
   )
   const table = buildResultsTable(participants, rows)
   const winner = table.rows[0]
+
+  // Entry collection, for an admin only. THREE things about this read are
+  // deliberate:
+  //
+  //   1. It is its OWN read rather than paid_amount added to the participants
+  //      select above. That select is the page: a database that hasn't had the
+  //      20260902 migration applied yet would fail it and every member would
+  //      get an error card where the payouts should be — the exact shape of
+  //      the Aug 31 outage. Here, the same failure costs the admin one block.
+  //   2. It runs only for an admin, so a member's page does no extra work.
+  //   3. `collection` stays null on any failure, which renders nothing. The
+  //      block is a convenience beside the money; it may not become a reason
+  //      the results page breaks.
+  const isAdmin = await viewerIsAdmin(supabase)
+  let collection = null
+  if (isAdmin) {
+    const { data: paidData, error: paidError } = await supabase
+      .from("tournament_participants")
+      .select("entry_fee, paid_amount, users ( display_name )")
+      .eq("tournament_id", tournament.id)
+      .is("revoked_at", null)
+    if (paidError) {
+      console.error("[results] collection read failed:", paidError.message)
+    } else {
+      type PaidRow = {
+        entry_fee: number | string | null
+        paid_amount: number | string | null
+        users: { display_name: string } | { display_name: string }[] | null
+      }
+      const forStanding: CollectionParticipant[] = (
+        (paidData ?? []) as PaidRow[]
+      ).map((p) => {
+        const joined = Array.isArray(p.users) ? p.users[0] : p.users
+        return {
+          display_name: joined?.display_name ?? "Unknown bettor",
+          entry_fee: Number(p.entry_fee) || 0,
+          paid_amount: Number(p.paid_amount) || 0,
+        }
+      })
+      collection = collectionStanding(forStanding)
+    }
+  }
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
@@ -338,6 +382,18 @@ export default async function ResultsPage() {
           <SettlementSummary
             text={buildSettlementSummary(table, tournament.name)}
           />
+
+          {/* Admin only, and a SEPARATE block rather than part of the text
+              above — this page is member-visible and that text sits behind a
+              Copy button aimed at the group thread. See the note on
+              buildCollectionSummary(). */}
+          {collection && (
+            <SettlementSummary
+              text={buildCollectionSummary(collection, tournament.name)}
+              title="Entry collection (admins only)"
+              hint="Who has handed their entry over. Nobody else sees this block, and none of it moves the pool — the split above already counts every entry."
+            />
+          )}
 
           <p className="text-center text-xs text-text-muted">
             Actual share = your theoretical payout ÷ everyone&apos;s theoretical

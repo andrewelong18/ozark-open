@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { TOURNAMENT_RULE_COLUMNS, toTournamentRules } from "@/lib/placements"
 import { validateEntryFee } from "@/lib/validation"
 import { normalizeDisplayName, validateDisplayName } from "@/lib/profile"
+import { parsePaidAmount } from "@/lib/collection"
 
 // Admin bettor-approval endpoint (Sprint 16). This is the automated
 // replacement for hand-adding a tournament_participants row in Studio:
@@ -11,8 +12,9 @@ import { normalizeDisplayName, validateDisplayName } from "@/lib/profile"
 //            CREATE the participant row with an entry fee + player flag).
 //            Also RE-approves: it clears revoked_at on an existing row, which
 //            the UNIQUE (user_id, tournament_id) constraint requires anyway.
-//   PATCH  — edit an existing participant's entry fee / player flag, and/or
-//            correct their display_name (Sprint 23 / #99).
+//   PATCH  — edit an existing participant's entry fee / player flag, record
+//            entry money collected (paid_amount / paid_note), and/or correct
+//            their display_name (Sprint 23 / #99).
 //   DELETE — revoke (stamp revoked_at → back to view-only).
 //
 // Revoke is a SOFT revoke (Sprint 21 / #91). A hard DELETE took the entry fee
@@ -173,7 +175,7 @@ export async function POST(request: Request) {
       },
       { onConflict: "user_id,tournament_id" }
     )
-    .select("user_id, entry_fee, is_player")
+    .select("user_id, entry_fee, is_player, paid_amount, paid_note")
     .single()
   if (error) {
     return NextResponse.json(
@@ -210,7 +212,13 @@ export async function PATCH(request: Request) {
   }
   const rules = toTournamentRules(tournament)
 
-  const update: { entry_fee?: number; is_player?: boolean } = {}
+  const update: {
+    entry_fee?: number
+    is_player?: boolean
+    paid_amount?: number
+    paid_at?: string | null
+    paid_note?: string | null
+  } = {}
   if (body.entryFee !== undefined) {
     const entryFee = Number(body.entryFee)
     const feeError = validateEntryFee(entryFee, rules)
@@ -218,6 +226,27 @@ export async function PATCH(request: Request) {
     update.entry_fee = entryFee
   }
   if (typeof body.isPlayer === "boolean") update.is_player = body.isPlayer
+
+  // Entry collection (Track A). Recorded, never decided: this endpoint takes
+  // an amount and a note and stamps when it was recorded. It does NOT check
+  // the amount against the entry fee — partial payments and the occasional
+  // overpayment are both real, and `paid_amount >= entry_fee` is derived at
+  // read time rather than enforced here. And it is never a pool input: the
+  // pool is Σ entry_fee (ADR 0001 §9) whether or not the money arrived.
+  if (body.paidAmount !== undefined) {
+    const parsed = parsePaidAmount(body.paidAmount)
+    if (!parsed.ok) {
+      return NextResponse.json({ errors: [parsed.error] }, { status: 400 })
+    }
+    update.paid_amount = parsed.amount
+    // Stamped on every recorded amount, INCLUDING a correction back to 0 —
+    // paid_at answers "when did an admin last touch this", not "when did the
+    // money arrive", and clearing it on a correction would lose that.
+    update.paid_at = new Date().toISOString()
+  }
+  if (typeof body.paidNote === "string") {
+    update.paid_note = body.paidNote.trim() || null
+  }
 
   const nameGiven = normalizeDisplayName(body.displayName) !== ""
   if (!nameGiven && Object.keys(update).length === 0) {
@@ -238,7 +267,7 @@ export async function PATCH(request: Request) {
     .update(update)
     .eq("user_id", body.userId)
     .eq("tournament_id", tournament.id)
-    .select("user_id, entry_fee, is_player")
+    .select("user_id, entry_fee, is_player, paid_amount, paid_note")
     .single()
   if (error) {
     return NextResponse.json({ error: `Couldn't update: ${error.message}` }, { status: 500 })

@@ -359,3 +359,53 @@ test("with no invites the funnel simply starts at 'signed in'", () => {
   assert.deepEqual(r.funnel.noAccount, [])
   assert.equal(r.funnel.awaitingApproval.length, 1)
 })
+
+// ---------------------------------------------------------------------------
+// Entry collection on the row
+// ---------------------------------------------------------------------------
+
+test("paid_amount and paid_note ride along on an approved row", () => {
+  const r = roster({
+    users: [user("u-a", "a@x.com", { display_name: "A" })],
+    participants: [
+      { user_id: "u-a", entry_fee: 30, paid_amount: 12, paid_note: " Venmo 9/2 " },
+    ],
+  })
+  assert.equal(r.people[0].paid_amount, 12)
+  assert.equal(r.people[0].paid_note, "Venmo 9/2")
+})
+
+test("a database without the collection columns reads as nothing paid", () => {
+  // What every row looks like until migration 20260902000000 is applied. It
+  // must be a zero, never NaN or undefined — the console sums these.
+  const r = roster({
+    users: [user("u-a", "a@x.com", { display_name: "A" })],
+    participants: [{ user_id: "u-a", entry_fee: 30 }],
+  })
+  assert.equal(r.people[0].paid_amount, 0)
+  assert.equal(r.people[0].paid_note, null)
+})
+
+test("PostgREST string ints and a nonsense value both coerce, never NaN", () => {
+  const r = roster({
+    users: [
+      user("u-a", "a@x.com", { display_name: "A" }),
+      user("u-b", "b@x.com", { display_name: "B" }),
+    ],
+    participants: [
+      { user_id: "u-a", entry_fee: 30, paid_amount: "25" },
+      { user_id: "u-b", entry_fee: 30, paid_amount: -5 },
+    ],
+  })
+  const byName = Object.fromEntries(r.people.map((p) => [p.name, p.paid_amount]))
+  assert.equal(byName.A, 25)
+  assert.equal(byName.B, 0)
+})
+
+test("someone with no participant row owes nothing rather than reading unpaid", () => {
+  // The distinction the console relies on: paid_amount is 0 for an unapproved
+  // person too, so "owes" is derived from entry_fee, which is null here.
+  const r = roster({ users: [user("u-a", "a@x.com", { display_name: "A" })] })
+  assert.equal(r.people[0].entry_fee, null)
+  assert.equal(r.people[0].paid_amount, 0)
+})

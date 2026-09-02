@@ -118,7 +118,15 @@ export default async function AdminPeoplePage() {
       // Revoked rows are NOT filtered out here — the console has to show a
       // revoked person so an admin can re-approve them (Sprint 21 / #91).
       .from("tournament_participants")
-      .select("user_id, entry_fee, is_player, revoked_at")
+      // paid_amount/paid_note need migration 20260902000000. This read IS the
+      // page (a failure renders LoadError), so that migration must be applied
+      // to production BEFORE this deploys — /api/health checks exactly this.
+      // Deliberately not split into a degrading read: unlike /results, every
+      // viewer here is an admin, and an admin who can't see the console is a
+      // clearer failure than one silently missing a column.
+      .select(
+        "user_id, entry_fee, is_player, revoked_at, paid_amount, paid_note"
+      )
       .eq("tournament_id", tournament.id),
     // Degrades to "Never" everywhere if it fails — losing last-login must not
     // take down the chase page.
