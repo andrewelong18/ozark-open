@@ -13,11 +13,13 @@ import {
   actualShare,
   aggregatePayouts,
   buildResultsTable,
+  cashReturned,
   finalizeReadiness,
   normalizePayoutRows,
   poolTotal,
   refundedStake,
   roundCents,
+  type PayoutRow,
   theoreticalPayout,
   type PayoutViewQueryRow,
 } from "./payouts.ts"
@@ -417,4 +419,61 @@ test("the guard counts PICKS, not placements — a pick nobody bet on still bloc
   )
   assert.equal(table.pending, 0, "no pending PLACEMENTS")
   assert.equal(finalizeReadiness({ pendingPicks: 1, unclosedBets: 0 }).ok, false)
+})
+
+// ---------------------------------------------------------------------------
+// cashReturned — the number two surfaces used to disagree about (#157)
+// ---------------------------------------------------------------------------
+
+test("cashReturned is the pool share plus the refunded stakes", () => {
+  assert.equal(cashReturned({ actual: 10, refunded: 6 }), 16)
+  assert.equal(cashReturned({ actual: 10, refunded: 0 }), 10)
+})
+
+test("every results row reconciles: entry + P/L === cash returned", () => {
+  // The property the /results table was failing to show. It holds by
+  // construction (profit_loss = actual + refunded − entry_fee), and pinning it
+  // means a future change to either side fails here rather than on the page 32
+  // people open to find out what they are owed.
+  const participants = [
+    { user_id: "u1", display_name: "Voided Vic", entry_fee: 20 },
+    { user_id: "u2", display_name: "Clean Casey", entry_fee: 20 },
+    { user_id: "u3", display_name: "No Wagers Nia", entry_fee: 20 },
+  ]
+  const rows: PayoutRow[] = [
+    // Vic: one hit, one voided $6 stake refunded out of band.
+    { placement_id: "p1", user_id: "u1", amount: 5, result: "hit", theoretical: 12, refunded: 0 },
+    { placement_id: "p2", user_id: "u1", amount: 6, result: "void", theoretical: null, refunded: 6 },
+    { placement_id: "p3", user_id: "u2", amount: 8, result: "hit", theoretical: 20, refunded: 0 },
+  ]
+
+  const table = buildResultsTable(participants, rows)
+  for (const row of table.rows) {
+    assert.equal(
+      roundCents(row.entry_fee + row.profit_loss),
+      roundCents(cashReturned(row)),
+      `${row.display_name} does not add up across`
+    )
+  }
+})
+
+test("the voided stake leaves the pool and comes back to its bettor", () => {
+  const participants = [
+    { user_id: "u1", display_name: "Voided Vic", entry_fee: 20 },
+    { user_id: "u2", display_name: "Clean Casey", entry_fee: 20 },
+  ]
+  const rows: PayoutRow[] = [
+    { placement_id: "p1", user_id: "u1", amount: 6, result: "void", theoretical: null, refunded: 6 },
+    { placement_id: "p2", user_id: "u2", amount: 8, result: "hit", theoretical: 20, refunded: 0 },
+  ]
+  const table = buildResultsTable(participants, rows)
+  // Pool = 40 entry − 6 voided.
+  assert.equal(table.pool, 34)
+
+  const vic = table.rows.find((r) => r.user_id === "u1")!
+  // Casey holds every theoretical dollar, so Vic's share is 0 — but he is not
+  // out $20, he is out $14, because $6 was handed back.
+  assert.equal(vic.actual, 0)
+  assert.equal(cashReturned(vic), 6)
+  assert.equal(vic.profit_loss, -14)
 })
