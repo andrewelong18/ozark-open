@@ -142,7 +142,14 @@ export default async function MyBetsPage() {
   const phases = groupByPhase(entries)
   const totals = checkTournamentTotal(entries, entryFee)
   const myRules = buildRulesModel(participant, rules)
-  const compliance = buildComplianceSummary(entries, entryFee, rules)
+  // The zero-placement item is skipped HERE and only here: the page renders its
+  // own "No bets placed yet" empty state a few lines down, and the banner would
+  // be that same sentence twice in a row. The empty state carries the
+  // requirement instead.
+  const compliance =
+    entries.length === 0
+      ? []
+      : buildComplianceSummary(entries, entryFee, rules)
   // §8.1 balanced: the exact total AND the pick minimum, same pair the
   // dashboard used to compute for this bar.
   const balanced = totals.exact && checkPickMinimum(entries, rules).meets_minimum
@@ -212,7 +219,7 @@ export default async function MyBetsPage() {
       {entries.length === 0 ? (
         <EmptyState
           title="No bets placed yet"
-          message={`Your $${entryFee} entry is waiting on the bet menu.`}
+          message={`Your $${entryFee} entry is waiting on the bet menu — at least ${rules.min_picks_per_tournament} picks totalling exactly $${entryFee} by the Phase 2 deadline.`}
           action={
             <Button variant="gold" size="sm" render={<Link href="/bets" />}>
               Place Bets →

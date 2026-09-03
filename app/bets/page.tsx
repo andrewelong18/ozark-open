@@ -27,7 +27,7 @@ import {
   TOURNAMENT_CLOCK_COLUMNS,
   TOURNAMENT_RULE_COLUMNS,
 } from "@/lib/placements"
-import { wageringOpen } from "@/lib/phases"
+import { phaseClosedByClock, wageringOpen } from "@/lib/phases"
 import { sortPicks } from "@/lib/pick-order"
 import {
   buildComplianceSummary,
@@ -256,7 +256,9 @@ export default async function BetsPage({
         totalWagered: totals.total,
         remaining: totals.remaining,
         pickCount: entries.length,
-        items: buildComplianceSummary(entries, entryFee, rules),
+        items: buildComplianceSummary(entries, entryFee, rules, {
+          wageringOver: phaseClosedByClock(2, clock, now),
+        }),
       }
     }
   }

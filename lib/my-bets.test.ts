@@ -288,8 +288,59 @@ function placement(phase: 1 | 2, amount: number, n: number) {
   }
 }
 
-test("compliance: no placements means no banners (the empty state talks)", () => {
-  assert.deepEqual(buildComplianceSummary([], 40, RULES), [])
+// The completion blind spot. Until this, a registered member who never opened
+// the menu was the ONLY one the app told nothing — and the dry run has two of
+// them on the record (OUTSTANDING_DECISIONS.md §2b): Steve paid his entry,
+// never wagered, and finished at −$20.00.
+
+test("compliance: no placements says what they still owe, once", () => {
+  const items = buildComplianceSummary([], 40, RULES)
+  assert.equal(items.length, 1)
+  assert.equal(items[0].title, "No bets placed yet")
+  assert.match(items[0].message, /at least 5 picks/)
+  assert.match(items[0].message, /exactly \$40/)
+})
+
+test("compliance: the no-placements item is info, so the alert count stays 0", () => {
+  // Not cosmetic. PRD Q2 says they are not in violation until the Phase 2
+  // close, and the dashboard's "Alerts (n)" badge counts warnings — a red 1 on
+  // a page where nothing is yet wrong is an alert people learn to ignore.
+  const items = buildComplianceSummary([], 40, RULES)
+  assert.equal(items[0].tone, "info")
+  assert.equal(items.filter((i) => i.tone === "warning").length, 0)
+})
+
+test("compliance: once wagering is over, no placements says nothing at all", () => {
+  // There is nothing they can do about it now, and telling someone to go place
+  // bets on results night is worse than silence.
+  assert.deepEqual(
+    buildComplianceSummary([], 40, RULES, { wageringOver: true }),
+    []
+  )
+})
+
+test("compliance: wageringOver does not silence a real warning", () => {
+  // The suppression is only for the zero-placement nudge. Someone who wagered
+  // $20 of $40 is genuinely off, and that stays visible after the close — it is
+  // what the settlement text will be built against.
+  const items = buildComplianceSummary(
+    [placement(1, 4, 1), placement(1, 4, 2), placement(1, 4, 3), placement(1, 4, 4), placement(1, 4, 5)],
+    40,
+    RULES,
+    { wageringOver: true }
+  )
+  assert.equal(items.length, 1)
+  assert.equal(items[0].tone, "warning")
+  assert.equal(items[0].title, "Not balanced yet")
+})
+
+test("compliance: the pick minimum's own zero exemption is untouched", () => {
+  // checkPickMinimum() exempts zero picks deliberately (PRD Q2, cited in
+  // lib/chase.ts, mirrored in docs/admin/phase-compliance.sql, relied on by
+  // scripts/dry-run-verify.ts). The fix above is a DISPLAY fix; if this ever
+  // starts failing, the rule was changed and three other things need looking at.
+  const picks = checkPickMinimum([], RULES)
+  assert.equal(picks.meets_minimum, true)
 })
 
 test("compliance: under the tournament-wide minimum warns with validation's message verbatim", () => {

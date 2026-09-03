@@ -20,7 +20,9 @@ export type BetSlipSummaryProps = {
    * caps it at the entry — PRD §7 rule 6). */
   remaining: number
   pickCount: number
-  /** From buildComplianceSummary — empty only when nothing is placed yet. */
+  /** From buildComplianceSummary. Empty only once wagering is over with
+   *  nothing placed; at zero placements before the deadline it carries one
+   *  `info` item, and the headline below still leads with pickCount. */
   items: ComplianceItem[]
 }
 
@@ -44,9 +46,11 @@ export function BetSlipSummary({
   pickCount,
   items,
 }: BetSlipSummaryProps) {
-  // Headline = the highest-priority standing. With no picks there's nothing to
-  // warn about; once betting, buildComplianceSummary always returns at least
-  // one item (a warning, or the "you're balanced" success), so items[0] leads.
+  // Headline = the highest-priority standing. buildComplianceSummary always
+  // returns at least one item now — a warning, the "you're balanced" success,
+  // or the zero-placement info line — so items[0] leads. pickCount still
+  // overrides at zero: this bar is one truncated line and "No picks placed yet"
+  // is the shorter true thing to say on it.
   const lead = items[0]
   const tone: Tone = pickCount === 0 ? "info" : (lead?.tone ?? "info")
   const headline =

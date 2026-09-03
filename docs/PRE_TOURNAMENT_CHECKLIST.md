@@ -250,10 +250,42 @@ so the project can pause and the automatic save states can stop.
 
 ---
 
+## Monitoring — the one thing that watches the app for you
+
+`https://ozark-open.com/api/health` runs the reads the app itself depends on and answers **200**
+when they all work, **503** when one doesn't. It is public — no session needed — and returns no
+data, only check names, pass/fail and timings.
+
+Point any uptime monitor at it (UptimeRobot's free tier is plenty; 5-minute interval, alert on
+non-200). Two rules:
+
+- **Use `ozark-open.com`.** A `.vercel.app` alias 308s to the canonical host before the route runs,
+  and two of them sit behind Vercel SSO — a monitor pointed at one measures Vercel's login page.
+- **Set it up before the week of the tournament**, not during. It is worth most in the hour after a
+  deploy, and there is no reason to wait.
+
+Why it isn't a plain ping: on Aug 31 the dashboard shipped a query for a column whose migration
+hadn't been applied. Vercel was green, Supabase was green, and every member got an error card. A
+ping on `/` would have been green the whole time. This endpoint checks the *schema the code
+expects* — the tournament row and its rule and clock columns, the dashboard's `bets` read
+including `opened_at`, the activity feed's function, and the entry-collection columns — so a deploy
+that outruns its migration is red within one poll.
+
+When it's red, open it in a browser. The failing check names itself and carries the database's own
+message, which names the missing column:
+
+```json
+{ "ok": false, "checks": [ { "name": "bets_read", "ok": false,
+  "error": "column bets.opened_at does not exist" } ] }
+```
+
+That is a migration to apply, not a code change (`docs/AGENT_AUTOMATION.md`).
+
 ## If something goes wrong
 
 | Symptom | What it usually is |
 |---|---|
+| Anything at all is broken | Load `/api/health` first — 30 seconds, and it names the failing read. |
 | Nobody can sign in | Project asleep, or magic-link email failing. Dashboard first, then Resend. |
 | A member says "I can't bet" | They're not approved, or they're revoked. `/admin/people`. |
 | A pick doesn't link to a golfer | Name mismatch between the sheet and their display name. Fix the sheet, re-upload — the §7 self-bet rules depend on that link. |

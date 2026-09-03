@@ -31,7 +31,8 @@
 // let each scenario run as a chosen user with RLS enforced:
 //   SET ROLE authenticated; SET request.jwt.claim.sub = '<uuid>'; <statement>
 
-import { execFileSync } from "node:child_process"
+import { execFile, execFileSync } from "node:child_process"
+import { promisify } from "node:util"
 
 const PGURI = process.env.PGURI ?? "postgresql://localhost:5432/ozark_roundtrip"
 
@@ -415,11 +416,156 @@ function main() {
      WHERE user_id = '${ALICE}' AND tournament_id = '${tournamentId}'`
   )
 
+  return { tournamentId, openPick, openPick2 }
+}
+
+// ---------------------------------------------------------------------------
+// The over-commit race (migration 20260902000001)
+// ---------------------------------------------------------------------------
+//
+// THIS IS THE ONE CHECK IN THIS FILE THAT CANNOT BE WRITTEN SYNCHRONOUSLY, and
+// the reason is the bug it defends against.
+//
+// lib/placement-write.ts reads the bettor's placements, sums them in
+// TypeScript, and writes — three steps with no lock and no transaction. Two
+// requests on DIFFERENT picks each read a total missing the other's, both pass
+// validateRunningTotal(), and both land. A sequential test cannot see that: run
+// one after the other and the second one's read is correct.
+//
+// So this runs two genuinely overlapping psql transactions. T1 inserts and then
+// sits inside its transaction for a second; T2 starts a third of a second later
+// and tries to insert while T1 is uncommitted. Against a $20 entry with two $15
+// wagers, exactly one may survive.
+//
+// WHAT MAKES THE ASSERTION MEAN SOMETHING: this was run against the trigger
+// with its `FOR UPDATE` removed and it FAILED, with both wagers landing at $30
+// on a $20 entry — because re-summing alone is not enough under READ COMMITTED,
+// where neither transaction can see the other's uncommitted row. The lock is
+// what serialises them. A concurrency test that has never failed proves
+// nothing, so if you touch that function, delete the lock and watch this go red
+// before you trust it green.
+
+const execFileAsync = promisify(execFile)
+
+/** One psql process, run without blocking the other. Resolves whether the SQL
+ *  succeeded — a raise here is the expected outcome for the loser. */
+async function psqlAsync(sql: string): Promise<{ ok: boolean; stderr: string }> {
+  try {
+    await execFileAsync("psql", [PGURI, "-X", "-v", "ON_ERROR_STOP=1", "-c", sql], {
+      encoding: "utf-8",
+    })
+    return { ok: true, stderr: "" }
+  } catch (err) {
+    return { ok: false, stderr: String((err as { stderr?: string }).stderr ?? err) }
+  }
+}
+
+async function raceCheck(ctx: {
+  tournamentId: string
+  openPick: string
+  openPick2: string
+}) {
+  console.log("\nThe over-commit race (PRD §7 rule 6, as a database guarantee):")
+
+  // A $20 entry and a clean board, so two $15 wagers is unambiguously one too
+  // many. Hard DELETE as the superuser — RLS has no DELETE policy.
+  runSql(`
+    DELETE FROM public.bet_placements WHERE user_id = '${BOB}';
+    UPDATE public.tournament_participants SET entry_fee = 20
+     WHERE user_id = '${BOB}' AND tournament_id = '${ctx.tournamentId}';
+  `)
+
+  const wager = (pickId: string) =>
+    `INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement)
+     VALUES ('${BOB}', '${pickId}', 15, 110)`
+
+  const [first, second] = await Promise.all([
+    // Holds its transaction open for a second AFTER inserting, which is the
+    // window the TypeScript check has no protection against.
+    psqlAsync(`BEGIN; ${wager(ctx.openPick)}; SELECT pg_sleep(1); COMMIT;`),
+    // Starts inside that window.
+    psqlAsync(`SELECT pg_sleep(0.3); BEGIN; ${wager(ctx.openPick2)}; COMMIT;`),
+  ])
+
+  const landed = Number(
+    runSql(
+      `SELECT coalesce(sum(amount), 0) FROM public.bet_placements
+        WHERE user_id = '${BOB}' AND deleted_at IS NULL`
+    )
+  )
+  check(
+    "two concurrent $15 wagers against a $20 entry leave exactly $15 on the board",
+    landed === 15,
+    `$${landed} landed — if this is $30, the guard is not holding and PRD §7 rule 6 is a suggestion`
+  )
+  check(
+    "exactly one of the two transactions succeeded",
+    Number(first.ok) + Number(second.ok) === 1,
+    `first ${first.ok ? "committed" : "raised"}, second ${second.ok ? "committed" : "raised"}`
+  )
+  // The loser has to read like a rule, not like a crash: lib/placement-write.ts
+  // matches SQLSTATE OZ001 to turn this into the same 400 and the same sentence
+  // a validated over-commit produces.
+  const loser = first.ok ? second.stderr : first.stderr
+  check(
+    "the loser is refused with validateRunningTotal()'s exact sentence",
+    loser.includes("Over your $20 entry"),
+    loser.split("\n")[0]
+  )
+
+  // A sequential over-commit is refused too — the guard is not only about
+  // races, and this is the path an admin hand-editing in Studio would take.
+  runSql(`DELETE FROM public.bet_placements WHERE user_id = '${BOB}'`)
+  runSql(wager(ctx.openPick))
+  const sequential = await psqlAsync(wager(ctx.openPick2))
+  check(
+    "a plain second wager over the entry is refused as well",
+    !sequential.ok && sequential.stderr.includes("Over your $20 entry")
+  )
+
+  // Editing DOWN must still work: the guard excludes the row's own old amount
+  // via `pl.id <> NEW.id`, so an edit that reduces isn't double-counted.
+  const ok = await psqlAsync(
+    `UPDATE public.bet_placements SET amount = 5
+      WHERE user_id = '${BOB}' AND pick_id = '${ctx.openPick}'`
+  )
+  check("editing a wager DOWN is not blocked by its own old amount", ok.ok, ok.stderr)
+  const raise = await psqlAsync(
+    `UPDATE public.bet_placements SET amount = 25
+      WHERE user_id = '${BOB}' AND pick_id = '${ctx.openPick}'`
+  )
+  check(
+    "editing a wager UP past the entry is refused",
+    !raise.ok && raise.stderr.includes("Over your $20 entry")
+  )
+
+  // Removing is always allowed — a soft delete only reduces the total, and a
+  // guard that blocked it would trap someone over the cap with no way down.
+  const remove = await psqlAsync(
+    `UPDATE public.bet_placements SET deleted_at = now()
+      WHERE user_id = '${BOB}' AND pick_id = '${ctx.openPick}'`
+  )
+  check("removing a wager is never blocked", remove.ok, remove.stderr)
+
+  // Restore the fixture for anything downstream.
+  runSql(`
+    DELETE FROM public.bet_placements WHERE user_id = '${BOB}';
+    UPDATE public.tournament_participants SET entry_fee = 40
+     WHERE user_id = '${BOB}' AND tournament_id = '${ctx.tournamentId}';
+  `)
+}
+
+async function run() {
+  const ctx = main()
+  await raceCheck(ctx)
+
   if (failures > 0) {
     console.error(`\n${failures} check(s) failed.`)
     process.exit(1)
   }
-  console.log("\nPlacement round trip passed: lifecycle and visibility hold under RLS.")
+  console.log(
+    "\nPlacement round trip passed: lifecycle and visibility hold under RLS, and two concurrent wagers cannot exceed the entry."
+  )
 }
 
-main()
+void run()

@@ -102,3 +102,41 @@ export async function requireAdminRoute(): Promise<
 
   return { supabase, user }
 }
+
+/**
+ * A **soft** admin check: a boolean, for a page that a member is allowed to
+ * see but that shows an admin something extra.
+ *
+ * Deliberately separate from `requireAdminPage()` rather than a refactor of
+ * it. The hard gate's whole job is to throw, and `app/bets/page.tsx:110`
+ * records why it's used "rather than a soft check" there. This is the other
+ * shape, and it has exactly one caller today: `/results` is member-visible, so
+ * the entry-collection block on it has to be conditional rather than gated.
+ *
+ * FAILS CLOSED, like both hard gates: a lookup that errors returns false, so
+ * the extra block simply doesn't render. That is the safe direction here for
+ * the obvious reason — the failure mode of failing open is showing every
+ * member who hasn't paid.
+ *
+ * Takes the client rather than making one, because the caller is already
+ * mid-page with a client in hand.
+ */
+export async function viewerIsAdmin(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<boolean> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return false
+
+  const { data: profile, error } = await supabase
+    .from("users")
+    .select("is_admin")
+    .eq("id", user.id)
+    .maybeSingle()
+  if (error) {
+    console.error("[admin-gate] soft admin lookup failed:", error.message)
+    return false
+  }
+  return Boolean((profile as AdminRow)?.is_admin)
+}

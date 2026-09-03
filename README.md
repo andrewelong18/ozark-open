@@ -132,6 +132,13 @@ The full protocol Claude follows is in `CLAUDE.md`.
 
 No CI/CD pipeline to configure. No servers to manage. Updating bets, odds, statuses, and results is done by re-uploading the bets spreadsheet — **no code changes or redeployments required.**
 
+**Apply migrations before you merge.** Vercel deploys `main` the moment it lands, so a schema
+change merged ahead of its migration is live against a database that can't serve it. That is not
+theoretical — it took the dashboard down for every member on Aug 31, 2026. `GET /api/health` runs
+the reads the app depends on and answers 503 naming the failing one; point an uptime monitor at
+`https://ozark-open.com/api/health` (setup and what to do when it's red:
+`docs/PRE_TOURNAMENT_CHECKLIST.md` § Monitoring).
+
 ---
 
 ## The Admin Runbook (updating bets, statuses, and results)

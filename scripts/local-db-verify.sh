@@ -74,7 +74,7 @@ echo "    applied seed-sample-phase1.sql"
 echo "==> policy manifest (every RLS policy, against the checked-in expectation)"
 node --experimental-strip-types "$REPO/scripts/policy-manifest.ts" ${POLICY_MANIFEST_WRITE:+--write}
 
-echo "==> round trips (import → placement RLS → users RLS → payout view → onboarding guard → snapshots)"
+echo "==> round trips (import → placement RLS → users RLS → payout view → onboarding guard → collection → snapshots)"
 node --experimental-strip-types "$REPO/scripts/import-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/placement-roundtrip.ts"
 # users RLS (#154) runs after placement-roundtrip, which installs the
@@ -86,6 +86,10 @@ node --experimental-strip-types "$REPO/scripts/users-rls-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/activity-rls-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/payout-view-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/onboarding-guard-roundtrip.ts"
+# Entry collection: the columns, who may write them, and the proof that wiping
+# every payment moves no payout. Runs after payout-view-roundtrip because that
+# is the view its last check compares before and after.
+node --experimental-strip-types "$REPO/scripts/collection-roundtrip.ts"
 # Sprint 11's "Done when", run rather than asserted: snapshot → mangle → restore
 # → the five money tables match byte for byte. Last, because it deliberately
 # rewrites state and the checks above want the seed as the seed left it.

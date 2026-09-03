@@ -92,7 +92,27 @@ Pat closes all four. Tracked as [#111](https://github.com/andrewelong18/ozark-op
 Pat: "I would say the minimum entry ($20) can be deducted from the deposit. Extra
 should prolly be collected by other means (Venmo/Cash)." Phrased tentatively.
 Confirm the split is firm so `PRD.md` §1/§10 and `README.md` state it correctly.
-The app tracks no payment status regardless.
+
+**Still open, and narrowed (Sept 2, 2026).** The MECHANISM is Pat's call and this
+entry stays open until he confirms it. What changed is that the app now **records**
+collection without deciding it: `tournament_participants.paid_amount` / `paid_at` /
+`paid_note` (migration `20260902000000`), edited on `/admin/people`, summarised there
+and in an admin-only block on `/results`. `paid_note` is free text — "from the
+deposit", "Venmo 9/2" — so the columns are true whichever way Pat lands.
+
+Two rules make that safe to build ahead of the decision, and both are asserted by
+`scripts/collection-roundtrip.ts`:
+
+- **It is never an input to pool math.** The pool is Σ entry fees − Σ voided stakes
+  (ADR 0001 §9) whether or not the money arrived. An unpaid member still funds the
+  pool on paper — which is exactly why an admin needs to see the gap, and exactly why
+  no payout calculation may read these columns. The round trip wipes every payment to
+  zero and asserts `placement_payouts_view` is unchanged.
+- **"Paid in full" is derived** (`paid_amount >= entry_fee`), never stored, so a
+  partial payment needs no second source of truth.
+
+So the line "the app tracks no payment status" is no longer true; the line that
+replaces it is that the app tracks payment status and *acts on none of it*.
 
 ## 4. "Non-Goals — see word doc for more" (Pat §3)
 **Owner:** Pat · **Blocks:** nothing — clarification only.

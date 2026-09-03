@@ -157,8 +157,15 @@ runSql(`
   UPDATE public.bets SET title = 'MANGLED', status = 'hidden' WHERE id = '${betId}';
   -- a pick: repriced, the change that silently moves payouts
   UPDATE public.bet_picks SET american_odds = 99999, result = 'hit' WHERE id = '${pickId}';
-  -- a placement: the stake edited, which is money
-  UPDATE public.bet_placements SET amount = amount + 777 WHERE id = '${placementId}';
+  -- a placement: the stake edited, which is money.
+  --
+  -- Edited DOWN, not up. Since migration 20260902000001 the database refuses a
+  -- write that takes a bettor over their entry, so "+777" — the original
+  -- mangle — is no longer a bad edit an admin CAN make. That guard working is
+  -- good news; it just means the disaster this rehearses has to be one that
+  -- still gets through. A stake silently reduced is money just as much as a
+  -- stake silently raised, and the restore has to put it back either way.
+  UPDATE public.bet_placements SET amount = 1 WHERE id = '${placementId}';
   -- another placement: soft-deleted, so the restore has to bring a REMOVED
   -- wager back to being removed rather than resurrecting it
   UPDATE public.bet_placements SET deleted_at = now() WHERE id = '${softDeletedId}';
