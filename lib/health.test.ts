@@ -18,8 +18,9 @@ type Failures = {
   bets?: string
   participants?: string
   rpc?: string
-  /** Return no tournament row at all — a healthy database with a dead app. */
-  noTournament?: boolean
+  /** Every read comes back EMPTY with no error — what RLS does to an
+   *  anonymous caller. The bug that shipped: this must stay green. */
+  rlsFiltersEverything?: boolean
   /** Throw rather than resolve, the way a client with no env vars does. */
   throwOn?: "tournaments" | "bets"
 }
@@ -40,20 +41,12 @@ function stub(failures: Failures = {}): SupabaseClient {
           ? failures.bets
           : failures.participants
 
-    // PostgREST returns no data alongside an error, which is what makes a
-    // failed tournaments read skip the id-dependent checks rather than run
-    // them against a stale id.
+    // PostgREST returns no data alongside an error. Note the non-failing case
+    // returns an EMPTY array, not a row: that is what every one of these reads
+    // gets as `anon`, and every check must still pass on it.
     const result = fail
       ? { data: null, error: { message: fail } }
-      : {
-          data:
-            table === "tournaments"
-              ? failures.noTournament
-                ? null
-                : { id: "t-1" }
-              : [],
-          error: null,
-        }
+      : { data: [], error: null }
 
     const chain: Record<string, unknown> = {
       then(resolve: (v: unknown) => unknown) {
@@ -79,8 +72,8 @@ function stub(failures: Failures = {}): SupabaseClient {
       reads.push(table)
       return builder(table)
     },
-    rpc(name: string) {
-      reads.push(`rpc:${name}`)
+    rpc(name: string, args: Record<string, unknown>) {
+      reads.push(`rpc:${name}:${JSON.stringify(args)}`)
       return Promise.resolve({
         data: [],
         error: failures.rpc ? { message: failures.rpc } : null,
@@ -98,13 +91,7 @@ test("a healthy stack is ok, with every check green", async () => {
   assert.equal(report.ok, true)
   assert.deepEqual(
     report.checks.map((c) => c.name),
-    [
-      "tournament_rules",
-      "tournament_exists",
-      "bets_read",
-      "activity_rpc",
-      "participants_collection",
-    ]
+    ["tournament_rules", "bets_read", "activity_rpc", "participants_collection"]
   )
   assert.ok(report.checks.every((c) => c.ok))
   assert.ok(report.checks.every((c) => c.error === undefined))
@@ -143,25 +130,49 @@ test("a missing RPC is its own check, not a column error", async () => {
   assert.equal(byName(report).activity_rpc.ok, false)
 })
 
-test("no tournament row is red — a healthy database with a dead app", async () => {
-  const report = await buildHealthReport(stub({ noTournament: true }))
-  assert.equal(report.ok, false)
-  const checks = byName(report)
-  assert.equal(checks.tournament_rules.ok, true)
-  assert.equal(checks.tournament_exists.ok, false)
-  // The three id-dependent checks are SKIPPED rather than failed: reporting
-  // four failures for one cause reads as a much bigger outage than it is.
-  assert.equal(report.checks.length, 2)
+// THE REGRESSION TEST. This endpoint is public, so it runs as `anon`, and
+// every table it touches is RLS-protected — so every read comes back EMPTY
+// with NO ERROR. The first version treated that emptiness as "no tournament
+// exists" and answered 503 on every request in production, forever, with the
+// three checks that matter skipped behind it. Zero rows is a PASS.
+test("RLS filtering every read to nothing is GREEN, not a 503", () => {
+  return buildHealthReport(stub({ rlsFiltersEverything: true })).then((report) => {
+    assert.equal(report.ok, true)
+    assert.ok(report.checks.every((c) => c.ok))
+  })
 })
 
-test("an unreadable tournaments table skips the rest instead of cascading", async () => {
-  // One red check, not five. Everything below needs the id this read didn't
-  // return, and "No tournament row." would send an admin looking in the wrong
-  // place when the truth is that the database was unreachable.
+test("every check runs unconditionally — none is gated on a visible row", () => {
+  // The other half of the same bug: three checks sat behind an id that came
+  // from a row `anon` can never see, so they never ran at all.
+  const report = stub()
+  return buildHealthReport(report).then((r) => {
+    assert.equal(r.checks.length, 4)
+    assert.ok(r.checks.every((c) => c.ok))
+  })
+})
+
+test("the activity RPC is probed with the nil uuid, not a real tournament", async () => {
+  // It only has to prove the function exists with this signature and is
+  // callable by this role. Asking about a real tournament would need an id
+  // this caller cannot obtain.
+  const client = stub()
+  await buildHealthReport(client)
+  const reads = (client as unknown as { reads: string[] }).reads
+  const rpc = reads.find((r) => r.startsWith("rpc:"))
+  assert.match(rpc ?? "", /00000000-0000-0000-0000-000000000000/)
+})
+
+test("an unreadable tournaments table is red but does not stop the rest", async () => {
+  // A column error still errors as `anon` — PostgREST validates the select
+  // list against its schema cache BEFORE applying RLS, which is exactly why
+  // schema questions are the ones this endpoint can honestly ask.
   const report = await buildHealthReport(stub({ tournaments: "connection refused" }))
   assert.equal(report.ok, false)
-  assert.deepEqual(report.checks.map((c) => c.name), ["tournament_rules"])
   assert.equal(byName(report).tournament_rules.ok, false)
+  // The remaining three still run and still report.
+  assert.equal(report.checks.length, 4)
+  assert.equal(byName(report).bets_read.ok, true)
 })
 
 test("a throwing client is a check result, not a crash", async () => {
@@ -170,7 +181,6 @@ test("a throwing client is a check result, not a crash", async () => {
   const report = await buildHealthReport(stub({ throwOn: "tournaments" }))
   assert.equal(report.ok, false)
   assert.match(byName(report).tournament_rules.error ?? "", /no client/)
-  assert.deepEqual(report.checks.map((c) => c.name), ["tournament_rules"])
 })
 
 test("the report carries no data, only names, booleans and timings", async () => {
