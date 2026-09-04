@@ -17,7 +17,6 @@ type Failures = {
   tournaments?: string
   bets?: string
   participants?: string
-  rpc?: string
   /** Every read comes back EMPTY with no error — what RLS does to an
    *  anonymous caller. The bug that shipped: this must stay green. */
   rlsFiltersEverything?: boolean
@@ -72,13 +71,6 @@ function stub(failures: Failures = {}): SupabaseClient {
       reads.push(table)
       return builder(table)
     },
-    rpc(name: string, args: Record<string, unknown>) {
-      reads.push(`rpc:${name}:${JSON.stringify(args)}`)
-      return Promise.resolve({
-        data: [],
-        error: failures.rpc ? { message: failures.rpc } : null,
-      })
-    },
   } as unknown as SupabaseClient
 }
 
@@ -91,7 +83,7 @@ test("a healthy stack is ok, with every check green", async () => {
   assert.equal(report.ok, true)
   assert.deepEqual(
     report.checks.map((c) => c.name),
-    ["tournament_rules", "bets_read", "activity_rpc", "participants_collection"]
+    ["tournament_rules", "bets_read", "participants_collection"]
   )
   assert.ok(report.checks.every((c) => c.ok))
   assert.ok(report.checks.every((c) => c.error === undefined))
@@ -122,14 +114,6 @@ test("this change's own deploy order: missing paid_amount turns it red", async (
   assert.equal(checks.bets_read.ok, true)
 })
 
-test("a missing RPC is its own check, not a column error", async () => {
-  const report = await buildHealthReport(
-    stub({ rpc: "Could not find the function public.activity_placements" })
-  )
-  assert.equal(report.ok, false)
-  assert.equal(byName(report).activity_rpc.ok, false)
-})
-
 // THE REGRESSION TEST. This endpoint is public, so it runs as `anon`, and
 // every table it touches is RLS-protected — so every read comes back EMPTY
 // with NO ERROR. The first version treated that emptiness as "no tournament
@@ -147,20 +131,19 @@ test("every check runs unconditionally — none is gated on a visible row", () =
   // from a row `anon` can never see, so they never ran at all.
   const report = stub()
   return buildHealthReport(report).then((r) => {
-    assert.equal(r.checks.length, 4)
+    assert.equal(r.checks.length, 3)
     assert.ok(r.checks.every((c) => c.ok))
   })
 })
 
-test("the activity RPC is probed with the nil uuid, not a real tournament", async () => {
-  // It only has to prove the function exists with this signature and is
-  // callable by this role. Asking about a real tournament would need an id
-  // this caller cannot obtain.
-  const client = stub()
-  await buildHealthReport(client)
-  const reads = (client as unknown as { reads: string[] }).reads
-  const rpc = reads.find((r) => r.startsWith("rpc:"))
-  assert.match(rpc ?? "", /00000000-0000-0000-0000-000000000000/)
+test("the activity feed's RPC is deliberately NOT checked", async () => {
+  // It fails both of the endpoint's criteria, either one sufficient: GRANT
+  // EXECUTE ... TO authenticated means `anon` gets "permission denied" however
+  // healthy the function is, and lib/activity-source.ts lets the feed's reads
+  // fail independently by design, so losing it costs a rail and no page.
+  // Checking it pinned /api/health red against a system working as built.
+  const report = await buildHealthReport(stub())
+  assert.ok(!report.checks.some((c) => c.name.includes("activity")))
 })
 
 test("an unreadable tournaments table is red but does not stop the rest", async () => {
@@ -171,7 +154,7 @@ test("an unreadable tournaments table is red but does not stop the rest", async 
   assert.equal(report.ok, false)
   assert.equal(byName(report).tournament_rules.ok, false)
   // The remaining three still run and still report.
-  assert.equal(report.checks.length, 4)
+  assert.equal(report.checks.length, 3)
   assert.equal(byName(report).bets_read.ok, true)
 })
 
