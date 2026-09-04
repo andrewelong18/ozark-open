@@ -97,14 +97,28 @@ async function timed(
  * client with no RLS, and every DB round-trip runs as superuser or
  * `authenticated`. It took a real anonymous request to production.
  *
- * So the rule now is: **a public health check may only ask questions an
- * anonymous caller can actually get a true answer to.** That is exactly the
- * schema — does the column exist, is the function callable, will PostgREST
- * serve this shape — which is precisely the Aug 31 failure and needs no row to
- * be visible. PostgREST validates the column list against its schema cache
- * BEFORE applying RLS, so a missing column still errors as `anon`; an empty
- * result does not. Every check below therefore treats zero rows as fine and
- * only an ERROR as red.
+ * So a check earns its place here only by meeting BOTH of these:
+ *
+ *   1. **An anonymous caller can get a true answer to it.** That is the
+ *      schema — does the column exist, will PostgREST serve this shape — which
+ *      is precisely the Aug 31 failure and needs no row to be visible.
+ *      PostgREST validates the column list against its schema cache BEFORE
+ *      applying RLS, so a missing column still errors as `anon`; an empty
+ *      result does not. Every check below treats zero rows as fine and only an
+ *      ERROR as red.
+ *   2. **Its failure actually breaks a page.** Red has to mean somebody is
+ *      staring at a broken screen, or the monitor gets muted — and a muted
+ *      monitor is the same as no monitor.
+ *
+ * The second criterion is why `activity_placements()` is NOT checked here,
+ * having been in the first version. Two independent reasons, either sufficient:
+ * `GRANT EXECUTE … TO authenticated` (migration 20260831000000) means `anon`
+ * gets "permission denied" no matter how healthy the function is — the grant is
+ * correct, the dashboard calls it signed in — so criterion 1 fails; and
+ * lib/activity-source.ts lets every one of the feed's reads fail
+ * independently BY DESIGN, so losing that function costs one rail of ambient
+ * colour and no page at all, so criterion 2 fails too. Checking it pinned this
+ * endpoint red for a system working exactly as built.
  *
  * WHAT IT DELIBERATELY NO LONGER CLAIMS: that a tournament row exists, or that
  * a signed-in member can see their data. Both are answerable only from behind
@@ -145,21 +159,6 @@ export async function buildHealthReport(
         .from("bets")
         .select("id, phase, status, opened_at")
         .limit(1)
-      return { error }
-    })
-  )
-
-  // The activity feed's SECURITY DEFINER read. A missing function is a 404
-  // from PostgREST rather than a column error, so it fails differently and
-  // needs its own check. The nil uuid is deliberate — it matches no tournament
-  // and returns nothing, which is all this needs: that the function exists,
-  // with this signature, and is callable by this role.
-  checks.push(
-    await timed("activity_rpc", async () => {
-      const { error } = await supabase.rpc("activity_placements", {
-        p_tournament_id: "00000000-0000-0000-0000-000000000000",
-        p_limit: 1,
-      })
       return { error }
     })
   )

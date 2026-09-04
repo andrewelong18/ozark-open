@@ -268,8 +268,9 @@ Why it isn't a plain ping: on Aug 31 the dashboard shipped a query for a column 
 hadn't been applied. Vercel was green, Supabase was green, and every member got an error card. A
 ping on `/` would have been green the whole time. This endpoint checks the *schema the code
 expects* — the tournament row and its rule and clock columns, the dashboard's `bets` read
-including `opened_at`, the activity feed's function, and the entry-collection columns — so a deploy
-that outruns its migration is red within one poll.
+including `opened_at`, and the entry-collection columns — so a deploy that outruns its migration is
+red within one poll. It checks only what an anonymous caller can truthfully answer and only what
+actually breaks a page, so a red is always worth opening.
 
 When it's red, open it in a browser. The failing check names itself and carries the database's own
 message, which names the missing column:
