@@ -5,7 +5,7 @@ import { Fragment, useCallback, useMemo, useRef, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Collapse } from "@/components/ui/collapse"
 import { PlayerChip } from "@/components/player/player-chip"
-import { StatusBadge } from "@/components/betting/status-badge"
+import { StatusBadge, type BetStatus } from "@/components/betting/status-badge"
 import { PickRow } from "@/components/betting/pick-row"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import { BetPlacementCard } from "@/components/betting/bet-placement-card"
@@ -27,13 +27,12 @@ import {
   ALL_FACET,
   availableCategories,
   availableRounds,
-  defaultStatusView,
   filterPhases,
+  phaseHasBets,
   reconcileFacet,
-  showStatusToggle,
   type Facet,
-  type StatusView,
 } from "@/lib/bet-filters"
+import type { Phase, PhaseState } from "@/lib/phases"
 import { cn } from "@/lib/utils"
 
 export type BetCategory = {
@@ -89,18 +88,21 @@ const ROUND_LABEL: Record<string, string> = {
   round_2: "Round 2",
   round_3: "Round 3",
 }
-// Compact labels for the round tab strip — the full names live in the
-// section headings once a tab is chosen.
-const ROUND_TAB_LABEL: Record<string, string> = {
-  tournament: "Tournament",
-  round_1: "R1",
-  round_2: "R2",
-  round_3: "R3",
+// The compact round labels ("R1", "R3") are gone with the tab strip that held
+// them (Sprint 26 / #193 — Andrew): rounds are chips in one scrolling row
+// alongside the categories now, and they're spelled out. ROUND_LABEL above
+// already had the full names, so the chips and the section headings finally
+// read the same.
+const PHASE_OPTIONS: Phase[] = [1, 2]
+
+/** A phase's own state, as a badge. `phaseState()` already answers this for the
+ *  dashboard's betting badge, so this mapping is deliberately total and
+ *  boring — the interesting logic stays in one place (lib/phases.ts). */
+const PHASE_BADGE: Record<PhaseState, BetStatus> = {
+  open: "open",
+  closed: "closed",
+  unpublished: "unpublished",
 }
-const STATUS_OPTIONS: { value: StatusView; label: string }[] = [
-  { value: "open", label: "Open" },
-  { value: "closed", label: "Closed" },
-]
 
 // Everyone's wagers on one closed pick, biggest stake first (PRD §12
 // Q11/Q12 — amounts and identities go public the moment the bet closes).
@@ -249,15 +251,7 @@ function ClosedBetCard({
               </button>
             ))}
         </div>
-        {bet.status !== "open" && (
-          <StatusBadge
-            status={
-              // Settled is derived at render — every pick resolved — never
-              // stored.
-              isBetSettled(bet.bet_picks) ? "resolved" : "closed"
-            }
-          />
-        )}
+        <StatusBadge status={betBadge(bet)} />
       </div>
       <div id={panelId}>
         {bet.bet_picks
@@ -309,6 +303,25 @@ function MoneyDisplayInline({ value }: { value: number }) {
   return <span className="tabular">${value}</span>
 }
 
+/**
+ * A bet's badge — ONE expression, used by both cards, so they cannot disagree.
+ *
+ * It keys off `wagering_open` rather than `status`, and that is the whole fix
+ * for #195. ClosedBetCard used to gate its badge on `bet.status !== "open"`,
+ * which left a real state unbadged: between a phase's deadline and the admin's
+ * closing upload — about ten hours on Thursday and again on Saturday, both when
+ * the page is refreshed hardest — a bet is past its deadline while the sheet
+ * still calls it `open`, so it rendered through ClosedBetCard with no badge at
+ * all. `wagering_open` is already the field that decides WHICH card renders, so
+ * asking it for the label makes the two agree by construction.
+ *
+ * "Resolved" stays derived at render (every pick has a verdict), never stored.
+ */
+function betBadge(bet: Bet): BetStatus {
+  if (bet.wagering_open) return "open"
+  return isBetSettled(bet.bet_picks) ? "resolved" : "closed"
+}
+
 /** A bare chevron. The DS ships no icon set (readme §Iconography) and leans on
  * typographic marks, so this is a rotated caret rather than a Lucide import. */
 function ChevronGlyph({ open }: { open: boolean }) {
@@ -342,6 +355,14 @@ export type BetsMenuProps = {
    * Optional here (a plain member's menu has no on-behalf mode) but REQUIRED
    * on BetPlacementCard, so the hand-off below can't be dropped silently. */
   onBehalfOf?: OnBehalfOf
+  /** Each phase's own state, computed server-side from the phase clock and the
+   * published bets (`phaseState()` in lib/phases.ts). Drives the badge beside
+   * the toggle — and it is NOT derivable from `phases` alone, because a phase
+   * closes on the clock as well as on its bets' statuses (ADR 0001 §5a). */
+  phaseStates: Record<Phase, PhaseState>
+  /** Which tab to open on — `closingPhase()` in lib/chase.ts, computed on the
+   * server where the bets still carry their phase. */
+  defaultPhase: Phase
 }
 
 export function BetsMenu({
@@ -352,13 +373,13 @@ export function BetsMenu({
   placementsByPick,
   revealUnavailable = false,
   onBehalfOf = null,
+  phaseStates,
+  defaultPhase,
 }: BetsMenuProps) {
-  // The view the menu opens on, computed from the bets actually on the page:
-  // open if anything is open, else closed. Mid-tournament Phase 1 is closed
-  // while Phase 2 is open, so this can't key off the phase (#104).
-  const [status, setStatus] = useState<StatusView>(() =>
-    defaultStatusView(phases)
-  )
+  // Which phase the menu opens on. Decided on the server by closingPhase() —
+  // Phase 2 the moment any Phase 2 bet is published, Phase 1 before that — so
+  // the tab you land on is the one the tournament is actually in.
+  const [phase, setPhase] = useState<Phase>(defaultPhase)
   // Exactly ONE secondary filter at a time — a round, or a category, or
   // neither. Never both; that's what "one filter at a time" buys, and it's
   // why no selection can empty the page.
@@ -375,31 +396,44 @@ export function BetsMenu({
   const armCelebration = useCallback(() => celebration.current?.arm(), [])
   const celebrate = useCallback(() => celebration.current?.celebrate(), [])
 
-  const showStatus = useMemo(() => showStatusToggle(phases), [phases])
+  // Has this phase been published at all? Hidden bets never reach the menu, so
+  // an empty phase is one the admin hasn't opened yet — which is a state with
+  // its own message, not an error (Sprint 26 / #193).
+  const published = useMemo(() => phaseHasBets(phases, phase), [phases, phase])
 
-  // Rounds and categories present IN THE CURRENT VIEW, so every option
-  // offered is guaranteed to match at least one bet.
-  const roundTabs = useMemo(
-    () => availableRounds(phases, status),
-    [phases, status]
+  // Rounds and categories present IN THE SELECTED PHASE, so every chip offered
+  // is guaranteed to match at least one bet.
+  const roundChips = useMemo(
+    () => availableRounds(phases, phase),
+    [phases, phase]
   )
   const categoryChips = useMemo(
-    () => availableCategories(phases, status),
-    [phases, status]
+    () => availableCategories(phases, phase),
+    [phases, phase]
   )
-  const showRoundTabs = roundTabs.length > 1
-  const showCategoryChips = categoryChips.length > 1
+  // One row, rounds then categories (Sprint 26 / #193 — Andrew). It's worth
+  // rendering only when there's an actual choice to make: a single chip beside
+  // "All Bets" filters nothing.
+  const chips = useMemo(
+    () => [
+      ...roundChips.map((value) => ({ kind: "round" as const, value, label: ROUND_LABEL[value] ?? value })),
+      ...categoryChips.map((value) => ({ kind: "category" as const, value, label: value })),
+    ],
+    [roundChips, categoryChips]
+  )
+  const showChips = chips.length > 1
 
-  // A selection made in one view may not exist in the other (filter to Round
-  // 3, flip to Closed). Reconcile rather than render an empty page.
+  // A selection made in one phase may not exist in the other — Round 1 is a
+  // Phase 1 round and Round 3 a Phase 2 one, so a round facet essentially never
+  // survives a tab change. Reconcile rather than render an empty page.
   const activeFacet = useMemo(
-    () => reconcileFacet(phases, status, facet),
-    [phases, status, facet]
+    () => reconcileFacet(phases, phase, facet),
+    [phases, phase, facet]
   )
 
   const filteredPhases = useMemo(
-    () => filterPhases(phases, status, activeFacet),
-    [phases, status, activeFacet]
+    () => filterPhases(phases, phase, activeFacet),
+    [phases, phase, activeFacet]
   )
 
   // Replays the list's entrance whenever the filter changes, by alternating
@@ -412,7 +446,7 @@ export function BetsMenu({
   // derived state: it discards this render and re-runs immediately, before
   // paint. In an effect it would be a cascading render, and
   // react-hooks/set-state-in-effect rejects it.
-  const facetKey = `${status}|${activeFacet.kind}|${
+  const facetKey = `${phase}|${activeFacet.kind}|${
     activeFacet.kind === "all" ? "" : activeFacet.value
   }`
   const [swap, setSwap] = useState({ key: facetKey, phase: "a" as "a" | "b" })
@@ -420,118 +454,102 @@ export function BetsMenu({
     setSwap({ key: facetKey, phase: swap.phase === "a" ? "b" : "a" })
   }
 
-  const hasFilters = showStatus || showRoundTabs || showCategoryChips
-
-  // Selecting either dimension clears the other — they never combine.
-  const selectRound = (round: string) =>
-    setFacet(round === "all" ? ALL_FACET : { kind: "round", value: round })
-  const selectCategory = (name: string | null) =>
-    setFacet(name === null ? ALL_FACET : { kind: "category", value: name })
+  // Selecting any chip replaces whatever was selected — one facet at a time,
+  // which is what lets a single row hold both dimensions without anything to
+  // reason about.
+  const selectChip = (next: Facet) => setFacet(next)
 
   return (
     <>
-      {hasFilters && (
-        <div className="mb-6 flex flex-col gap-3">
-          {/* The open/closed VIEW sits on top, alone on its row, because it
-              partitions the menu rather than narrowing it — and because
-              during the tournament it's the control people reach for most. */}
-          {showStatus && (
-            <div className="inline-flex w-fit items-center gap-0.5 rounded-full border border-border bg-surface-sunken p-0.5">
-              {STATUS_OPTIONS.map((opt) => {
-                const active = status === opt.value
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setStatus(opt.value)}
-                    aria-pressed={active}
-                    className={cn(
-                      "min-h-11 cursor-pointer rounded-full px-4 py-1.5 text-sm font-semibold transition-colors duration-fast ease-standard",
-                      active
-                        ? "bg-surface-card text-text-strong shadow-xs"
-                        : "text-text-muted hover:text-text-strong"
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          {/* Then ONE secondary dimension. Rounds win the tab strip when there
-              are several to choose between; otherwise categories get it. Both
-              are single-select and mutually exclusive, so there is never a
-              combination to reason about. */}
-          {showRoundTabs && (
-            <div className="flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {["all", ...roundTabs].map((r) => {
-                const active =
-                  r === "all"
-                    ? activeFacet.kind !== "round"
-                    : activeFacet.kind === "round" && activeFacet.value === r
-                return (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => selectRound(r)}
-                    aria-current={active ? "true" : undefined}
-                    className={cn(
-                      "relative min-h-11 shrink-0 cursor-pointer px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors duration-fast ease-standard",
-                      "after:absolute after:inset-x-3 after:-bottom-px after:h-0.5 after:rounded-full after:transition-colors duration-fast ease-standard",
-                      active
-                        ? "text-indigo-700 after:bg-indigo-700"
-                        : "text-text-muted after:bg-transparent hover:text-text-strong"
-                    )}
-                  >
-                    {r === "all" ? "All Bet Rounds" : (ROUND_TAB_LABEL[r] ?? r)}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          {showCategoryChips && (
-            <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <FilterChip
-                label="All Categories"
-                active={activeFacet.kind !== "category"}
-                onClick={() => selectCategory(null)}
-              />
-              {categoryChips.map((name) => (
-                <FilterChip
-                  key={name}
-                  label={name}
-                  active={
-                    activeFacet.kind === "category" && activeFacet.value === name
-                  }
-                  onClick={() => selectCategory(name)}
-                />
-              ))}
-            </div>
-          )}
+      <div className="mb-6 flex flex-col gap-3">
+        {/* Row 1: the PHASE, which is what the weekend is organised around, and
+            beside it that phase's own state. The badge used to sit next to the
+            <h1> and describe the whole book, which is why it read "Open"
+            mid-tournament while the phase you were looking at was closed
+            (#194). It belongs with the control that decides what it describes. */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="inline-flex w-fit items-center gap-0.5 rounded-full border border-border bg-surface-sunken p-0.5">
+            {PHASE_OPTIONS.map((value) => {
+              const active = phase === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setPhase(value)}
+                  aria-pressed={active}
+                  className={cn(
+                    "min-h-11 cursor-pointer rounded-full px-4 py-1.5 text-sm font-semibold transition-colors duration-fast ease-standard",
+                    active
+                      ? "bg-surface-card text-text-strong shadow-xs"
+                      : "text-text-muted hover:text-text-strong"
+                  )}
+                >
+                  Phase {value}
+                </button>
+              )
+            })}
+          </div>
+          <StatusBadge status={PHASE_BADGE[phaseStates[phase]]} />
         </div>
-      )}
 
-      {/* Unreachable by construction — one facet at a time, every option
-          derived from the current view (see lib/bet-filters.ts). Kept as a
-          floor rather than a message about filters, because the only way to
-          land here now is a menu with nothing in the chosen view at all. */}
-      {filteredPhases.length === 0 ? (
+        {/* Row 2: ONE chip row holding both secondary dimensions — rounds then
+            categories (Sprint 26 / #193 — Andrew). They were a tab strip and a
+            chip row on separate lines, which was two rows of chrome for a model
+            that has only ever allowed one selection at a time. Merging them is
+            the honest rendering of that, and it gives the page back a row on
+            the device it's read on. Scrolls horizontally with no visible
+            scrollbar; every chip is a 44px target. */}
+        {showChips && (
+          <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <FilterChip
+              label="All Bets"
+              active={activeFacet.kind === "all"}
+              onClick={() => selectChip(ALL_FACET)}
+            />
+            {chips.map((chip) => (
+              <FilterChip
+                key={`${chip.kind}:${chip.value}`}
+                label={chip.label}
+                active={
+                  activeFacet.kind === chip.kind &&
+                  activeFacet.value === chip.value
+                }
+                onClick={() => selectChip({ kind: chip.kind, value: chip.value })}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Two different nothings, and conflating them is how a member concludes
+          the app is broken. An UNPUBLISHED phase is the state Pat named — the
+          bets exist but are still `hidden`, so the admin hasn\'t opened the
+          window yet. A published phase filtered to nothing is unreachable by
+          construction (one facet at a time, every chip derived from this phase
+          — see lib/bet-filters.ts) and is kept only as a floor. */}
+      {!published ? (
         <div className="py-6">
           <EmptyState
-            title={status === "open" ? "No open bets" : "No closed bets yet"}
+            glyph="\u23f3"
+            title={`Phase ${phase} isn\u2019t open yet`}
             message={
-              status === "open"
-                ? "Nothing is taking wagers right now. Check the closed bets for how everyone did."
-                : "Nothing has closed yet. Every bet on the menu is still taking wagers."
+              phase === 2
+                ? "Phase 2 opens after Round 2, once the admin publishes it. Nothing to see here until then."
+                : "The book opens when an admin publishes the menu. Check back soon."
             }
+          />
+        </div>
+      ) : filteredPhases.length === 0 ? (
+        <div className="py-6">
+          <EmptyState
+            title="No bets match"
+            message="Clear the filter to see everything in this phase."
           />
         </div>
       ) : (
         <div data-swap={swap.phase} className="flex flex-col gap-8">
-          {filteredPhases.map(({ phase, rounds }) => (
-            <section key={phase} className="flex flex-col gap-5">
+          {filteredPhases.map(({ phase: phaseNumber, rounds }) => (
+            <section key={phaseNumber} className="flex flex-col gap-5">
               {rounds.map(({ round: roundKey, categories: cats }) => (
                 <div key={roundKey} className="flex flex-col gap-4">
                   <h3 className="font-heading text-lg text-text-strong">
@@ -551,6 +569,7 @@ export function BetsMenu({
                         {bet.wagering_open && isParticipant ? (
                           <BetPlacementCard
                             title={bet.title}
+                            badge={betBadge(bet)}
                             totalProbability={
                               bet.total_probability != null
                                 ? `Total probability ${formatProbability(Number(bet.total_probability))}`

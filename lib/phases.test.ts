@@ -111,6 +111,30 @@ test("the deadline closes a phase whose bets still read open", () => {
   assert.equal(phaseState(1, CLOCK, bets, AT_P1), "closed")
 })
 
+test("a phase holding BOTH open and closed bets reads open until the deadline", () => {
+  // The state /bets renders most often once the badge is per-phase (Sprint 26 /
+  // #194), and the one this file never covered: on Thursday afternoon Phase 1
+  // holds closed Round 1 bets beside a Tournament bet the sheet still calls
+  // open. One wagerable bet is enough to keep the phase open — and the deadline
+  // still overrides it, because that is what stops wagering.
+  const mixed = [bet(1, "closed"), bet(1, "open"), bet(1, "closed")]
+  assert.equal(phaseState(1, CLOCK, mixed, BEFORE_P1), "open")
+  assert.equal(phaseState(1, NO_CLOCK, mixed, AFTER_P2), "open")
+  assert.equal(phaseState(1, CLOCK, mixed, AT_P1), "closed")
+})
+
+test("phase 2 is read on its own clock and its own bets, not phase 1's", () => {
+  // Friday night: Phase 1 is closed and done, Phase 2 has just been published.
+  // Covered only through bettingBadge() until now, which meant a phase-2 badge
+  // bug could hide behind phase 1's answer.
+  const board = [bet(1, "closed"), bet(2, "open"), bet(2, "open")]
+  assert.equal(phaseState(1, CLOCK, board, BETWEEN), "closed")
+  assert.equal(phaseState(2, CLOCK, board, BETWEEN), "open")
+  // And Phase 2's own deadline closes it without touching Phase 1's answer.
+  assert.equal(phaseState(2, CLOCK, board, AFTER_P2), "closed")
+  assert.equal(phaseState(1, CLOCK, board, AFTER_P2), "closed")
+})
+
 // ---------------------------------------------------------------------------
 // bettingBadge — the #107 fix, across the four states the sprint enumerates
 // ---------------------------------------------------------------------------
