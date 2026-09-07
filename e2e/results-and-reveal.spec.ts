@@ -54,9 +54,10 @@ test("wagers on an open bet stay hidden, and reveal when it closes", async ({ pa
   await signOut(page)
   await signInAs(page, ACCOUNTS.approved)
   await page.goto("/bets")
-  await page.getByRole("button", { name: "Closed", exact: true }).click()
-
+  // Bet 1 does not move tabs when it closes — it is a Phase 1 bet before and
+  // after (#193). What changes is the card it renders and the badge on it.
   const closedCard = page.getByTestId("bet-1")
+  await expect(closedCard).toContainText("Closed")
   const toggle = closedCard.getByRole("button", { name: /(Show|Hide) 1 bettor\b/ })
   await expect(toggle).toBeVisible()
   await toggle.click()

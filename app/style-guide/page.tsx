@@ -373,6 +373,7 @@ export default function StyleGuidePage() {
           <StatusBadge status="open" />
           <StatusBadge status="closed" />
           <StatusBadge status="resolved" />
+          <StatusBadge status="unpublished" />
         </Row>
       </Section>
 

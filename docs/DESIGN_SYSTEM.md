@@ -125,7 +125,7 @@ Numbers use Montserrat with `font-variant-numeric: tabular-nums` — apply the
 | `OddsChip` | American odds chip; `size` sm/md/lg; `detail` reveals fractional + implied (from `lib/odds.ts`) |
 | `MoneyDisplay` | Money treatment; `cents`, `pl` (colors the sign), `onDark`, `size`, `weight` (uses `lib/money.ts`) |
 | `OutcomeBadge` | `hit`/`miss`/`push`/`void` — color + glyph + label |
-| `StatusBadge` | `open`/`closed`/`resolved` — dot + label |
+| `StatusBadge` | `open`/`closed`/`resolved`/`unpublished` — dot + label. `unpublished` ("Not open yet", Sprint 26) describes a *phase* rather than a bet and is the only variant no bet card renders |
 | `StakeInput` | Whole-dollar inline stake; unplaced/placed (gold flash)/error/disabled (client) |
 | `BetRow` | Workhorse row; action zone adapts to status. Interactive only when `onPlace` is passed |
 

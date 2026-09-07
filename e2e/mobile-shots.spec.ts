@@ -49,7 +49,8 @@ test.describe("phone-width screenshots", () => {
 
     // 3. The closed side: per-pick totals, and the reveal expanded to the wall
     //    of names it collapses (#103).
-    await page.getByRole("button", { name: "Closed" }).click()
+    // Since #193 the closed bets share a tab with the open ones, so this shot is
+    // the Phase 1 list rather than a separate view.
     const reveal = page.getByRole("button", { name: /Show \d+ bettors?/ }).first()
     if (await reveal.isVisible().catch(() => false)) await reveal.click()
     await page.screenshot({ path: shot("bets-closed"), fullPage: true, animations: "disabled" })

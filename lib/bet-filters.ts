@@ -1,31 +1,55 @@
-// Bet-menu filtering (Sprint 24 / #104).
+// Bet-menu filtering (Sprint 24 / #104, re-cut in Sprint 26 / #193).
 //
-// Pure module by design — no React, no Supabase, no "@/" alias imports — so
-// the defaulting rules are unit-tested rather than trusted. The menu component
-// owns the clicks; this owns what the clicks mean.
+// Pure module by design — no React, no Supabase, no "@/" alias imports — so the
+// defaulting rules are unit-tested rather than trusted. The menu component owns
+// the clicks; this owns what the clicks mean.
 //
-// WHAT CHANGED AND WHY. /bets carried three filter patterns at once: an
-// All/Open/Closed triple, a round tab strip, and a multi-select category chip
-// row. They combined freely, which is how you land on an empty page and have
-// to work out which of three controls emptied it. Pat's read from the Jul 31
-// dry run was simply that it is harder to use than it should be.
+// ---------------------------------------------------------------------------
+// WHAT SPRINT 24 BUILT, AND WHY SPRINT 26 CHANGED THE AXIS
+// ---------------------------------------------------------------------------
 //
-// THE MODEL NOW.
+// /bets used to carry three filter patterns at once: an All/Open/Closed triple,
+// a round tab strip, and a multi-select category chip row. They combined
+// freely, which is how you land on an empty page and have to work out which of
+// three controls emptied it. Sprint 24 replaced that with a model whose header
+// argued, at length, that STATUS was the right primary axis — a *view* that
+// always partitioned the menu, never a filter — precisely so a closed bet and
+// an open bet could never sit in one list looking alike.
 //
-//   1. STATUS is a view, not a filter — binary open/closed, and it always
-//      partitions the menu. There is no "all", because "all" is what made a
-//      closed bet and an open bet sit in one list looking alike.
+// Pat drove the menu again in September and said the axis names the wrong
+// thing. The weekend is organised around Phase 1 and Phase 2; nobody stands on
+// a tee box thinking in open-versus-closed. His words: "instead of open and
+// closed toggle, it should instead be a phase 1 and phase 2 toggle. If phase 2
+// bets are hidden, then just say that phase 2 isn't open yet."
 //
-//   2. Exactly ONE secondary filter is active at a time: a round, or a
-//      category, or neither. Never both. Picking a round clears any category
-//      and vice versa. That is the literal reading of "one filter at a time",
-//      and it is what makes the next property hold.
+// So the primary axis is now the PHASE, and the cost is real and paid for
+// elsewhere rather than denied here (PRD §12 A19). Inside a phase, open and
+// closed bets DO now sit in one list — mid-tournament, Phase 1 holds closed,
+// revealed Round 1 bets beside Tournament bets the sheet still marks open.
+// Three things in the menu keep that legible without a second control:
+// wagerable bets sort above closed ones, every card carries a status badge
+// (open cards never used to), and the badge beside the toggle reports the
+// selected phase's own state.
 //
-//   3. NO SELECTABLE OPTION CAN EMPTY THE PAGE. Every round and category
-//      offered is derived from the bets actually present in the current status
-//      view, so each one is guaranteed to match at least one bet. Combined
-//      with (2) — no intersections to go empty — the "no bets match" state
-//      becomes unreachable rather than merely unlikely.
+// ---------------------------------------------------------------------------
+// THE MODEL NOW
+// ---------------------------------------------------------------------------
+//
+//   1. PHASE is the view. Both tabs always render, including a phase with
+//      nothing published — that empty tab IS the "Phase 2 isn't open yet"
+//      message Pat asked for, not a failure state.
+//
+//   2. Exactly ONE secondary facet is active at a time: a round, or a category,
+//      or neither. Never both. Since Sprint 26 they share a single chip row,
+//      which is the honest rendering of a model that was always single-select.
+//
+//   3. NO OFFERED FACET CAN EMPTY THE PAGE. Every round and category chip is
+//      derived from the bets actually present in the selected phase, so each
+//      one matches at least one bet. This is the property #104 was really
+//      about, and it survives the axis change one level down: the PHASE may
+//      legitimately be empty (see 1), the CHIPS may not.
+
+import type { Phase } from "./phases.ts"
 
 // ---------------------------------------------------------------------------
 // Shapes — structurally compatible with the menu's PhaseGroup tree, declared
@@ -46,10 +70,6 @@ export type FilterablePhase<B extends FilterableBet> = {
   rounds: FilterableRound<B>[]
 }
 
-/** The binary view. "closed" folds in settled bets — a bet's status is never
- * "resolved", that's derived per pick at render. */
-export type StatusView = "open" | "closed"
-
 /** The one active secondary filter, or none. */
 export type Facet =
   | { kind: "all" }
@@ -68,12 +88,30 @@ export const CATEGORY_ORDER = [
 ]
 
 // ---------------------------------------------------------------------------
-// Defaulting
+// Status — no longer an axis, but still the thing a badge and the ordering ask
+// about
 // ---------------------------------------------------------------------------
 
-export function matchesStatus(view: StatusView, betStatus: string): boolean {
-  return view === "open" ? betStatus === "open" : betStatus !== "open"
+/**
+ * Is this bet still taking wagers, as far as its own status is concerned?
+ *
+ * The survivor of Sprint 24's `matchesStatus`. It is deliberately a question
+ * about `bets.status` alone: the PHASE DEADLINE is the other half of whether a
+ * wager can be placed (`wageringOpen()` in lib/phases.ts), and the menu sorts
+ * and badges on that fuller answer. This is here for callers that only hold a
+ * status string.
+ *
+ * Anything that isn't "open" reads closed — a bet's status is never "resolved"
+ * (that's derived per pick at render), but nothing here should depend on that
+ * staying true.
+ */
+export function isOpenBet(betStatus: string): boolean {
+  return betStatus === "open"
 }
+
+// ---------------------------------------------------------------------------
+// Reading the tree
+// ---------------------------------------------------------------------------
 
 /** Every bet in the tree, flattened. */
 export function flattenBets<B extends FilterableBet>(
@@ -85,103 +123,91 @@ export function flattenBets<B extends FilterableBet>(
 }
 
 /**
- * Which view the menu opens on.
+ * Does this phase have anything published?
  *
- * Open if there is anything open to bet on, otherwise closed — and this is
- * computed from the bets on the page, never from the phase number. During the
- * tournament Phase 1 is closed while Phase 2 is open, so BOTH states exist at
- * once; "default to open" has to mean "open bets exist", not "phase 1", or the
- * menu opens on a dead view in the middle of the weekend.
- *
- * An empty menu defaults to open — the book before anything is published, and
- * the state the page's own empty state describes.
+ * Hidden bets never reach the menu — /bets filters them out in the query — so
+ * "no bets in this phase" means the phase is unpublished. The menu uses this to
+ * choose between the bet list and the "Phase 2 isn't open yet" empty state, and
+ * the tab renders either way.
  */
-export function defaultStatusView<B extends FilterableBet>(
-  phases: FilterablePhase<B>[]
-): StatusView {
-  const bets = flattenBets(phases)
-  // Closed only when there is something to show and none of it is open. An
-  // empty menu stays open rather than falling through to a closed view of
-  // nothing — /bets short-circuits to its own empty state before this is
-  // reachable, but the rule shouldn't depend on that staying true.
-  if (bets.length === 0) return "open"
-  return bets.some((b) => matchesStatus("open", b.status)) ? "open" : "closed"
-}
-
-/** Whether the open/closed toggle is worth rendering at all: only when the
- * menu actually holds both kinds. */
-export function showStatusToggle<B extends FilterableBet>(
-  phases: FilterablePhase<B>[]
+export function phaseHasBets<B extends FilterableBet>(
+  phases: FilterablePhase<B>[],
+  phase: Phase
 ): boolean {
-  const bets = flattenBets(phases)
-  return (
-    bets.some((b) => matchesStatus("open", b.status)) &&
-    bets.some((b) => matchesStatus("closed", b.status))
+  return phases.some(
+    (p) =>
+      p.phase === phase &&
+      p.rounds.some((r) => r.categories.some((c) => c.bets.length > 0))
   )
 }
 
 // ---------------------------------------------------------------------------
-// Contextual options — derived from the current view, so every one of them
+// Contextual options — derived from the selected phase, so every one of them
 // matches at least one bet.
 // ---------------------------------------------------------------------------
 
-/** Rounds present in the given view, in menu order (phases arrive sorted). */
+/** Rounds present in the given phase, in menu order (the tree arrives sorted). */
 export function availableRounds<B extends FilterableBet>(
   phases: FilterablePhase<B>[],
-  view: StatusView
+  phase: Phase
 ): string[] {
   const seen = new Set<string>()
   const list: string[] = []
-  for (const p of phases)
+  for (const p of phases) {
+    if (p.phase !== phase) continue
     for (const r of p.rounds) {
       if (seen.has(r.round)) continue
-      if (r.categories.some((c) => c.bets.some((b) => matchesStatus(view, b.status)))) {
+      if (r.categories.some((c) => c.bets.length > 0)) {
         seen.add(r.round)
         list.push(r.round)
       }
     }
+  }
   return list
 }
 
-/** Categories present in the given view, in PRD §6 order with unknowns last. */
+/** Categories present in the given phase, in PRD §6 order with unknowns last. */
 export function availableCategories<B extends FilterableBet>(
   phases: FilterablePhase<B>[],
-  view: StatusView
+  phase: Phase
 ): string[] {
   const seen = new Set<string>()
-  for (const p of phases)
+  for (const p of phases) {
+    if (p.phase !== phase) continue
     for (const r of p.rounds)
-      for (const c of r.categories)
-        if (c.bets.some((b) => matchesStatus(view, b.status))) seen.add(c.name)
+      for (const c of r.categories) if (c.bets.length > 0) seen.add(c.name)
+  }
   return CATEGORY_ORDER.filter((c) => seen.has(c)).concat(
     [...seen].filter((c) => !CATEGORY_ORDER.includes(c)).sort()
   )
 }
 
 /**
- * Whether a facet still selects something in the given view — used to drop a
- * stale selection when the status toggle flips. Without this, filtering to
- * "Round 3" and then switching to Closed leaves a selection that matches
- * nothing, which is exactly the empty page this refactor removes.
+ * Whether a facet still selects something in the given phase — used to drop a
+ * stale selection when the phase toggle flips. Without this, filtering to
+ * "Round 1" and then switching to Phase 2 leaves a selection that matches
+ * nothing, which is exactly the empty page this model exists to prevent. Round
+ * 1 is a Phase 1 round and Round 3 a Phase 2 one (ADR 0001 §4), so this fires
+ * on essentially every round facet the moment the tab changes.
  */
 export function facetIsAvailable<B extends FilterableBet>(
   phases: FilterablePhase<B>[],
-  view: StatusView,
+  phase: Phase,
   facet: Facet
 ): boolean {
   if (facet.kind === "all") return true
   if (facet.kind === "round")
-    return availableRounds(phases, view).includes(facet.value)
-  return availableCategories(phases, view).includes(facet.value)
+    return availableRounds(phases, phase).includes(facet.value)
+  return availableCategories(phases, phase).includes(facet.value)
 }
 
 /** Reset a facet that no longer applies, keeping one that does. */
 export function reconcileFacet<B extends FilterableBet>(
   phases: FilterablePhase<B>[],
-  view: StatusView,
+  phase: Phase,
   facet: Facet
 ): Facet {
-  return facetIsAvailable(phases, view, facet) ? facet : ALL_FACET
+  return facetIsAvailable(phases, phase, facet) ? facet : ALL_FACET
 }
 
 // ---------------------------------------------------------------------------
@@ -189,15 +215,19 @@ export function reconcileFacet<B extends FilterableBet>(
 // ---------------------------------------------------------------------------
 
 /**
- * Apply the view and the single facet, dropping categories, rounds and phases
- * that end up empty so the menu never renders a bare heading.
+ * Keep the selected phase and apply the single facet, dropping categories and
+ * rounds that end up empty so the menu never renders a bare heading.
+ *
+ * Returns at most one phase. An unpublished phase returns `[]` — the caller
+ * renders the "isn't open yet" state rather than treating it as an error.
  */
 export function filterPhases<B extends FilterableBet>(
   phases: FilterablePhase<B>[],
-  view: StatusView,
+  phase: Phase,
   facet: Facet
 ): FilterablePhase<B>[] {
   return phases
+    .filter((p) => p.phase === phase)
     .map((p) => ({
       phase: p.phase,
       rounds: p.rounds
@@ -206,10 +236,6 @@ export function filterPhases<B extends FilterableBet>(
           round: r.round,
           categories: r.categories
             .filter((c) => facet.kind !== "category" || c.name === facet.value)
-            .map((c) => ({
-              name: c.name,
-              bets: c.bets.filter((b) => matchesStatus(view, b.status)),
-            }))
             .filter((c) => c.bets.length > 0),
         }))
         .filter((r) => r.categories.length > 0),

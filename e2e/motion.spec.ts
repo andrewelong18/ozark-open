@@ -138,12 +138,15 @@ test.describe("filter swap", () => {
     await signInAs(page, ACCOUNTS.approved)
     await page.goto("/bets")
 
-    // Narrow to one round first, then widen back to "All Bet Rounds". Widening
-    // is the direction that cannot filter the card away, whichever round the
-    // fixture happens to put it in — a specific tab would depend on the sheet.
-    const tabs = page.getByRole("button", { name: /^(R[123]|Tournament)$/ })
-    if ((await tabs.count()) === 0) test.skip(true, "no round tab strip in this fixture")
-    await tabs.first().click()
+    // Narrow to one round first, then widen back to "All Bets". Widening is the
+    // direction that cannot filter the card away, whichever round the fixture
+    // happens to put it in — a specific chip would depend on the sheet.
+    //
+    // Rounds and categories share one chip row since #193, and the round chips
+    // are spelled out ("Round 1", not "R1").
+    const chips = page.getByRole("button", { name: /^(Round [123]|Tournament)$/ })
+    if ((await chips.count()) === 0) test.skip(true, "no round chips in this fixture")
+    await chips.first().click()
 
     const list = page.locator("[data-swap]")
     await expect(list).toHaveCount(1)
@@ -155,13 +158,35 @@ test.describe("filter swap", () => {
     await expect(field).toHaveValue("7")
 
     const before = await list.getAttribute("data-swap")
-    await page.getByRole("button", { name: "All Bet Rounds", exact: true }).click()
+    await page.getByRole("button", { name: "All Bets", exact: true }).click()
 
     // The container flipped, so the entrance replayed…
     await expect(list).not.toHaveAttribute("data-swap", before!)
     // …and the card did not remount, so the stake is still typed. A `key` on
     // the container fails exactly here.
     await expect(field).toHaveValue("7")
+  })
+
+  test("switching phase replays the list under the same contract (#193)", async ({
+    page,
+  }) => {
+    // The phase toggle is a filter control that did not exist when the flip-flop
+    // was written, so it owes the same guarantee: replay the entrance, keep the
+    // cards mounted. The fixture's Phase 2 is hidden, so this goes out to the
+    // empty state and back — the harder direction, since the list unmounts.
+    await signInAs(page, ACCOUNTS.approved)
+    await page.goto("/bets")
+
+    const list = page.locator("[data-swap]")
+    await expect(list).toHaveCount(1)
+    const before = await list.getAttribute("data-swap")
+
+    await page.getByRole("button", { name: "Phase 2", exact: true }).click()
+    await expect(page.getByText(/Phase 2 isn.t open yet/)).toBeVisible()
+
+    await page.getByRole("button", { name: "Phase 1", exact: true }).click()
+    await expect(list).toHaveCount(1)
+    await expect(list).not.toHaveAttribute("data-swap", before!)
   })
 })
 
@@ -223,8 +248,7 @@ test.describe("collapse", () => {
   }) => {
     await signInAs(page, ACCOUNTS.approved)
     await page.goto("/bets")
-    await page.getByRole("button", { name: "Closed", exact: true }).click()
-
+    // Closed bet 5 is on the default Phase 1 tab since #193 — no view switch.
     // Seeded: nonplayer@ has one wager on closed bet 5.
     const card = page.getByTestId("bet-5")
     const name = card.getByText("Nina Nonplayer")

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { requireAdminPage } from "@/lib/admin-gate"
 import { createClient } from "@/lib/supabase/server"
-import { StatusBadge, type BetStatus } from "@/components/betting/status-badge"
+import { closingPhase } from "@/lib/chase"
 import { BetSlipSummary } from "@/components/betting/bet-slip-summary"
 import { EmptyState } from "@/components/modules/empty-state"
 import { LoadError } from "@/components/modules/load-error"
@@ -27,7 +27,7 @@ import {
   TOURNAMENT_CLOCK_COLUMNS,
   TOURNAMENT_RULE_COLUMNS,
 } from "@/lib/placements"
-import { phaseClosedByClock, wageringOpen } from "@/lib/phases"
+import { phaseClosedByClock, phaseState, wageringOpen, type Phase, type PhaseState } from "@/lib/phases"
 import { sortPicks } from "@/lib/pick-order"
 import {
   buildComplianceSummary,
@@ -53,9 +53,17 @@ const CATEGORY_ORDER = [
 ]
 
 // The sheet arrives unsorted; the menu orders phase → round → category
-// (ADR 0001 §7), bets by their stable sheet IDs, and picks favourites-first
-// (#105 — the query has no ORDER BY, so without sortPicks the order is
-// whatever Postgres returns and an upsert can reshuffle it).
+// (ADR 0001 §7), bets WAGERABLE-FIRST then by their stable sheet IDs, and picks
+// favourites-first (#105 — the query has no ORDER BY, so without sortPicks the
+// order is whatever Postgres returns and an upsert can reshuffle it).
+//
+// Wagerable-first is Sprint 26 (#193) and it overturns Sprint 24's "sorting
+// bets … stays" (Andrew, Sept 2026). Now that a phase holds open and closed
+// bets in one list, the things you can still act on belong above the ones you
+// can only read about. It sorts on `wagering_open`, NOT `status`: the phase
+// deadline is half of whether a wager can be placed, and a bet the clock has
+// closed but the sheet still calls `open` belongs with the closed ones — which
+// is also which card it renders.
 function groupBets(bets: Bet[]): PhaseGroup[] {
   const phases = new Map<number, Map<string, Map<string, Bet[]>>>()
   for (const bet of bets) {
@@ -90,17 +98,15 @@ function groupBets(bets: Bet[]): PhaseGroup[] {
             .map(([name, bets]) => ({
               name,
               bets: bets
-                .sort((a, b) => a.sheet_bet_id - b.sheet_bet_id)
+                .sort(
+                  (a, b) =>
+                    Number(b.wagering_open) - Number(a.wagering_open) ||
+                    a.sheet_bet_id - b.sheet_bet_id
+                )
                 .map((bet) => ({ ...bet, bet_picks: sortPicks(bet.bet_picks) })),
             })),
         })),
     }))
-}
-
-// Menu-wide glance: open while anything is still open, closed otherwise.
-// (Hidden bets never reach the page; "resolved" lives per pick now.)
-function menuStatus(bets: Bet[]): BetStatus {
-  return bets.some((b) => b.status === "open") ? "open" : "closed"
 }
 
 /**
@@ -330,6 +336,20 @@ export default async function BetsPage({
 
   const phases = groupBets(bets)
 
+  // Each phase's own state, and the tab to open on. Both are computed here
+  // rather than in the client because they need things the menu tree doesn't
+  // carry: `phaseState` needs the phase CLOCK (a phase closes on the deadline as
+  // well as on its bets' statuses — ADR 0001 §5a), and `closingPhase` needs the
+  // bets' phase numbers, which FilterableBet deliberately doesn't hold.
+  //
+  // Same `now` as the wagering_open stamp above, so a bet and the badge over it
+  // cannot disagree about whether the deadline has passed.
+  const phaseStates: Record<Phase, PhaseState> = {
+    1: phaseState(1, clock, bets, now),
+    2: phaseState(2, clock, bets, now),
+  }
+  const defaultPhase = closingPhase(bets)
+
   return (
     <div
       className={cn(
@@ -346,10 +366,7 @@ export default async function BetsPage({
           fixed, and a transform-animated ancestor would become its
           containing block and peel it off the viewport. */}
       <div data-enter-stagger className="lg:col-span-2">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h1 className="font-heading text-3xl text-text-strong">Bet Menu</h1>
-        <StatusBadge status={menuStatus(bets)} />
-      </div>
+      <h1 className="mb-3 font-heading text-3xl text-text-strong">Bet Menu</h1>
 
       {/* On-behalf mode is loud on purpose. Everything below — the budget, the
           pre-filled stakes, the limits in the §7 messages — belongs to the
@@ -397,6 +414,8 @@ export default async function BetsPage({
           placementsByPick={placementsByPick}
           revealUnavailable={revealUnavailable}
           onBehalfOf={onBehalfOf}
+          phaseStates={phaseStates}
+          defaultPhase={defaultPhase}
         />
       </div>
       </div>
