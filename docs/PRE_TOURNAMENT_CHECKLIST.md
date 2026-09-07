@@ -163,6 +163,28 @@ so the project can pause and the automatic save states can stop.
             Fix the spelling in the sheet to match their display name and re-upload.
       - [ ] Warnings about odds changing on a bet that already has placements.
 
+- [ ] **Soft open — watch the first real sign-ins land.** *(Added Sept 7, 2026, when Sprint 9's
+      group dry run was closed without ever being run. This step is what stands in for it, and it
+      is the only place the app's least-tested path gets exercised before it matters.)*
+
+      Nothing in the test suite covers **~5 real people signing in on their own phones at the same
+      time**. Two full dry runs with Pat proved the lifecycle; Playwright proves the journeys; the
+      32-member simulation proves the money. None of them prove that a stranger who has never seen
+      this app receives an email and gets through onboarding — and the **magic-link delivery leg
+      has been exercised exactly once in this project's life**.
+
+      So do it deliberately, now, while there is time to fix it:
+      - [ ] Post the link in the group thread as soon as the menu is live. Don't wait for the day
+            before — you want the failures on a Monday, not on a Thursday morning.
+      - [ ] Over the next hour, open `/admin/people` and watch the funnel move. People stuck
+            between **invited** and **onboarded** are the signal: the link didn't arrive, or
+            onboarding lost them.
+      - [ ] **Message two or three of them out of band** — text, not email — and confirm the magic
+            link actually arrived, and how long it took. This is the check nothing automated can
+            make.
+      - [ ] Approve as they come in, with the right entry fee and playing-golfer flag, rather than
+            in one batch on Wednesday.
+
 - [ ] **Set the two deadlines.** `/admin/close` → *Phase clock*. Defaults are Round 1 and Round 3
       tee-off — **Thu Sept 24, 11:00 CT** and **Sat Sept 26, 11:00 CT** (PRD §8). Times are Central,
       the same clock as the tee sheet. Turn on the members' countdown while you're there.
@@ -190,6 +212,17 @@ so the project can pause and the automatic save states can stop.
       editable right up to the moment they fire.
 - [ ] **Post the link** in the group thread with a nudge to sign in *tonight*, not at the first tee.
       Sessions are long-lived, so anyone who signs in this week stays signed in through Saturday.
+- [ ] **The iOS pass** ([#139](https://github.com/andrewelong18/ozark-open/issues/139)) — fifteen
+      minutes on a real iPhone, not an emulator. The mobile work is proven by a Pixel 7 Playwright
+      project, which is Chromium and structurally cannot see any of this:
+      - [ ] `/login` and `/onboarding` with Safari's URL bar hidden — the card must not overshoot.
+      - [ ] **The safe-area gap.** On a notched phone the bet-slip bar should clear the home
+            indicator with a visible gap — not sit under it, not float a bar-height above it.
+            Nothing in an emulator has a home indicator, and this is the highest-value check here.
+      - [ ] Tapping a stake field raises the **number pad**, and the fixed bar doesn't end up under
+            it.
+      - [ ] The login field doesn't capitalise the first letter or red-underline the address.
+
 - [ ] **Confirm the Sheets mirror.** `/leaderboard` should render Pat's *Sportsbook Leaderboard*
       tab. If it says "No standings yet", the sheet isn't shared or the service account isn't
       configured (#66) — sort it now, not on Thursday.
@@ -283,6 +316,23 @@ message, which names the missing column:
 That is a migration to apply, not a code change (`docs/AGENT_AUTOMATION.md`).
 
 ## If something goes wrong
+
+**Members can't sign in.** The most likely failure of the weekend, and the one the group dry run
+would have surfaced. Work it in this order:
+
+1. **Is the app up?** `https://ozark-open.com/api/health` — it runs the reads the app actually
+   depends on and answers 503 naming the failure. Green here means the problem is delivery, not
+   the app.
+2. **Where are they stuck?** `/admin/people` shows the whole funnel. **Invited but never signed
+   in** = the email didn't arrive or wasn't opened. **Signed in but not onboarded** = they bounced
+   off the setup step. **Onboarded but not approved** = it's your turn, not theirs.
+3. **If the link didn't arrive:** check spam first — it is almost always spam. Magic links are
+   single-use and expire; have them request a fresh one rather than re-using the old email.
+4. **If it still won't work,** create the account outright from `/admin/people` — it makes a real,
+   confirmed account with no email sent, and they can claim it later. Then place their wagers for
+   them at `/bets?for=<userId>`; every §7 rule evaluates against **them**, and the wager records
+   you as the person who typed it in.
+
 
 | Symptom | What it usually is |
 |---|---|

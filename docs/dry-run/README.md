@@ -3,6 +3,18 @@
 Everything needed to run the full tournament-weekend rehearsal in one evening — Sprint 9's
 "group dry run", scaled down to two people plus a simulated pool.
 
+> **Final state — closed Sept 7, 2026.** This rehearsal ran **twice** against production, both
+> times Andrew + Pat: **Jul 31, 2026** (record in [`ISSUE_LOG.md`](ISSUE_LOG.md) — full lifecycle,
+> pool reconciled to the cent at $425 − $32 = $393, 21 findings → Sprints 21–25) and again in
+> **September 2026** (four asks → Sprints 26–28, issues #193–#199, plus the seed-script bug #189;
+> no `ISSUE_LOG` of its own — the scoping commit and those issues are the record).
+>
+> Sprint 9's **group** run — 5+ real participants on their own phones — was **cut, not run**
+> ([`../sprints/sprint-9.md`](../sprints/sprint-9.md) § Closed). Nothing here is scheduled any
+> more. The material stays because it is still the best rehearsal harness in the repo: run
+> `bash scripts/dry-run-verify.sh` any time you want the whole weekend re-proved in a minute, and
+> the GAMEPLAN's unticked boxes are a script nobody is coming back to rather than work outstanding.
+
 | File | Read when |
 |---|---|
 | **`GAMEPLAN.md`** | **Start here.** The checkbox script for the session: 12 acts, tiered P0/P1/P2, with the reasoning behind each test. |

@@ -261,9 +261,9 @@ See `ROADMAP.md` for the phased build plan and acceptance criteria. At a high le
 
 ## 11. Timeline
 
-- **Tournament:** September 24–26, 2026 (Round 1 Thu · Round 2 Fri · Round 3 Sat; end date pending final confirmation — `OUTSTANDING_DECISIONS.md`).
+- **Tournament:** September 24–26, 2026 (Round 1 Thu · Round 2 Fri · Round 3 Sat). **Confirmed Sept 7, 2026** — the dates are load-bearing in the phase clock, the §8 itinerary and the pre-tournament checklist, and Pat moved Round 2's venue in September without questioning the weekend (`OUTSTANDING_DECISIONS.md` §5, resolved).
 - **Feature freeze:** ~August 28, 2026 — everything after is testing, bugs, and polish.
-- **Fully wrapped:** September 10, 2026 at the latest (two weeks before tee-off), with a group dry run before then.
+- **Fully wrapped:** September 10, 2026 at the latest (two weeks before tee-off). **The group dry run was cut on Sept 7, 2026** rather than run — see `sprints/sprint-9.md` § Closed. Two full-lifecycle sessions with Pat against production (Jul 31 and September), the Playwright suite, the 32-member pool simulation and `dry-run-verify.sh` stood in for it; what it never covered — ~5 real members signing in on their own phones at once — became a soft-open step in `PRE_TOURNAMENT_CHECKLIST.md` instead of an open checkbox.
 
 **Operational risks to manage around the timeline:**
 

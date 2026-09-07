@@ -68,23 +68,52 @@ No code change was needed: the `is_player` exemption branch in
 the self-bet cap is the one rule they are exempt from, and it is inapplicable
 rather than lenient, since no pick in the menu bears a non-player's name.
 
-## 2b. Four questions the Jul 31 dry run raised but didn't get to ask
-**Owner:** Pat · **Blocks:** #4 blocks the largest available scope cut; the rest are policy.
+## 2b. Four questions the Jul 31 dry run raised but didn't get to ask — **2 of 4 closed Sept 7, 2026**
+**Owner:** Pat · **Blocks:** nothing, as of Sept 7 — both remaining items are policy calls that can
+be made on the weekend itself.
 
-Acts 9.1, 10.2, 10.4 and 11.1 weren't reached, so these went unasked. Ten minutes with
-Pat closes all four. Tracked as [#111](https://github.com/andrewelong18/ozark-open/issues/111).
+Acts 9.1, 10.2, 10.4 and 11.1 weren't reached, so these went unasked. Tracked as
+[#111](https://github.com/andrewelong18/ozark-open/issues/111). Two were still unanswered when
+Sprint 9 was closed on **Sept 7, 2026**, and two were settled — one by what shipped, one by
+Andrew's own call. Resolved rows are kept rather than deleted, because the record of *what was
+asked* is half the value of this file.
 
 1. **Devin Arand's case** — someone is $2 short of their entry at Phase 2 close and isn't
    answering. Bets stand? (Documented answer is Q3 — *whatever stands, stands* — but never
    confirmed aloud. Their full entry funds the pool while only part works for them; Devin
    finished the dry run at −$2.04, almost entirely from this.)
-2. **Steve Esswein's case** — someone pays the entry and never wagers. He appeared on the
-   board at **$0.00 / −$20.00**. Is that what Pat wants when it's a real person?
+2. ~~**Steve Esswein's case** — someone pays the entry and never wagers. He appeared on the
+   board at **$0.00 / −$20.00**. Is that what Pat wants when it's a real person?~~
+   **✅ RESOLVED Sept 7, 2026 — settled by conduct, and reopenable in one line if Pat disagrees.**
+   Two things changed the question. The **outcome** was already governed: PRD §12 Q3 says whatever
+   stands, stands, and nothing in the app adjusts it. The **prevention** shipped Sept 2, 2026 as
+   part of the launch-readiness pass — `buildComplianceSummary()` returned nothing at zero
+   placements, so the member who had done the least was the only one the app told nothing; it now
+   says what they still need. Pat has seen the $0.00 / −$20.00 row across two full dry runs
+   without objecting. That is a weaker answer than his own words and is recorded as such.
 3. **Cents** — payouts display to the cent. How does $29.03 get paid over Venmo? Decides
    whether to round or show a suggested-payment column.
-4. **The participant leaderboard** — Pat suggested dropping it in July. Still his view? If so,
+4. ~~**The participant leaderboard** — Pat suggested dropping it in July. Still his view? If so,
    **Sprint 8 and the whole Google Sheets integration can be cut**, along with issues #66–#68.
-   The single largest scope reduction available.
+   The single largest scope reduction available.~~
+   **✅ RESOLVED Sept 7, 2026 (Andrew): keep it.** The largest available scope reduction was
+   deliberately **not** taken. Sprint 8 stays ✅, `lib/leaderboard.ts` and `/leaderboard` stay
+   built, and #66/#67/#68 stay open as residue. It remains **unlinked from the nav** (Andrew's
+   call, Aug 23, 2026) and its Google service account (#66) is still unconfigured, so today it
+   renders an empty state rather than standings — which is the documented expected result, not a
+   bug (`docs/dry-run/GAMEPLAN.md`, landmine #4).
+
+   **This row is about the Google Sheets mirror, and only that.** It has meant the Sheets board
+   since Pat's July 11 note that the workbook stays the leaderboard's home, and §1 above uses the
+   name the same way. The **bet-outcomes leaderboard** — the money standings that replace the
+   dashboard's live modules once Phase 2 resolves — is a different board with different data, and
+   it is Sprint [28](sprints/sprint-28.md) as already written (PRD §12 **A20**); Andrew confirmed
+   on Sept 7, 2026 that it takes no new scope from this decision. Keeping both boards makes the
+   name collision permanent and worth stating once: the golf board is mirrored from a Google Sheet
+   tab named, literally, "Sportsbook Leaderboard", which is also what Pat calls the money
+   standings — which is exactly why the money table ships as `lib/standings.ts` /
+   `components/results/standings-table.tsx` under the heading "Final Standings", and why renaming
+   that heading later must not rename those modules.
 
 ## 3. Entry collection mechanism
 **Owner:** Pat (+ tournament treasurer) · **Blocks:** nothing in the app (payments are out of band) — documentation accuracy only.
@@ -122,10 +151,18 @@ doc contains no Non-Goals content (verified — no tracked comments, no such sec
 The July 2026 architecture memo doesn't contain Non-Goals either. Ask Pat what he
 intended to add so `PRD.md` §3 can capture it.
 
-## 5. Tournament end date — confirm Sept 26 (was 24–27)
+## 5. Tournament end date — confirm Sept 26 (was 24–27) — ✅ RESOLVED 2026-09-07
 **Owner:** Pat · **Blocks:** nothing — factual accuracy.
 
 The PRD/ROADMAP previously read "September 24–27"; corrected to **24–26** to match the
 three-round structure (Round 1 Thu 24 · Round 2 Fri 25 · Round 3 Sat 26) and Pat's
 own stakeholder-doc header ("September 24–26, 2026"). Confirm 26 is right — revert if
 "27" was intentional (e.g., a travel/awards day).
+
+**✅ RESOLVED Sept 7, 2026 — settled by conduct.** Sept 24–26 is now load-bearing in code that
+Pat has driven twice: the phase-clock migration (`20260810000000_phase_clock.sql`) seeds Phase 1
+closing **Thu Sept 24, 11:00 America/Chicago** and Phase 2 **Sat Sept 26, 11:00**, the PRD §8
+itinerary and `PRE_TOURNAMENT_CHECKLIST.md` are built around those two mornings, and in September
+Pat moved Round 2 to Lake Valley Golf Club — a change to the Friday of a Thu–Sat weekend, made
+without questioning the weekend. Nobody has proposed a fourth day since July. Reopen only if Pat
+says otherwise.
