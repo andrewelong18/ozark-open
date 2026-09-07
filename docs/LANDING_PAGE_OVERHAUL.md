@@ -652,8 +652,12 @@ calendar; venue towns verified against the courses' own listings.
 | Round | Day | Date | Course | Town | Format |
 |---|---|---|---|---|---|
 | 1 | Thursday | Sept 24, 2026 | Old Kinderhook Golf Club | Camdenton, MO | *TBD* |
-| 2 | Friday | Sept 25, 2026 | Bear Creek Valley Golf Club | Osage Beach, MO | *TBD* |
+| 2 | Friday | Sept 25, 2026 | Lake Valley Golf Club | Camdenton, MO | *TBD* |
 | 3 | Saturday | Sept 26, 2026 | Osage National Golf Course | Lake Ozark, MO | *TBD* |
+
+**Round 2 changed (Sept 7, 2026).** Andrew moved Friday's round from Bear Creek
+Valley Golf Club (Osage Beach) to **Lake Valley Golf Club**, which sits in
+**Camdenton, MO** — so the town moved with the course.
 
 Dates match PRD §1 (Sept 24–26, 2026). **The Format column is the one piece
 still missing** — Item 2 established that beat B is about the golf (stroke play,
