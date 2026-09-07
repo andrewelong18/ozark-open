@@ -14,11 +14,12 @@ import { EmptyState } from "@/components/modules/empty-state"
 /**
  * The dashboard's activity feed: a chat-shaped timeline of who is playing.
  *
- * Three event kinds, newest at the top, new arrivals animating in and pushing
+ * Four event kinds, newest at the top, new arrivals animating in and pushing
  * the rest down. A bet event is a linked profile name, "placed a bet", and a
  * timestamp — deliberately NOT the pick, the amount or the odds, which stay
  * behind the bet closing (PRD §8, §12; the column list in
- * public.activity_placements() is what actually enforces it).
+ * public.activity_placements() is what actually enforces it). A join event is
+ * the same three things about a member who just finished onboarding.
  *
  * The house lines (lib/activity-quips.ts) render through that same row, on
  * purpose: linked name, avatar, stamp, indistinguishable from a wager. They are
@@ -219,12 +220,12 @@ function RowBody({
   event: ActivityEvent
   serverNow: string
 }) {
-  // A wager and a house line render through the SAME component, differing only
-  // in the words after the name and in a testid nobody can see. That is
-  // deliberate (Andrew, Aug 31, 2026): the lines are supposed to pass for real
-  // events, and one renderer is the only way "identical" stays true as either
-  // one changes. The testids exist so e2e/activity-feed.spec.ts can still tell
-  // them apart when it checks that no REAL row leaks a position.
+  // A wager, an arrival and a house line render through the SAME component,
+  // differing only in the words after the name and in a testid nobody can see.
+  // That is deliberate (Andrew, Aug 31, 2026): the lines are supposed to pass
+  // for real events, and one renderer is the only way "identical" stays true as
+  // any of them changes. The testids exist so e2e/activity-feed.spec.ts can
+  // still tell them apart when it checks that no REAL row leaks a position.
   if (event.kind === "bet") {
     return (
       <MemberRow
@@ -235,6 +236,20 @@ function RowBody({
         // General on purpose: there is no pick and no amount to say, and there
         // won't be one until the bet closes and /bets reveals the lot.
         text="placed a bet"
+        at={event.at}
+        serverNow={serverNow}
+      />
+    )
+  }
+
+  if (event.kind === "join") {
+    return (
+      <MemberRow
+        testId="activity-join-row"
+        userId={event.userId}
+        name={event.name}
+        avatarUrl={event.avatarUrl}
+        text="joined the sportsbook"
         at={event.at}
         serverNow={serverNow}
       />
