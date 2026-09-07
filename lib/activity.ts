@@ -1,4 +1,4 @@
-// The dashboard activity feed — a timeline of three event kinds.
+// The dashboard activity feed — a timeline of four event kinds.
 //
 // Pure module by design — no Supabase, no "@/" alias imports — so the
 // node:test suite exercises the exact code the API route and the dashboard
@@ -10,8 +10,9 @@
 // them is derived from data, which is why they cost the section below nothing.
 //
 // WHAT THE FEED SAYS, and the line it does not cross: a bet event carries the
-// bettor's NAME and the MOMENT, and nothing else. No pick, no amount, no odds,
-// no bet title. PRD §8 gates (participant, pick, amount) together behind a bet
+// bettor's NAME and the MOMENT, and nothing else. A join event carries the
+// same two fields and is held to the same rule for the same reason. No pick,
+// no amount, no odds, no bet title. PRD §8 gates (participant, pick, amount) together behind a bet
 // closing; naming the bettor while withholding the position is the agreed
 // refinement of COMPETITIVE_ANALYSIS §2.4, recorded in PRD §12. The column list
 // in public.activity_placements() is where that is enforced — this module never
@@ -32,6 +33,30 @@ import { ACTIVITY_QUIPS, type Quip } from "./activity-quips.ts"
 /** Someone put money on something. Which something is deliberately absent. */
 export type BetEvent = {
   kind: "bet"
+  id: string
+  at: string
+  userId: string
+  name: string
+  avatarUrl: string | null
+}
+
+/**
+ * Someone finished onboarding — they set their name and they are in the book.
+ *
+ * Sourced from `users.onboarded_at`, which is the exact moment a member
+ * completes the required first-run step (`app/api/onboarding/route.ts`), and
+ * therefore the only stamp in the schema that means "signed up AND finished".
+ * `created_at` would fire on the magic-link click, before there is a name to
+ * put in the row.
+ *
+ * Deliberately NOT gated on approval. A `tournament_participants` row is what
+ * makes someone eligible to BET (PRD §12 A11), and it is created by an admin
+ * minutes or days later — waiting for it would date the event to the approval
+ * rather than the arrival, and say "joined" about a moment the member wasn't
+ * present for.
+ */
+export type JoinEvent = {
+  kind: "join"
   id: string
   at: string
   userId: string
@@ -64,7 +89,7 @@ export type QuipEvent = {
 }
 
 /** Events that actually happened — everything except the quips. */
-export type RealEvent = BetEvent | PhaseEvent
+export type RealEvent = BetEvent | JoinEvent | PhaseEvent
 
 export type ActivityEvent = RealEvent | QuipEvent
 
@@ -77,11 +102,18 @@ export type PlacementActivityRow = {
   created_at: string
 }
 
-/** A member, for matching a house line's name to a profile. */
+/**
+ * A member, for matching a house line's name to a profile — and, since the join
+ * events came along, for being one. Both come off the same roster read, which
+ * is why `onboarded_at` is optional: a caller that only wants the quip links
+ * (and every existing test that predates joins) can leave it out.
+ */
 export type FeedMember = {
   id: string
   display_name: string | null
   avatar_url?: string | null
+  /** When they finished onboarding. NULL = signed in but never completed it. */
+  onboarded_at?: string | null
 }
 
 /** The minimum a bet has to expose for the phase events. A superset of
@@ -114,6 +146,58 @@ export function placementEvents(rows: PlacementActivityRow[]): BetEvent[] {
     })
   }
   return events
+}
+
+/**
+ * Roster rows → join events.
+ *
+ * A member counts as joined once `onboarded_at` is stamped, and the same drop
+ * rule `placementEvents` uses applies: no id, no readable name, or no usable
+ * stamp and the row is skipped rather than rendered as "someone". A nameless
+ * member is a data fault worth noticing on /admin/people, not a mystery to
+ * display on the dashboard.
+ *
+ * Bounded the way the placement read is. The roster is ~32 rows and is already
+ * in memory, so this costs nothing today — but every pre-Sprint-16 member was
+ * backfilled with `onboarded_at = created_at` (20260720000000), so the feed's
+ * tail is a wall of arrivals from months ago, and the cap keeps the newest ones
+ * without letting that wall grow with the roster. Newest first before the
+ * slice, so what survives is the recent end of the list.
+ *
+ * NOT scoped to a tournament, because `users` isn't: joining is joining the
+ * sportsbook, not entering a pool, and the two are separate steps by design
+ * (approval creates the participant row — PRD §12 A11). With one live
+ * tournament this is a distinction without a difference; with two it would put
+ * last year's arrivals at the bottom of this year's feed, which is where they
+ * belong anyway.
+ */
+export function joinEvents(
+  members: FeedMember[],
+  limit: number = Number.POSITIVE_INFINITY
+): JoinEvent[] {
+  const events: JoinEvent[] = []
+  for (const member of members) {
+    const name = (member.display_name ?? "").trim()
+    const at = member.onboarded_at
+    if (!member.id || !name || !at) continue
+    if (Number.isNaN(new Date(at).getTime())) continue
+    events.push({
+      kind: "join",
+      id: `join-${member.id}`,
+      at,
+      userId: member.id,
+      name,
+      avatarUrl: member.avatar_url ?? null,
+    })
+  }
+  // Newest first, ties broken by id so the slice is deterministic — the same
+  // total order buildFeed sorts by, and for the same reason: a poll that kept a
+  // different 40 rows would deal the reader a different feed every 20 seconds.
+  events.sort((a, b) => {
+    const at = new Date(b.at).getTime() - new Date(a.at).getTime()
+    return at !== 0 ? at : a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  })
+  return Number.isFinite(limit) ? events.slice(0, Math.max(0, limit)) : events
 }
 
 /**

@@ -9,6 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import {
   buildFeed,
+  joinEvents,
   phaseEvents,
   placementEvents,
   type ActivityEvent,
@@ -25,8 +26,9 @@ export const ACTIVITY_LIMIT = 40
 
 /**
  * The feed for one tournament: everyone's placements as name-and-moment, the
- * phase events derived from the caller's own bet rows and clock, and the quips
- * interleaved deterministically.
+ * arrivals of members who finished onboarding, the phase events derived from
+ * the caller's own bet rows and clock, and the quips interleaved
+ * deterministically.
  *
  * The placements come through the `activity_placements` RPC rather than a table
  * read, and that is not an optimisation — RLS makes a plain read return the
@@ -57,8 +59,10 @@ export async function loadActivityFeed(
   // card where their dashboard should have been (Aug 31, 2026).
   //
   //   - the wagers, through the definer RPC
-  //   - the roster, to give the house lines their profile links
-  //     (public.users is authenticated-read-all since 20260717000002, ~32 rows)
+  //   - the roster, which does double duty: the join events ARE these rows
+  //     (onboarded_at is the stamp), and it gives the house lines their profile
+  //     links (public.users is authenticated-read-all since 20260717000002,
+  //     ~32 rows, so this is one small read serving both)
   //   - opened_at, which is the feed's own column and is read HERE rather than
   //     by the page, so a database that doesn't have it yet costs one line of
   //     the feed instead of the whole dashboard
@@ -67,16 +71,17 @@ export async function loadActivityFeed(
       p_tournament_id: tournamentId,
       p_limit: limit,
     }),
-    supabase.from("users").select("id, display_name, avatar_url"),
+    supabase.from("users").select("id, display_name, avatar_url, onboarded_at"),
     supabase
       .from("bets")
       .select("phase, status, opened_at")
       .eq("tournament_id", tournamentId),
   ])
 
-  // A failed member read costs the links, not the feed: the lines still render
-  // with plain-text names, which is the same fallback a member without an
-  // account gets.
+  // A failed member read costs the join events and the house lines' profile
+  // links, not the feed: the lines still render with plain-text names, which is
+  // the same fallback a member without an account gets, and the wagers and
+  // phase events are untouched.
   if (members.error) {
     console.error("[activity] member read failed:", members.error.message)
   }
@@ -90,15 +95,17 @@ export async function loadActivityFeed(
   }
   const stamped = stamps.error ? bets : ((stamps.data ?? []) as FeedBet[])
   const phases = phaseEvents(stamped, clock, now)
+  // Same cap as the placements, and for the same reason — see joinEvents().
+  const joins = joinEvents(roster, limit)
 
   if (placements.error) {
     console.error("[activity] placement read failed:", placements.error.message)
-    return buildFeed(phases, ACTIVITY_QUIPS, roster)
+    return buildFeed([...joins, ...phases], ACTIVITY_QUIPS, roster)
   }
 
   const rows = (placements.data ?? []) as PlacementActivityRow[]
   return buildFeed(
-    [...placementEvents(rows), ...phases],
+    [...placementEvents(rows), ...joins, ...phases],
     ACTIVITY_QUIPS,
     roster
   )
