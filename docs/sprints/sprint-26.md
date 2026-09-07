@@ -87,5 +87,14 @@ actually moved.
   only variant no bet card renders — it describes a *phase*. It does not ping:
   `DESIGN_SYSTEM.md` §4 allows ongoing animation only where it carries information
   true just while it runs, and a phase that hasn't opened carries none.
-- **Residue:** `npm run test:e2e` is unexecuted — no Docker on this machine, the
-  standing #172 constraint. The browser pass on a phone is unrun.
+- **Residue:** the browser pass on a phone
+  ([#201](https://github.com/andrewelong18/ozark-open/issues/201) — worth doing
+  alongside [#127](https://github.com/andrewelong18/ozark-open/issues/127), same
+  page and same device), and `npm run test:e2e` unexecuted for want of Docker
+  (the standing [#172](https://github.com/andrewelong18/ozark-open/issues/172)
+  constraint), which means this sprint's three new specs have never actually run.
+- **Filed, not fixed:** `supabase/seed-sim-pool.sql` has the same phase↔status
+  correlation the unit fixture had
+  ([#202](https://github.com/andrewelong18/ozark-open/issues/202)). Nothing
+  depends on it today, but the next person to use that seed for anything
+  phase-related would get a green run that proves nothing.
