@@ -227,11 +227,11 @@ test.describe("the bet menu under a thumb", () => {
     )
 
     await expectTappable(
-      page.getByRole("button", { name: "Closed", exact: true }),
-      "open/closed toggle"
+      page.getByRole("button", { name: "Phase 2", exact: true }),
+      "phase toggle"
     )
     await expectTappable(
-      page.getByRole("button", { name: "All Categories" }),
+      page.getByRole("button", { name: "All Bets" }),
       "filter chip"
     )
     await expectTappable(
@@ -241,7 +241,8 @@ test.describe("the bet menu under a thumb", () => {
   })
 
   test("the reveal toggle on a closed bet", async ({ page }) => {
-    await page.getByRole("button", { name: "Closed", exact: true }).click()
+    // The closed bets share the Phase 1 tab with the open ones since #193, so
+    // there is no view to switch to first.
     await expectTappable(
       page.getByRole("button", { name: /Show \d+ bettors?/ }).first(),
       "reveal toggle"

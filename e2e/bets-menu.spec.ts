@@ -9,7 +9,8 @@
 
 import { expect, test } from "@playwright/test"
 
-import { ACCOUNTS, signInAs } from "./fixtures/auth.ts"
+import { ACCOUNTS, signInAs, signOut } from "./fixtures/auth.ts"
+import { buildMenuSheet } from "./fixtures/sheet.ts"
 
 test.beforeEach(async ({ page }) => {
   await signInAs(page, ACCOUNTS.approved)
@@ -77,29 +78,82 @@ test("the stroke handicap is a badge beside the name, not part of it (#102)", as
   await expect(card).not.toContainText("(E)")
 })
 
-test("the filter defaults to Open, all rounds (#104)", async ({ page }) => {
-  // The status toggle only renders when the menu holds both kinds — the E2E
-  // fixture is deliberately mixed (4 open, 9 closed) so it does.
-  const open = page.getByRole("button", { name: "Open", exact: true })
-  const closed = page.getByRole("button", { name: "Closed", exact: true })
+test("the menu opens on the phase the tournament is in (#193)", async ({ page }) => {
+  // Both tabs ALWAYS render — that is the point of #193. The fixture's Phase 2
+  // is `hidden`, which is what production looks like until Friday's upload, so
+  // Phase 1 is where the tournament is and where the menu opens.
+  const p1 = page.getByRole("button", { name: "Phase 1", exact: true })
+  const p2 = page.getByRole("button", { name: "Phase 2", exact: true })
 
-  await expect(open).toHaveAttribute("aria-pressed", "true")
-  await expect(closed).toHaveAttribute("aria-pressed", "false")
-
-  await expect(page.getByRole("button", { name: "All Bet Rounds" })).toHaveAttribute(
-    "aria-current",
+  await expect(p1).toHaveAttribute("aria-pressed", "true")
+  await expect(p2).toHaveAttribute("aria-pressed", "false")
+  await expect(page.getByRole("button", { name: "All Bets" })).toHaveAttribute(
+    "aria-pressed",
     "true"
   )
 
-  // One filter at a time: switching the view flips exactly one pressed state.
-  await closed.click()
-  await expect(closed).toHaveAttribute("aria-pressed", "true")
-  await expect(open).toHaveAttribute("aria-pressed", "false")
+  // Phase 1 holds BOTH kinds at once — the state the old status toggle split
+  // across two views and the reason this sprint had to badge every card.
+  await expect(page.getByTestId("bet-1")).toContainText("Open")
+  await expect(page.getByTestId("bet-5")).toContainText("Closed")
+
+  // One tab at a time.
+  await p2.click()
+  await expect(p2).toHaveAttribute("aria-pressed", "true")
+  await expect(p1).toHaveAttribute("aria-pressed", "false")
+})
+
+test("an unpublished Phase 2 says so instead of vanishing (#193)", async ({ page }) => {
+  // Pat's words: "if phase 2 bets are hidden, then just say that phase 2 isn't
+  // open yet." The tab is present and selectable; behind it is a sentence, not
+  // an empty page and not a missing control.
+  await page.getByRole("button", { name: "Phase 2", exact: true }).click()
+
+  await expect(page.getByText(/Phase 2 isn.t open yet/)).toBeVisible()
+  await expect(page.getByTestId("bet-20")).toHaveCount(0)
+  // The badge beside the toggle agrees with the body.
+  await expect(page.getByText("Not open yet")).toBeVisible()
+})
+
+test("opening Phase 2 by upload brings the tab to life (#193)", async ({ page }) => {
+  // The other half of the state, reached the only way the app allows — a
+  // re-upload through /admin/import, the same move results-and-reveal makes to
+  // close a bet. Reaching into the database would test a state the app can't
+  // produce.
+  const sheet = await buildMenuSheet([{ betIds: [20, 21], status: "open" }])
+
+  await signOut(page)
+  await signInAs(page, ACCOUNTS.admin)
+  await page.goto("/admin/import")
+  await page.locator("#import-file").setInputFiles(sheet)
+  await page.getByRole("button", { name: "Import", exact: true }).click()
+  await expect(page.getByText("Import Report")).toBeVisible()
+
+  await signOut(page)
+  await signInAs(page, ACCOUNTS.approved)
+  await page.goto("/bets")
+
+  // Phase 2 is now where the tournament is, so the menu opens there by itself.
+  await expect(
+    page.getByRole("button", { name: "Phase 2", exact: true })
+  ).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByTestId("bet-20")).toBeVisible()
+  await expect(page.getByText(/Phase 2 isn.t open yet/)).toHaveCount(0)
+
+  // Put it back, so this spec can run twice and the file stays order-independent.
+  const reset = await buildMenuSheet([{ betIds: [20, 21], status: "hidden" }])
+  await signOut(page)
+  await signInAs(page, ACCOUNTS.admin)
+  await page.goto("/admin/import")
+  await page.locator("#import-file").setInputFiles(reset)
+  await page.getByRole("button", { name: "Import", exact: true }).click()
+  await expect(page.getByText("Import Report")).toBeVisible()
 })
 
 test("a closed bet collapses its bettors behind a toggle (#103)", async ({ page }) => {
-  await page.getByRole("button", { name: "Closed", exact: true }).click()
-
+  // No navigation needed since #193: closed bet 5 is a Phase 1 bet and Phase 1
+  // is the default tab, so it is already on screen beside the open ones.
+  //
   // nonplayer@ has a seeded $5 wager on closed bet 5, so exactly one bettor is
   // revealed there. Everything about a closed bet is public.
   const card = page.getByTestId("bet-5")

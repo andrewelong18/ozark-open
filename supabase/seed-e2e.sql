@@ -15,8 +15,10 @@
 --   CLOSED everything else   — keeps its Round-1 results
 --
 -- The mix is load-bearing for three journeys:
---   * the Open/Closed status toggle only renders when the menu holds both kinds
---     (showStatusToggle in lib/bet-filters.ts),
+--   * the menu holds open AND closed bets in the SAME phase, which is the state
+--     the phase-first menu has to stay legible in (Sprint 26 / #193) — and the
+--     state the old fixtures could not express, because phase and status used to
+--     be perfectly correlated everywhere,
 --   * reveal-at-close needs an open bet that hides other people's wagers AND a
 --     closed one that shows them,
 --   * bet 1 is the pick-ordering fixture: in sheet order Alex Leslie (+900) sits
@@ -60,7 +62,64 @@ WHERE p.bet_id = b.id AND b.tournament_id = t.id AND t.year = 2026
 UPDATE public.bets b
 SET status = 'closed'
 FROM public.tournaments t
-WHERE b.tournament_id = t.id AND t.year = 2026 AND b.sheet_bet_id NOT IN (1, 3, 7, 8);
+WHERE b.tournament_id = t.id AND t.year = 2026
+  AND b.phase = 1
+  AND b.sheet_bet_id NOT IN (1, 3, 7, 8);
+
+-- ---------------------------------------------------------------------------
+-- Phase 2, still HIDDEN (Sprint 26 / #193).
+--
+-- seed-sample-phase1.sql is Phase 1 only, so until now there was no Phase 2
+-- anywhere in E2E and a Phase 2 tab would have had nothing behind it in every
+-- run. These two bets reproduce what production actually looks like for most of
+-- the week: Phase 2 exists in the database and is `hidden`, so /bets filters it
+-- out of the query entirely and the tab correctly reads "Phase 2 isn't open
+-- yet".
+--
+-- A spec that wants the OTHER state opens them the way the app does — a
+-- re-upload through /admin/import via buildMenuSheet — rather than by reaching
+-- into the database, which is the same move e2e/results-and-reveal.spec.ts
+-- already makes to close a bet.
+--
+-- sheet_bet_id 20/21 and pick ids 200+ sit clear of the sample menu (1-13,
+-- 1-57) and of e2e/fixtures/rules.ts's throwaway bet 900.
+-- ---------------------------------------------------------------------------
+INSERT INTO public.bets
+  (tournament_id, category_id, sheet_bet_id, title, phase, round, status, total_probability)
+SELECT t.id, c.id, v.sheet_bet_id, v.title, v.phase, v.round, v.status, v.total_probability
+FROM (
+  VALUES
+    (20, 'Win Tournament', 2, 'tournament', 'hidden', 1.5, 'Top Finisher'),
+    (21, 'Medalist - Round 3', 2, 'round_3', 'hidden', 1.5, 'Top Finisher')
+) AS v (sheet_bet_id, title, phase, round, status, total_probability, category_name)
+CROSS JOIN (SELECT id FROM public.tournaments WHERE year = 2026) t
+JOIN public.bet_categories c ON c.name = v.category_name
+ON CONFLICT (tournament_id, sheet_bet_id) DO UPDATE SET
+  category_id       = EXCLUDED.category_id,
+  title             = EXCLUDED.title,
+  phase             = EXCLUDED.phase,
+  round             = EXCLUDED.round,
+  status            = EXCLUDED.status,
+  total_probability = EXCLUDED.total_probability;
+
+INSERT INTO public.bet_picks
+  (bet_id, sheet_pick_id, label, american_odds, fractional_odds, probability, result)
+SELECT b.id, v.sheet_pick_id, v.label, v.american_odds, v.fractional_odds, v.probability, v.result
+FROM (
+  VALUES
+    (20, 200, 'Dan Mercer', 110, '11/10', 0.4761904761904762, 'pending'),
+    (20, 201, 'Garrett Klenke', 200, '2/1', 0.3333333333333333, 'pending'),
+    (21, 202, 'Jake Kohne', 150, '3/2', 0.4, 'pending'),
+    (21, 203, 'Steve Jones', 250, '5/2', 0.2857142857142857, 'pending')
+) AS v (sheet_bet_id, sheet_pick_id, label, american_odds, fractional_odds, probability, result)
+JOIN public.bets b ON b.sheet_bet_id = v.sheet_bet_id
+JOIN public.tournaments t ON t.id = b.tournament_id AND t.year = 2026
+ON CONFLICT (bet_id, sheet_pick_id) DO UPDATE SET
+  label           = EXCLUDED.label,
+  american_odds   = EXCLUDED.american_odds,
+  fractional_odds = EXCLUDED.fractional_odds,
+  probability     = EXCLUDED.probability,
+  result          = EXCLUDED.result;
 
 -- ---------------------------------------------------------------------------
 -- One wager from a member the journeys do NOT sign in as, so "can I see other
@@ -105,10 +164,13 @@ WHERE user_id IN (SELECT id FROM public.users WHERE email IN ('newbie@ozark.test
 
 COMMIT;
 
--- Sanity: 4 open / 9 closed, and two wagers parked on nonplayer@.
+-- Sanity: Phase 1 is 4 open / 9 closed, Phase 2 is 2 hidden, and two wagers are
+-- parked on nonplayer@. The hidden pair is what makes the Phase 2 tab read
+-- "isn't open yet" rather than having nothing to render at all.
 SELECT
-  count(*) FILTER (WHERE b.status = 'open')   AS open_bets,
-  count(*) FILTER (WHERE b.status = 'closed') AS closed_bets,
+  count(*) FILTER (WHERE b.phase = 1 AND b.status = 'open')   AS p1_open,
+  count(*) FILTER (WHERE b.phase = 1 AND b.status = 'closed') AS p1_closed,
+  count(*) FILTER (WHERE b.phase = 2 AND b.status = 'hidden') AS p2_hidden,
   (SELECT count(*) FROM public.bet_placements) AS placements
 FROM public.bets b
 JOIN public.tournaments t ON t.id = b.tournament_id AND t.year = 2026;
