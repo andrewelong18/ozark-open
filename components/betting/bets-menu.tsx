@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useMemo, useRef, useState } from "react"
 
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Collapse } from "@/components/ui/collapse"
 import { PlayerChip } from "@/components/player/player-chip"
@@ -436,6 +437,19 @@ export function BetsMenu({
     [phases, phase, activeFacet]
   )
 
+  // What the active chip is called, so an empty result can name the thing that
+  // emptied it rather than saying "no bets" and leaving the reader to work out
+  // which of the controls above did it.
+  /** The tab that isn't selected. Two phases, so this is a flip, not a search. */
+  const otherPhase: Phase = phase === 1 ? 2 : 1
+
+  const activeChipLabel =
+    activeFacet.kind === "all"
+      ? null
+      : (chips.find(
+          (c) => c.kind === activeFacet.kind && c.value === activeFacet.value
+        )?.label ?? activeFacet.value)
+
   // Replays the list's entrance whenever the filter changes, by alternating
   // between two identical keyframes (a CSS animation restarts only when its
   // name changes). See the [data-swap] rules in app/globals.css for why this
@@ -521,29 +535,63 @@ export function BetsMenu({
         )}
       </div>
 
-      {/* Two different nothings, and conflating them is how a member concludes
-          the app is broken. An UNPUBLISHED phase is the state Pat named — the
-          bets exist but are still `hidden`, so the admin hasn\'t opened the
-          window yet. A published phase filtered to nothing is unreachable by
-          construction (one facet at a time, every chip derived from this phase
-          — see lib/bet-filters.ts) and is kept only as a floor. */}
+      {/* THREE different nothings, and conflating them is how a member decides
+          the app is broken. Each one names the thing that caused it and offers
+          the tap that undoes it.
+
+          1. The phase has nothing published — the bets exist but are still
+             `hidden`, so the admin hasn’t opened the window. Pat asked for this
+             one by name.
+          2. The phase has bets but the active chip matches none of them. This is
+             unreachable by construction — one facet at a time, every chip derived
+             from this phase (lib/bet-filters.ts) — and it is here anyway,
+             because "unreachable" is a property of today’s code and a member
+             staring at a blank list deserves better than our confidence. */}
       {!published ? (
         <div className="py-6">
           <EmptyState
-            glyph="\u23f3"
-            title={`Phase ${phase} isn\u2019t open yet`}
+            glyph="⏳"
+            title={`No bets in Phase ${phase} yet`}
             message={
               phase === 2
-                ? "Phase 2 opens after Round 2, once the admin publishes it. Nothing to see here until then."
-                : "The book opens when an admin publishes the menu. Check back soon."
+                ? "Phase 2 isn’t open yet — it opens after Round 2, once the admin uploads the menu. Nothing to see here until then."
+                : "Phase 1 isn’t open yet — the book opens when an admin uploads the menu. Check back soon."
+            }
+            action={
+              // Only offered when there is somewhere to go: on opening night
+              // neither phase has anything, and a button back to an equally
+              // empty tab is worse than no button.
+              phaseHasBets(phases, otherPhase) ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPhase(otherPhase)}
+                >
+                  See Phase {otherPhase} instead
+                </Button>
+              ) : undefined
             }
           />
         </div>
       ) : filteredPhases.length === 0 ? (
         <div className="py-6">
           <EmptyState
-            title="No bets match"
-            message="Clear the filter to see everything in this phase."
+            glyph="🔍"
+            title="No bets match this filter"
+            message={
+              activeChipLabel
+                ? `Nothing in Phase ${phase} is filed under “${activeChipLabel}”.`
+                : `Nothing in Phase ${phase} matches the current filter.`
+            }
+            action={
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => selectChip(ALL_FACET)}
+              >
+                Show all Phase {phase} bets
+              </Button>
+            }
           />
         </div>
       ) : (

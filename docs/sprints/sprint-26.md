@@ -78,6 +78,33 @@ actually moved.
   browser run — the seed was Phase 1 only, and said so in a comment naming the
   toggle this sprint replaced.
 
+### Follow-up — Sept 7, 2026: both empty states name themselves
+
+Andrew, after reading the build: an empty phase and an empty filter should each
+say so plainly. Both already rendered a message; both now lead with the fact and
+offer the tap that undoes it.
+
+- **Empty phase** — title is now *"No bets in Phase N yet"*, with Pat's sentence
+  ("Phase 2 isn't open yet — it opens after Round 2…") as the explanation
+  underneath. Plus a **"See Phase 1 instead"** button, offered only when the
+  other tab actually has something: on opening night neither phase does, and a
+  button to an equally empty tab is worse than no button.
+- **Empty filter** — *"No bets match this filter"*, naming the active chip
+  (*Nothing in Phase 1 is filed under "Round 1"*) and offering **"Show all
+  Phase N bets"**. This state is still **unreachable by construction** — one
+  facet at a time, every chip derived from the selected phase — and it is here
+  anyway, because "unreachable" is a property of today's code and a member
+  looking at a blank list deserves better than our confidence in it.
+
+**Two bugs fixed in the same pass, one of them shipped an hour earlier.**
+`glyph="\u23f3"` was written as a JSX *attribute* string, and JSX attributes are
+not JS string literals — backslash escapes are not processed, so it would have
+rendered the literal text. Every glyph is a real emoji now, matching the rest of
+the app, and it was verified by grepping the compiled bundle rather than by
+reasoning about it. The same pass found a spec asserting
+`getByRole("heading", …)` against `EmptyState`'s title, which is a styled
+`<div>` with no heading role and would never have matched.
+
 ### Notes
 
 - The badge beside the toggle reuses `phaseState()` rather than adding a second

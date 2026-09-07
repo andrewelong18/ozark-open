@@ -109,10 +109,24 @@ test("an unpublished Phase 2 says so instead of vanishing (#193)", async ({ page
   // an empty page and not a missing control.
   await page.getByRole("button", { name: "Phase 2", exact: true }).click()
 
+  // Leads with the fact — there are no bets here — and then explains why, so it
+  // reads as a state rather than a failure.
+  // getByText, not getByRole("heading") — EmptyState's title is a styled <div>,
+  // so there is no heading role to match.
+  await expect(page.getByText("No bets in Phase 2 yet")).toBeVisible()
   await expect(page.getByText(/Phase 2 isn.t open yet/)).toBeVisible()
   await expect(page.getByTestId("bet-20")).toHaveCount(0)
   // The badge beside the toggle agrees with the body.
   await expect(page.getByText("Not open yet")).toBeVisible()
+
+  // And it offers the obvious next tap rather than leaving you on a dead tab.
+  const back = page.getByRole("button", { name: "See Phase 1 instead" })
+  await expect(back).toBeVisible()
+  await back.click()
+  await expect(
+    page.getByRole("button", { name: "Phase 1", exact: true })
+  ).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByTestId("bet-1")).toBeVisible()
 })
 
 test("opening Phase 2 by upload brings the tab to life (#193)", async ({ page }) => {
