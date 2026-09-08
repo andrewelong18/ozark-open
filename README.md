@@ -256,21 +256,26 @@ confined to one module with one importer — `docs/DATA_MODEL.md` §5.1 explains
 
 ### Recipe: undo a bad import or a bad edit
 
-Uploaded last week's sheet? Fat-fingered a cell in Studio? The app keeps save states of the money tables, and rolling back is one command.
+Uploaded last week's sheet? Fat-fingered a cell in Studio? The app keeps save states of the money tables, and rolling back is a button.
 
-**You already have a snapshot.** Every import takes one automatically before it applies — the import report prints its id and the exact command to undo that upload. There's also a **Snapshot now** button on `/admin/import`; press it before editing anything by hand.
+**You already have a save state.** Every import takes one automatically before it applies, and so does every restore. There's also a **Snapshot now** button on `/admin/snapshots` and `/admin/import`; press it before editing anything by hand.
+
+**Go to `/admin/snapshots`** (Profile → Admin → *Save States & Undo*). Save states are listed newest-first with their age, why they were taken, and how many wagers they hold. Press **Restore this**, read the panel — it shows the save state against what's in the database right now — and type `RESTORE` to arm the button.
+
+**This overwrites current state.** Bets, picks, wagers, participants and the tournament row all go back to how they were at that instant — *including throwing away wagers people placed since*. On a Friday afternoon that can be real money someone typed in. Two things the panel says out loud: every wager placed since then is gone, and **the tournament row comes back too**, so a restore rewinds the phase clock and can un-publish the final results.
+
+**It is undoable.** A `pre-restore` save state is written first, in the same transaction, and the confirmation names its id.
+
+It does **not** touch accounts, the invite list, avatars or the bet categories — undoing a bad bet import never costs you the roster.
+
+**When the app itself is down** — a bad deploy, an outage — the console is unreachable and the script is the way back. It is not retired:
 
 ```bash
-# What can I go back to?
 node --experimental-strip-types scripts/restore-snapshot.ts --list
-
-# Go back.
 node --experimental-strip-types scripts/restore-snapshot.ts <id> "$SUPABASE_DB_URL" --yes
 ```
 
-**This overwrites current state.** Bets, picks, wagers, participants and the tournament row all go back to how they were at that instant — *including throwing away wagers people placed since*. On a Friday afternoon that can be real money someone typed in. The script tells you how old the snapshot is and how many rows it's about to discard before it touches anything, and refuses to run without `--yes`. Read those numbers, then decide.
-
-It does **not** touch accounts, the invite list, avatars or the bet categories — undoing a bad bet import never costs you the roster. Afterwards it prints row counts and the pool reconciliation, and exits non-zero if they don't match the save state.
+It refuses to run without `--yes`, prints row counts and the pool reconciliation afterwards, and exits non-zero if they don't match the save state.
 
 Full detail, including the schedule and retention: [`docs/DATA_SAFETY.md`](docs/DATA_SAFETY.md). That doc also covers the *other* backup — `scripts/db-export.sh`, which is the fire escape to this undo button.
 

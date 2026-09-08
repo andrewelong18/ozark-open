@@ -22,9 +22,9 @@ different question, and reaching for the wrong one wastes the minutes you don't 
 |---|---|---|
 | **Answers** | "The database is gone / corrupt / I need the permanent record." | "The last thing I did was wrong. Put it back." |
 | **Covers** | Everything: schema, all tables, the payout view, best-effort accounts. | Five money tables — `tournaments`, `tournament_participants`, `bets`, `bet_picks`, `bet_placements`. |
-| **Taken by** | A human, at two named moments. | The app: automatically before **every** import, on a schedule, and on demand from the **Snapshot now** button on `/admin/import`. |
+| **Taken by** | A human, at two named moments. | The app: automatically before **every** import, before **every restore**, on a schedule, and on demand from the **Snapshot now** button on `/admin/snapshots` or `/admin/import`. |
 | **Lives** | A folder on your laptop (and wherever you copied it). | A row in the database. |
-| **Restore** | `pg_restore` into an empty schema — minutes, and a decision. | `scripts/restore-snapshot.ts <id> --yes` — seconds. |
+| **Restore** | `pg_restore` into an empty schema — minutes, and a decision. | A button on `/admin/snapshots` — seconds, from a phone. |
 | **Survives** | The project being deleted. | Nothing that takes the database with it. |
 
 The short version: **snapshots are the undo button, the export is the fire escape.** Snapshots
@@ -179,28 +179,79 @@ They accrue three ways, and you don't have to do anything for any of them:
 
 - **Before every import.** `/admin/import` takes one before a single row moves. If the snapshot
   fails, the import is refused rather than run without a net.
+- **Before every restore.** `restore_snapshot()` takes a `pre-restore` one inside the same
+  transaction, so the undo button has its own undo (Sprint 27).
 - **On a schedule**, via Supabase pg_cron (see below).
-- **On demand** — the **Snapshot now** button on `/admin/import`. Use it before editing
-  anything by hand.
+- **On demand** — the **Snapshot now** button on `/admin/snapshots` or `/admin/import`. Use it
+  before editing anything by hand.
 
-### Rolling one back
+### Rolling one back — from the app (Sprint 27)
+
+**Go to `/admin/snapshots`** (Profile → Admin → *Save States & Undo*). Every save state is
+listed newest-first with its age, why it was taken, and how many wagers it holds. Press
+**Restore this** on one and a panel opens showing what it holds against what the database holds
+right now — the same `(3 will be discarded)` / `(2 will come back)` deltas the script prints —
+then type `RESTORE` to arm the button.
+
+This is the primary way back, and it needs nothing but a phone. It exists because the tool for
+the most likely weekend disaster used to require a laptop with `psql` on it, which is the one
+thing nobody has at 10pm on a Saturday (PRD §12 **A21**; it reverses Sprint 11's "no restore
+UI", knowingly).
+
+**This overwrites current state.** Everything written to those five tables since the save state
+was taken is discarded — *including wagers people placed in the meantime*. On a Friday
+afternoon that could be real money someone typed in. Two things the panel says out loud, and
+both are worth reading twice:
+
+- **Every wager placed since then is gone**, and nothing on any page will look wrong afterwards.
+- **The `tournaments` row comes back too** — so a restore rewinds the phase clock and the
+  deadlines with it, and if the final results are already published it **un-publishes them** and
+  `/results` goes dark for everyone.
+
+**It is undoable.** A `pre-restore` save state is written first, inside the same transaction, and
+the confirmation afterwards names its id with the words *"if this was a mistake, restore that
+one"*. If the restore fails for any reason the whole thing rolls back and no stray save state is
+left behind.
+
+What a restore does **not** touch: accounts, the invite list, avatars, or the bet categories.
+Rolling back a bad bet import never costs you the roster — `tournament_invites` cascades off
+`tournaments` and is deliberately preserved through the restore.
+
+### Rolling one back — from a terminal, when the app is down
+
+The script is **not** retired, and it is not a legacy path. The console lives inside the app, so
+it is worthless in the one case where the app is what's broken: a bad deploy, a Vercel outage, a
+migration that half-applied. That case is why `scripts/restore-snapshot.ts` stays.
 
 ```bash
 # What can I go back to?
 node --experimental-strip-types scripts/restore-snapshot.ts --list
 
-# Go back to one. The id is printed by the import report and the Snapshot now button.
+# Go back to one. The id is printed by the import report, the Snapshot now button,
+# and every row of /admin/snapshots.
 node --experimental-strip-types scripts/restore-snapshot.ts <id> "$SUPABASE_DB_URL" --yes
 ```
 
-**This overwrites current state.** Everything written to those five tables since the snapshot
-was taken is discarded — *including wagers people placed in the meantime*. On a Friday
-afternoon that could be real money someone typed in. The script prints how old the snapshot is
-and how many rows it's about to discard before it does anything, and it refuses to run without
-`--yes`. Read those numbers.
+It prints how old the snapshot is and how many rows it's about to discard before it does
+anything, and it refuses to run without `--yes`. Read those numbers. It does **not** take a
+`pre-restore` save state — that is the console's behaviour, not the script's, so from a terminal
+take one by hand first if you want the way back.
 
-What it does **not** touch: accounts, the invite list, avatars, or the bet categories. Rolling
-back a bad bet import never costs you the roster.
+### The known limit: accounts
+
+**`public.users` is not in the payload**, and several of the five tables carry a foreign key to
+it. So a save state taken *before* an account was deleted cannot be restored into a database
+where that account is gone — the foreign keys would not hold.
+
+This is handled rather than hidden: `restore_snapshot()` checks for it up front and refuses with
+a sentence naming how many rows and which table, before anything is deleted. Nothing is lost and
+nothing is half-applied.
+
+In practice this does not come up — **accounts are not deleted in this app.** There is no delete
+control anywhere in the admin surface; revoking a member soft-stamps `revoked_at` on their
+participant row (Sprint 21) precisely because the entry fee is a pool input. Widening the payload
+to include `users` is a Sprint 11 decision to revisit **outside** a tournament week, and it was
+deliberately not done in Sprint 27.
 
 ### Checking it worked
 
@@ -225,7 +276,11 @@ If the pool isn't what you expect after a restore, the snapshot itself was taken
 you didn't mean — restore a different one; nothing is destroyed by looking.
 
 The whole round trip — snapshot, deliberately mangle a bet and a placement, restore, compare a
-checksum over all five tables — runs on every `bash scripts/local-db-verify.sh`.
+checksum over all five tables — runs on every `bash scripts/local-db-verify.sh`, **twice**: once
+through the script (`scripts/snapshot-roundtrip.ts`) and once through the RPC the console presses
+(`scripts/snapshot-restore-roundtrip.ts`), which share no code. The second also proves the admin
+gate by SQLSTATE, that the listing never returns `payload`, that the `pre-restore` save state
+holds the state from *before* the restore, and that `tournament_invites` survives.
 
 ### The schedule
 
