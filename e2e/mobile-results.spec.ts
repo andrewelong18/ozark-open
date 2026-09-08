@@ -1,13 +1,13 @@
 // The results table, populated, at phone width.
 //
-// Its own file because /results only renders a table once the tournament is
+// Its own file because the standings only render once the tournament is
 // `completed`, and getting there is a one-way door: closing every bet and
 // publishing the final unlock. The rest of the mobile suite runs against the
 // open menu, so this goes last (alphabetically after mobile-layout and
 // mobile-journey) and puts the fixture back afterwards — the same discipline
 // e2e/results-and-reveal.spec.ts follows for the desktop project.
 //
-// Worth the setup: /results is the page the weekend ends on, it is read on a
+// Worth the setup: the standings are what the weekend ends on, they are read on a
 // phone, and until this pass it was a 480px-wide grid inside a horizontal
 // scroller. An overflow check against the pre-completion empty state — which is
 // all the layout spec can reach — proves nothing about the table itself.
@@ -62,7 +62,7 @@ test("the final table fits a phone, and reads without a header row", async ({ pa
   await expect(page.getByText("Import Report")).toBeVisible()
 
   await page.goto("/admin/close")
-  const publish = page.getByRole("button", { name: "Publish final results" })
+  const publish = page.getByRole("button", { name: "Post the leaderboard" })
   await expect(publish).toBeEnabled()
   await Promise.all([
     page.waitForResponse(
@@ -74,27 +74,34 @@ test("the final table fits a phone, and reads without a header row", async ({ pa
   // --- and now the thing under test ----------------------------------------
   await signOut(page)
   await signInAs(page, ACCOUNTS.approved)
-  await page.goto("/results")
-  await expect(page.getByRole("heading", { name: "Results" })).toBeVisible()
-  await expect(page.getByText("Top Payout")).toBeVisible()
+  // Sprint 28 (#197): the standings are the dashboard now; /results redirects.
+  await page.goto("/dashboard")
+  await expect(
+    page.getByRole("heading", { name: "Final Standings" })
+  ).toBeVisible()
+  await expect(page.getByText("Biggest Winner")).toBeVisible()
 
   const overflow = await page.evaluate(() => {
     const doc = document.documentElement
     return doc.scrollWidth - doc.clientWidth
   })
-  expect(overflow, "the results table drags the page sideways").toBeLessThanOrEqual(1)
+  expect(overflow, "the standings table drags the page sideways").toBeLessThanOrEqual(1)
 
   // The header row is sm+ only, so on a phone each money value has to carry its
   // own label — otherwise the stacked line is four bare dollar amounts and
   // nobody can tell theoretical from actual. Four labels per participant row.
-  const table = page.locator("main").getByText("Avery Approved").first()
-  await expect(table).toBeVisible()
+  const rows = page.getByTestId("standings-rows")
+  await expect(rows.getByText("Avery Approved").first()).toBeVisible()
   // `visible: true` matters: the sm+ header row still exists in the DOM with
   // the same words in it, hidden. Matching it would pass while the stacked
   // labels were missing — the exact defect this asserts against.
+  //
+  // Scoped to the rows for the same reason, since Sprint 28: the mobile sort
+  // control above the table carries these same five words as visible chips, so
+  // an unscoped match would find a chip and pass with the row labels gone.
   for (const label of ["Entry", "Theo", "Payout", "P/L"]) {
     await expect(
-      page.getByText(label, { exact: true }).filter({ visible: true }).first(),
+      rows.getByText(label, { exact: true }).filter({ visible: true }).first(),
       `the ${label} column lost its label when it stacked`
     ).toBeVisible()
   }

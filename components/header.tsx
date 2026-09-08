@@ -22,39 +22,28 @@ export async function Header() {
 
   const extraItems: NavItem[] = []
   if (user) {
-    const [
-      { data, error: profileError },
-      { data: tournamentData, error: tournamentError },
-    ] = await Promise.all([
-      supabase
-        .from("users")
-        .select("display_name, avatar_url")
-        .eq("id", user.id)
-        .single(),
-      supabase
-        .from("tournaments")
-        .select("status")
-        .order("year", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ])
+    // One read now. The tournament row was fetched here only to decide whether
+    // to show the Results pill, which retired in Sprint 28 (#197) — keeping the
+    // query would put a pointless round trip on the chrome of every page.
+    const { data, error: profileError } = await supabase
+      .from("users")
+      .select("display_name, avatar_url")
+      .eq("id", user.id)
+      .single()
     // The header degrades on purpose: a failed read here must not take down
     // every page's chrome. But it logs, because a silently missing admin link
     // is indistinguishable from having lost admin (#132).
     if (profileError) {
       console.error("[header] profile read failed:", profileError.message)
     }
-    if (tournamentError) {
-      console.error("[header] tournament read failed:", tournamentError.message)
-    }
     const profile = data as {
       display_name: string
       avatar_url: string | null
     } | null
-    // Results appears only once the tournament wraps — no dead link before
-    // that (the page itself also gates on 'completed').
-    if ((tournamentData as { status: string } | null)?.status === "completed")
-      extraItems.push({ label: "Results", href: "/results" })
+    // The Results pill retired in Sprint 28 (#197): the payouts are on the
+    // dashboard now, which is the first pill and the page everyone lands on.
+    // A second pill pointing at a redirect back to it would be a loop.
+    //
     // Profile is the last pill, and the only one with a face. The label is
     // just "Profile" — the member's own name was the top-right cluster's job,
     // and a name in the nav rail would be the widest pill on the row.

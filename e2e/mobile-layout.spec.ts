@@ -93,7 +93,9 @@ const ROUTES: { path: string; as: string | null; heading?: RegExp }[] = [
   { path: "/bets", as: ACCOUNTS.approved, heading: /Bet Menu/ },
   { path: "/my-bets", as: ACCOUNTS.approved, heading: /My Bets/ },
   { path: "/leaderboard", as: ACCOUNTS.approved, heading: /Leaderboard/ },
-  { path: "/results", as: ACCOUNTS.approved },
+  // /results is a redirect to /dashboard since Sprint 28 (#197), and
+  // /dashboard is already two rows above — keeping the entry would measure the
+  // same page twice.
   { path: "/profile", as: ACCOUNTS.approved },
   { path: "/onboarding", as: ACCOUNTS.newbie },
   { path: "/admin/people", as: ACCOUNTS.admin },

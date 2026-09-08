@@ -160,7 +160,12 @@ export function StandingsTable({
       </div>
 
       <Card className="gap-0 p-0">
-        <div>
+        {/* Named so tests can scope to the ROWS. The mobile sort chips above
+            carry the same five words ("Entry", "Theo", "Payout", "P/L"), and an
+            unscoped text match would find a chip and pass while the stacked
+            per-row labels were missing — which is the exact defect
+            e2e/mobile-results.spec.ts exists to catch. */}
+        <div data-testid="standings-rows">
           {/* Six columns on a laptop, stacked on a phone — the same
               `sm:contents` move as the people console and the leaderboard.
               Every heading is a button; `#` is the way back to the default. */}
