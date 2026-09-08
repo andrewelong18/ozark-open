@@ -38,32 +38,43 @@
 -- (Sprint 21 / #95 — it used to do that in a CTE alongside the INSERT, where
 -- the delete is invisible to the insert's snapshot, so a re-run collided on
 -- bet_placements_user_id_pick_id_key. Phase 2 wagers are never touched.)
+--
+-- ── WHY THE SLATE IS A TEMP TABLE AND NOT A CTE (#189) ─────────────────────
+--
+-- The cleanup used to match `u.email LIKE '%@dryrun.ozark.test'`, which is far
+-- wider than the eight bettors this file inserts: it also caught the four
+-- HAND-DRIVEN accounts, including newbie@dryrun.ozark.test — Mike Yenzer. So
+-- running this after Act 4 silently deleted wagers a human had just placed
+-- through the UI. No error, no row count anyone reads, and the verify query at
+-- the bottom just shows a smaller number than expected. It bit the Sept 4 dry
+-- run for real.
+--
+-- It was invisible in July because newbie@ had no participant row at Act 3.6
+-- and so could not hold a wager. The Sept 4 runbook onboards it as Mike
+-- Yenzer, and 25-phase1-handdriven-fallback.sql already assumes that — so the
+-- two files disagreed about whether the account is bulk-seeded or hand-driven.
+--
+-- Materialising the slate first means the DELETE and the INSERT read the SAME
+-- list of bettors and cannot drift apart again. It stays its own statement,
+-- which is what #95 was about. ON COMMIT DROP keeps re-runs clean.
+--
+-- scripts/dry-run-verify.sh structurally cannot catch a regression here: it
+-- runs against a fresh database with no hand-placed wagers, which is precisely
+-- the case where an over-wide predicate is harmless.
 
 BEGIN;
 
--- Step 1: clear, as its own statement so the INSERT below can see it happen.
-DELETE FROM public.bet_placements p
- USING public.bet_picks pk, public.bets bt, public.users u
- WHERE p.pick_id = pk.id
-   AND pk.bet_id = bt.id
-   AND bt.phase = 1
-   AND u.id = p.user_id
-   AND (u.email LIKE '%@dryrun.ozark.test' OR u.email = 'andrewelong18@gmail.com');
-
--- Step 2: seed.
-WITH bettor AS (
-  SELECT u.id AS user_id, u.email
-  FROM public.users u
-  WHERE u.email LIKE '%@dryrun.ozark.test' OR u.email = 'andrewelong18@gmail.com'
-),
+-- Step 0: the slate, materialised — the single source of truth for both the
+-- DELETE and the INSERT below.
 -- (email, sheet_pick_id, amount). Cross-checked against lib/validation.ts:
 -- whole dollars ≥ $1 · amount ≤ maxSingleBet(entry) · at most 10 picks in a
 -- phase · at least 5 picks ACROSS BOTH PHASES, due only by Phase 2 close
 -- (Devin lands there via Phase 2 — see 30-phase2-placements.sql) · self-pick
 -- total ≤ maxSelfBet(entry) · running total ≤ entry fee · one pick per
 -- Match/Group Match · never on an opponent.
-slate (email, sheet_pick_id, amount) AS (
-  VALUES
+CREATE TEMP TABLE slate (email text, sheet_pick_id int, amount int) ON COMMIT DROP;
+
+INSERT INTO slate (email, sheet_pick_id, amount) VALUES
     -- Garrett Klenke · $20 entry · max single $10 · self cap $5
     ('garrett.klenke@dryrun.ozark.test',  13, 3),
     ('garrett.klenke@dryrun.ozark.test',  24, 2),   -- self
@@ -120,7 +131,23 @@ slate (email, sheet_pick_id, amount) AS (
     ('andrewelong18@gmail.com',           24, 3),
     ('andrewelong18@gmail.com',           39, 3),
     ('andrewelong18@gmail.com',           46, 2),
-    ('andrewelong18@gmail.com',           49, 2)    -- $14 of $20
+    ('andrewelong18@gmail.com',           49, 2);   -- $14 of $20
+
+-- Step 1: clear, as its own statement so the INSERT below can see it happen,
+-- and scoped to exactly the bettors in the slate — never the hand-driven four.
+DELETE FROM public.bet_placements p
+ USING public.bet_picks pk, public.bets bt, public.users u
+ WHERE p.pick_id = pk.id
+   AND pk.bet_id = bt.id
+   AND bt.phase = 1
+   AND u.id = p.user_id
+   AND u.email IN (SELECT email FROM slate);
+
+-- Step 2: seed.
+WITH bettor AS (
+  SELECT u.id AS user_id, u.email
+  FROM public.users u
+  WHERE u.email IN (SELECT email FROM slate)
 ),
 resolved AS (
   SELECT
