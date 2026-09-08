@@ -77,7 +77,7 @@ this is what you'll have to compare against.
       pausing is off, but confirm it before moving on. Full context in
       [`DATA_SAFETY.md`](DATA_SAFETY.md) §The schedule.
 
-- [ ] **Set a reminder to downgrade in early October**, once `/results` is final and you've run the
+- [ ] **Set a reminder to downgrade in early October**, once the standings are final and you've run the
       `after-payouts` export. One month is the decision; twelve is what happens if nobody writes it
       down.
 
@@ -262,24 +262,34 @@ so the project can pause and the automatic save states can stop.
 **Saturday night** — the end:
 
 - [ ] **Upload #4.** Every remaining result, every bet `closed`.
-- [ ] **Check `/admin/close` says nothing is pending.** The *Publish final results* button stays
-      disabled while any pick has no result — deliberately. Publishing early splits the pool across
-      only the settled wagers, so every payout reads too high and **nothing on the page looks
+- [ ] **Read the import report.** Since Sprint 28 the final upload tells you whether it *was* the
+      final upload. If every pick has a verdict and every bet is closed, the report ends with
+      **Post the leaderboard**. If not, it lists exactly what is still unresolved — that list is
+      what to go fix in the sheet, and it is the same check `/admin/close` runs.
+- [ ] **Post the leaderboard.** From the import report, or `/admin/close` → *Post the leaderboard*.
+      This turns **every member's dashboard** into the final standings: the pool total, entry, bets
+      placed, place-bets button, house rules, alerts and the countdown all go.
+      The button refuses while any pick has no result — deliberately. Posting early splits the pool
+      across only the settled wagers, so every payout reads too high and **nothing on the page looks
       wrong** (PRD §8.1 / #108). Do not work around it; fix the sheet and re-upload.
-- [ ] **Publish final results.** `/admin/close` → *Publish final results*. This is what reveals
-      `/results` to everyone.
-- [ ] **Check the money before you announce it.** `/results`:
+- [ ] **Check the money before you announce it.** On your own dashboard:
       - [ ] No *Provisional* banner.
       - [ ] `Pool $X` = entry fees − voided stakes.
-      - [ ] The winner spotlight is showing.
+      - [ ] The *Biggest Winner* spotlight is showing.
+      - [ ] Click a column heading and confirm the table re-sorts. The gold row must stay on the
+            winner, not jump to whoever is on top.
+- [ ] **If it went up too early, take it back down.** `/admin/close` → *Take it back down*, two
+      taps. Nothing is deleted — every wager, result and entry fee stays exactly as it is, and
+      posting again brings back the same numbers. Fix the sheet, re-upload, post again.
 - [ ] **📦 Run the final database export.**
       ```bash
       bash scripts/db-export.sh "$SUPABASE_DB_URL" after-payouts
       ```
       `pending_picks` must be **0** in the manifest. This one is the permanent record — copy it
       somewhere that isn't your laptop. [`DATA_SAFETY.md`](DATA_SAFETY.md).
-- [ ] **Settle up on Venmo.** The app never touched payments and never will (PRD §10); `/results`
-      is the number to pay against.
+- [ ] **Settle up on Venmo.** The app never touched payments and never will (PRD §10); the
+      standings on the dashboard are the number to pay against, and the *Copy* button under them
+      puts the whole settlement in the group thread.
 
 ---
 

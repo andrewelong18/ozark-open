@@ -23,7 +23,7 @@ Everything else — tournament scoring, skins, the leaderboard math, and **bet r
 
 | Built (code complete) | Up next |
 |---|---|
-| Auth + tournament/participant setup (**verified in prod**); Sprints 1–7: bet/pick schema (ADR 0001), spreadsheet ingestion (`/admin/import`), placements + validation, My Bets + compliance, closed-bet views with everyone's placements + result badges, the admin runbook, payouts (theoretical + final: `placement_payouts_view`, `/admin/view`, `/results`) — all unit-tested and built locally, **full prod SQL chain applied Jul 18, 2026** (#12 → #22 → #28 → #34); in-browser verification pending (#24/#26/#31/#35) plus admin promotion (#15) | Sprints [26–28](docs/sprints/): the phase-first bet menu, the admin save-state console, and the closing leaderboard — cut Sept 7, 2026 from a second dry run with Pat. **Sprint 9 closed Sept 7, 2026**: the polish half shipped Aug 9, and the group dry run was cut rather than run (two full-lifecycle sessions with Pat against production, the Playwright suite and the 32-member pool simulation stood in for it — see [`docs/sprints/sprint-9.md`](docs/sprints/sprint-9.md) § Closed). Sprint 8's leaderboard mirror is built and deployed but stays unlinked, and its Google service account is still unconfigured (#66) |
+| Auth + tournament/participant setup (**verified in prod**); Sprints 1–7: bet/pick schema (ADR 0001), spreadsheet ingestion (`/admin/import`), placements + validation, My Bets + compliance, closed-bet views with everyone's placements + result badges, the admin runbook, payouts (theoretical + final: `placement_payouts_view`, `/admin/view`, the dashboard's final standings) — all unit-tested and built locally, **full prod SQL chain applied Jul 18, 2026** (#12 → #22 → #28 → #34); in-browser verification pending (#24/#26/#31/#35) plus admin promotion (#15) | Sprints [26–28](docs/sprints/): the phase-first bet menu, the admin save-state console, and the closing leaderboard — cut Sept 7, 2026 from a second dry run with Pat. **Sprint 9 closed Sept 7, 2026**: the polish half shipped Aug 9, and the group dry run was cut rather than run (two full-lifecycle sessions with Pat against production, the Playwright suite and the 32-member pool simulation stood in for it — see [`docs/sprints/sprint-9.md`](docs/sprints/sprint-9.md) § Closed). Sprint 8's leaderboard mirror is built and deployed but stays unlinked, and its Google service account is still unconfigured (#66) |
 
 `docs/ROADMAP.md` is the live sprint tracker — status table, numbered sprints with checkboxes, blockers, and target dates. All product decisions are settled and logged in `docs/PRD.md` §12 and `docs/adr/0001-bet-pick-architecture.md`; there are no open spec questions.
 
@@ -193,11 +193,12 @@ No deployments, no code, no Git — the app re-renders on the next page load.
 1. Flip the Phase 2 rows from `hidden` to `open` — updating their odds in the same pass is fine and expected.
 2. Re-upload. Hidden bets were never visible to participants; they appear for the first time now.
 
-### Recipe: publish the final results (Saturday night)
+### Recipe: post the leaderboard (Saturday night)
 
 1. Upload the final sheet with every bet `closed` and every pick carrying a verdict.
-2. On **`/admin/close`**, press **Publish final results**. That's the flip that reveals `/results` to everyone.
-3. **It will refuse if anything is unresolved, and that refusal is the point.** The payout rollup *skips* a pending placement rather than scoring it zero, so publishing early divides the whole pool across only the settled wagers: every payout comes out too high, every number looks plausible, and the totals still reconcile against the pool. There is nothing on the page that would look wrong. Finish the uploads, then publish.
+2. **The import report offers the post** when nothing is left unresolved, and lists what to fix in the sheet when something is. The same button is on **`/admin/close`** as **Post the leaderboard**.
+3. That's the flip that turns **every member's dashboard** into the final standings — the pool total, entry, bets placed, place-bets button, house rules, alerts and countdown are replaced by the standings. `/results` is a redirect to it. If it went up too early, `/admin/close` → *Take it back down*; nothing is deleted and posting again brings back the same numbers.
+4. **It will refuse if anything is unresolved, and that refusal is the point.** The payout rollup *skips* a pending placement rather than scoring it zero, so posting early divides the whole pool across only the settled wagers: every payout comes out too high, every number looks plausible, and the totals still reconcile against the pool. There is nothing on the page that would look wrong. Finish the uploads, then post.
 
 ### The tournament itinerary
 
