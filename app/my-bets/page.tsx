@@ -50,7 +50,9 @@ export default async function MyBetsPage() {
   const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     .select(`id, name, ${TOURNAMENT_RULE_COLUMNS}`)
-    .in("status", ["upcoming", "active"])
+    // 'completed' included (Sprint 28 / #197) — people re-read their own card
+    // all night once the payouts are up, checking their wagers against it.
+    .in("status", ["upcoming", "active", "completed"])
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()

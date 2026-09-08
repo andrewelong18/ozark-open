@@ -86,21 +86,45 @@ test("every line reconciles: in − back equals the stated net", () => {
   }
 })
 
-test("the order is buildResultsTable's, not a re-sort", () => {
-  // The text and the page must agree — someone reading both would notice.
+test("the order is profit/loss descending — the standings' order", () => {
+  // The text and the table must agree: this block is pasted from directly
+  // underneath the standings, and someone reading both would notice.
+  //
+  // The fixture has to be able to TELL those orders apart, or it asserts
+  // nothing. Equal entry fees and no voids make payout order and P/L order the
+  // same list, which is what the previous version of this test used. So:
+  // varying entry fees, and one void.
+  //
+  //   Σ entry 100, Σ refunded 30 → pool 70;  Σ theoretical 360
+  //   Alice  entry 20, theo 100           → payout 19.44, P/L  −0.56
+  //   Bob    entry 60, theo 200           → payout 38.89, P/L −21.11
+  //   Carol  entry 20, theo  60, void 30  → payout 41.67, P/L +21.67
   const table = buildResultsTable(
     [
-      participant("a", "Small", 20),
-      participant("b", "Biggest", 20),
-      participant("c", "Middle", 20),
+      participant("a", "Alice Ace", 20),
+      participant("b", "Bob Birdie", 60),
+      participant("c", "Carol Chip", 20),
     ],
-    [placement("a", 10), placement("b", 500), placement("c", 100)]
+    [
+      placement("a", 100),
+      placement("b", 200),
+      placement("c", 60),
+      placement("c", 0, 30),
+    ]
   )
   const text = buildSettlementSummary(table, "T")
 
   const names = [...text.matchAll(/^\d+\. (.+?) —/gm)].map((m) => m[1])
-  assert.deepEqual(names, table.rows.map((r) => r.display_name))
-  assert.deepEqual(names, ["Biggest", "Middle", "Small"])
+  assert.deepEqual(names, ["Carol Chip", "Alice Ace", "Bob Birdie"])
+
+  // buildResultsTable's own order is `actual` descending, which serves
+  // /admin/view. The pasted text follows the STANDINGS, so the two differ —
+  // and if this assertion ever fails because they've converged, the test above
+  // has stopped proving anything.
+  assert.deepEqual(
+    table.rows.map((r) => r.display_name),
+    ["Bob Birdie", "Alice Ace", "Carol Chip"]
+  )
 })
 
 // ---------------------------------------------------------------------------

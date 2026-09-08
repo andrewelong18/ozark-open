@@ -317,8 +317,8 @@ function ConfirmPanel({
         <li>
           <span className="font-semibold">The tournament row comes back too</span>{" "}
           — so this rewinds the phase clock and the deadlines with it, and if the
-          final results are already published it un-publishes them and /results
-          goes dark for everyone.
+          leaderboard is already posted it takes it down, and everyone&rsquo;s
+          dashboard goes back to the betting console.
         </li>
         <li>
           A <span className="font-semibold">pre-restore</span> save state is taken
