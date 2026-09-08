@@ -288,8 +288,9 @@ so the project can pause and the automatic save states can stop.
       `pending_picks` must be **0** in the manifest. This one is the permanent record — copy it
       somewhere that isn't your laptop. [`DATA_SAFETY.md`](DATA_SAFETY.md).
 - [ ] **Settle up on Venmo.** The app never touched payments and never will (PRD §10); the
-      standings on the dashboard are the number to pay against, and the *Copy* button under them
-      puts the whole settlement in the group thread.
+      standings on the dashboard are the number to pay against. There is no *Copy* button under
+      them any more (PRD §12 A22) — every member sees the same ranked table on the page they
+      land on, so send them the link rather than a pasted block.
 
 ---
 

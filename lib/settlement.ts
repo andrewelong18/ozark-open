@@ -45,6 +45,15 @@ function signedNet(value: number): string {
 /**
  * Build the copyable summary.
  *
+ * **NOT CURRENTLY RENDERED ANYWHERE** (Sept 8, 2026 / PRD §12 A22). The
+ * member-facing "Send the payouts" card came off the dashboard once the
+ * standings themselves became the channel. This function and its tests are kept
+ * deliberately rather than by accident: they encode two money rules the project
+ * has already paid for once — `actual + refunded` (#157) and the PROVISIONAL
+ * caveat living inside the pasted string rather than on the page around it
+ * (#108). Re-homing the text somewhere admin-only starts here; if that never
+ * happens, delete this and its suite together.
+ *
  * TWO things here are not cosmetic.
  *
  * 1. **What "gets back" means.** A voided stake is carved out of the pool

@@ -20,7 +20,7 @@ import {
   type PayoutViewQueryRow,
 } from "@/lib/payouts"
 import { standingsLeader } from "@/lib/standings"
-import { buildCollectionSummary, buildSettlementSummary } from "@/lib/settlement"
+import { buildCollectionSummary } from "@/lib/settlement"
 import { collectionStanding, type CollectionParticipant } from "@/lib/collection"
 import { viewerIsAdmin } from "@/lib/admin-gate"
 
@@ -298,17 +298,17 @@ export async function FinalStandings({
               viewerUserId={viewerUserId}
             />
 
-            {/* The table is what you read; this is what you send (#151
-                follow-up). Below it deliberately — the standings answer "what
-                did I win", which is why anyone opened the page. */}
-            <SettlementSummary
-              text={buildSettlementSummary(table, tournamentName)}
-            />
+            {/* The member-facing "Send the payouts" copy block is GONE (Sept 8,
+                2026). It existed to get the numbers to people when the numbers
+                lived on /results, a page nobody had to visit; the standings are
+                the dashboard now, so the group-thread paste was retelling ~32
+                people what they were already looking at. lib/settlement.ts
+                keeps buildSettlementSummary() and its tests — see the issue
+                filed with this change.
 
-            {/* Admin only, and a SEPARATE block rather than part of the text
-                above — this page is member-visible and that text sits behind a
-                Copy button aimed at the group thread. See the note on
-                buildCollectionSummary(). */}
+                What survives is the ADMIN block below: it answers a different
+                question ("who still owes"), it is gated on viewerIsAdmin(), and
+                it was always a separate string for exactly that reason. */}
             {collection && (
               <SettlementSummary
                 text={buildCollectionSummary(collection, tournamentName)}
