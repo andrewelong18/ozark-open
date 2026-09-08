@@ -146,12 +146,11 @@ test("results publish, and the pari-mutuel split renders", async ({ page }) => {
 
   // The pool is the sum of every non-revoked entry fee, less voided stakes.
   //
-  // `exact` is load-bearing: the page says "Pool $N" twice — once in the gold
-  // header badge, once inside the copyable settlement summary, whose line reads
-  // "Pool $N · 3 entries". A substring match hits both and fails strict mode.
-  // This assertion predates the settlement summary (11f200e vs e9a4c7d, both
-  // Aug 9 2026) and has been failing ever since; nobody noticed because the e2e
-  // job is workflow_dispatch, not a merge gate. Exact-matching pins it to the
+  // `exact` used to be load-bearing: the page said "Pool $N" twice — once in
+  // the gold header badge, once inside the copyable settlement summary, whose
+  // line read "Pool $N · 3 entries" — so a substring match hit both and failed
+  // strict mode. That summary was removed on Sept 8, 2026, leaving the badge as
+  // the only "Pool $N" on the page. `exact` stays: it pins the assertion to the
   // badge, which is the element this test is actually about.
   const pool = await sumEntryFees()
   await expect(page.getByText(`Pool $${pool}`, { exact: true })).toBeVisible()
