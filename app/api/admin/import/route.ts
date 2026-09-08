@@ -76,6 +76,11 @@ export async function POST(request: Request) {
     // The clock columns ride along so the stale-open warning can compare the
     // sheet against the phase deadlines, not just against itself (#122).
     .select(`id, ${TOURNAMENT_CLOCK_COLUMNS}`)
+    // DELIBERATELY not widened to 'completed' when the dashboard swap was
+    // (Sprint 28 / #197). Every other tournament read in the app took
+    // 'completed' so the app keeps working after the book closes; this one
+    // must not, because importing into a settled tournament would rewrite
+    // results the payouts have already been split from. Unpost first.
     .in("status", ["upcoming", "active"])
     .order("year", { ascending: false })
     .limit(1)

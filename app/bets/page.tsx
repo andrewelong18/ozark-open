@@ -155,7 +155,11 @@ export default async function BetsPage({
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournaments")
     .select(`id, ${TOURNAMENT_RULE_COLUMNS}, ${TOURNAMENT_CLOCK_COLUMNS}`)
-    .in("status", ["upcoming", "active"])
+    // 'completed' included (Sprint 28 / #197): the menu is READ after the book
+    // closes, at the exact moment people are arguing about how a bet landed.
+    // Losing the closed-bet reveal then would be the regression, not the fix —
+    // every bet is closed by now, so nothing here can be wagered on.
+    .in("status", ["upcoming", "active", "completed"])
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
