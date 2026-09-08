@@ -15,12 +15,13 @@
 //
 // This adds NO payout math. Every number comes from buildResultsTable(); this
 // module only decides which of them a human needs to see and how to word it.
-// If a figure here disagrees with /results, lib/payouts.ts is the one that's
-// right and this file is the bug.
+// If a figure here disagrees with the standings on the dashboard,
+// lib/payouts.ts is the one that's right and this file is the bug.
 
 import { roundCents, type ResultsTable,
   cashReturned,
 } from "./payouts.ts"
+import { DEFAULT_SORT, sortStandings } from "./standings.ts"
 import type { CollectionStanding } from "./collection.ts"
 
 /** U+2212 MINUS SIGN, matching MoneyDisplay rather than a hyphen. Reads as a
@@ -48,17 +49,15 @@ function signedNet(value: number): string {
  *
  * 1. **What "gets back" means.** A voided stake is carved out of the pool
  *    (pool = Σ entry fees − Σ voided stakes) and returned to the bettor, so the
- *    cash they actually receive is `actual + refunded`, not `actual`. The
- *    /results table shows `actual` under "Payout" and never shows `refunded` at
- *    all — on screen that's a legibility wrinkle, but in a text that people PAY
- *    FROM it would be a line that doesn't add up:
+ *    cash they actually receive is `actual + refunded`, not `actual`. A line
+ *    printing bare `actual` doesn't add up in a text that people PAY FROM:
  *
  *        $20 in → $10.00  (−$4.00)      ← where did $6 go?
  *
- *    So this prints the amount they actually get back, which makes every line
- *    self-consistent, and names the refund explicitly on the rows that have one
- *    so the difference from the on-screen column is explained rather than
- *    discovered by someone doing arithmetic in a group text.
+ *    So this prints the amount they actually get back, and names the refund
+ *    explicitly on the rows that have one. The Payout COLUMN on the standings
+ *    shows the same figure through the same cashReturned() helper — it didn't
+ *    always, and the month it didn't is #157.
  *
  * 2. **A provisional split must not travel.** `pending > 0` means the
  *    tournament was finalized with unresolved picks, so every share is split
@@ -99,10 +98,17 @@ export function buildSettlementSummary(
   )
   lines.push("")
 
-  // Order is buildResultsTable's — biggest payout first, ties by name. NOT
-  // re-sorted here: the text and the page have to agree, and someone reading
-  // both would notice immediately.
-  table.rows.forEach((row, i) => {
+  // Profit/loss descending — the standings' order, through the standings' own
+  // comparator, because the text and the table have to agree and someone
+  // reading both would notice immediately.
+  //
+  // That rule is older than this line; what changed in Sprint 28 is which
+  // order satisfies it. This used to take buildResultsTable's own order
+  // (biggest payout first) untouched, which agreed with /results. /results is
+  // now a redirect, the standings live on the dashboard ranked by P/L — Pat's
+  // axis, "who won the most money" — and this block is pasted from directly
+  // underneath them. Entry fees vary, so the two orders genuinely differ.
+  sortStandings(table.rows, DEFAULT_SORT).forEach((row, i) => {
     const back = cashReturned(row)
     const parts = [
       `${i + 1}. ${row.display_name} — ${money(row.entry_fee)} in → ${money(back)} back (${signedNet(row.profit_loss)})`,

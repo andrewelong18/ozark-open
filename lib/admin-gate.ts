@@ -110,8 +110,9 @@ export async function requireAdminRoute(): Promise<
  * Deliberately separate from `requireAdminPage()` rather than a refactor of
  * it. The hard gate's whole job is to throw, and `app/bets/page.tsx:110`
  * records why it's used "rather than a soft check" there. This is the other
- * shape, and it has exactly one caller today: `/results` is member-visible, so
- * the entry-collection block on it has to be conditional rather than gated.
+ * shape, and it has exactly one caller today: the final standings on the
+ * dashboard are member-visible, so the entry-collection block on them has to be
+ * conditional rather than gated.
  *
  * FAILS CLOSED, like both hard gates: a lookup that errors returns false, so
  * the extra block simply doesn't render. That is the safe direction here for
