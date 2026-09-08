@@ -69,7 +69,8 @@ run_sql -c "
 echo "==> stub Supabase storage schema"
 run_sql -c "
   CREATE SCHEMA storage;
-  CREATE TABLE storage.buckets (id text PRIMARY KEY, name text, public boolean DEFAULT false);
+  CREATE TABLE storage.buckets (id text PRIMARY KEY, name text, public boolean DEFAULT false,
+                                file_size_limit bigint, allowed_mime_types text[]);
   CREATE TABLE storage.objects (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), bucket_id text, name text);
   ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
   CREATE FUNCTION storage.foldername(name text) RETURNS text[] LANGUAGE sql AS 'SELECT string_to_array(name, ''/'')';"

@@ -4,7 +4,7 @@ import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/client"
-import { uploadAvatar } from "@/lib/avatar"
+import { AVATAR_MAX_BYTES, AVATAR_MIME_TYPES, uploadAvatar } from "@/lib/avatar"
 import { Avatar } from "@/components/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -12,8 +12,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NICKNAME_MAX } from "@/lib/profile"
 
-const ACCEPTED = ["image/jpeg", "image/png", "image/webp", "image/gif"]
-const MAX_BYTES = 2 * 1024 * 1024 // 2 MB — plenty for an avatar.
+// Both from lib/avatar.ts, which the bucket's own limits mirror in SQL (#144)
+// — a local copy here is how the client and the bucket drift apart.
+const ACCEPTED: readonly string[] = AVATAR_MIME_TYPES
+const MAX_BYTES = AVATAR_MAX_BYTES
 
 export function ProfileForm({
   userId,
