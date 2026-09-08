@@ -18,6 +18,7 @@ export function PlayerChip({
   size = "sm",
   hideAvatar = false,
   tone = "default",
+  underline = false,
   className,
   nameClassName,
   nicknameClassName,
@@ -32,6 +33,11 @@ export function PlayerChip({
   hideAvatar?: boolean
   /** `onDark` tunes the hover underline for use on the indigo surface. */
   tone?: "default" | "onDark"
+  /** Underline the name always, not only on hover — the same affordance
+   *  PlayerNameLink carries on the bet menu and the activity feed. A hover
+   *  underline says "link" to a mouse and nothing at all to a thumb, which is
+   *  the device the standings are read on. */
+  underline?: boolean
   className?: string
   nameClassName?: string
   nicknameClassName?: string
@@ -56,7 +62,8 @@ export function PlayerChip({
           nickname={nickname}
           nicknameClassName={nicknameClassName}
           className={cn(
-            "underline-offset-2 group-hover/chip:underline",
+            "underline-offset-2",
+            underline ? "underline" : "group-hover/chip:underline",
             tone === "onDark" ? "decoration-white/50" : "decoration-indigo-300"
           )}
         />

@@ -222,11 +222,17 @@ export function StandingsTable({
                   {i + 1}
                 </span>
                 <div className="flex min-w-0 items-center gap-1.5">
+                  {/* Face + name + link to the profile, one tap target — the
+                      same treatment every other name in the app carries (the
+                      bet menu's pick labels, the reveal list, the activity
+                      feed). `underline` because a hover-only affordance is
+                      invisible on a phone, and this table is read on one. */}
                   <PlayerChip
                     userId={row.user_id}
                     displayName={row.display_name}
                     nickname={row.nickname}
                     avatarUrl={row.avatar_url}
+                    underline
                     className="min-w-0"
                     nameClassName="text-sm font-semibold text-text-strong"
                   />

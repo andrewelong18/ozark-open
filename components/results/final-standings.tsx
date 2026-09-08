@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Avatar } from "@/components/avatar"
 import { PlayerChip } from "@/components/player/player-chip"
 import { EmptyState } from "@/components/modules/empty-state"
 import { LoadError } from "@/components/modules/load-error"
@@ -239,31 +238,35 @@ export async function FinalStandings({
                 with entry fees varying that is not the same person as the
                 biggest payout. */}
             {table.pending === 0 && winner && (
-              <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-inverse p-5 shadow-md">
-                <div className="flex min-w-0 items-center gap-3">
-                  <Avatar
-                    src={winner.avatar_url}
-                    name={winner.display_name}
-                    size="md"
-                  />
-                  <div className="min-w-0">
-                    <div className="text-[11px] font-bold tracking-wider text-gold-300 uppercase">
-                      Biggest Winner
-                    </div>
-                    <div className="mt-0.5">
-                      <PlayerChip
-                        userId={winner.user_id}
-                        displayName={winner.display_name}
-                        nickname={winner.nickname}
-                        hideAvatar
-                        tone="onDark"
-                        nameClassName="font-heading text-2xl leading-tight text-white"
-                        nicknameClassName="text-gold-300"
-                      />
-                    </div>
+              // STACKED ON A PHONE, side by side from `sm` up. Side by side at
+              // every width is what shipped, and at 390px the winner's name —
+              // Azalea, 2xl, glyphs that overhang their box — ran straight into
+              // the payout beside it. The name is the widest thing on this card
+              // and the money is the second widest; there is no arrangement of
+              // the two on one line at that width that isn't a collision.
+              <div className="flex flex-col gap-3 rounded-xl bg-surface-inverse p-5 shadow-md sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold tracking-wider text-gold-300 uppercase">
+                    Biggest Winner
                   </div>
+                  {/* The face is INSIDE the link now. It used to sit beside the
+                      chip as a bare <Avatar>, so the one element on the card
+                      that most looks like a profile picture was the one part of
+                      it you couldn't tap. */}
+                  <PlayerChip
+                    userId={winner.user_id}
+                    displayName={winner.display_name}
+                    nickname={winner.nickname}
+                    avatarUrl={winner.avatar_url}
+                    size="md"
+                    tone="onDark"
+                    underline
+                    className="mt-1 max-w-full"
+                    nameClassName="font-heading text-xl leading-tight text-white sm:text-2xl"
+                    nicknameClassName="text-gold-300"
+                  />
                 </div>
-                <div className="text-right">
+                <div className="flex shrink-0 items-baseline gap-2 sm:flex-col sm:items-end sm:gap-0.5">
                   <MoneyDisplay
                     // The same figure as their Payout cell below. Showing
                     // `actual` here while the row shows actual + refunded would
@@ -273,15 +276,13 @@ export async function FinalStandings({
                     size="xl"
                     className="text-gold-400"
                   />
-                  <div className="mt-0.5">
-                    <MoneyDisplay
-                      value={winner.profit_loss}
-                      cents
-                      pl
-                      onDark
-                      size="sm"
-                    />
-                  </div>
+                  <MoneyDisplay
+                    value={winner.profit_loss}
+                    cents
+                    pl
+                    onDark
+                    size="sm"
+                  />
                 </div>
               </div>
             )}
