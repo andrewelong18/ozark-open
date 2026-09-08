@@ -1,6 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import { useRef, useState } from "react"
+import { SnapshotButton } from "@/components/admin/snapshot-button"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
@@ -12,76 +14,6 @@ type ImportReport = {
   /** Sprint 11: the save state taken automatically just before this upload
    * applied. Optional only for defensiveness — the route always sends it. */
   snapshotId?: string | null
-}
-
-// Sprint 11: take a save state on demand. Sits above the upload because that's
-// the order you want it in — snapshot, then do the risky thing — even though
-// the import now takes its own snapshot automatically. This button is for the
-// OTHER risky moments: a Studio edit, a bulk approval, anything about to be
-// done by hand.
-function SnapshotButton() {
-  const [busy, setBusy] = useState(false)
-  const [taken, setTaken] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  async function snapshot() {
-    setBusy(true)
-    setError(null)
-    setTaken(null)
-    try {
-      const res = await fetch("/api/admin/snapshot", { method: "POST" })
-      const json = await res.json().catch(() => null)
-      if (!res.ok) {
-        setError(json?.error ?? `Snapshot failed (${res.status})`)
-        return
-      }
-      setTaken(json?.id ?? null)
-    } catch {
-      setError("Snapshot failed — check your connection and try again.")
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-3.5">
-        <div>
-          <div className="font-heading text-lg text-text-strong">Save state</div>
-          <p className="mt-0.5 text-sm text-text-muted">
-            Snapshots the bets, picks, wagers, participants and tournament row
-            as they are right now. Take one before editing anything by hand.
-            Imports snapshot themselves.
-          </p>
-        </div>
-        <Button type="button" variant="outline" onClick={snapshot} disabled={busy}>
-          {busy ? "Taking snapshot…" : "Snapshot now"}
-        </Button>
-        {taken && <SnapshotTaken id={taken} />}
-        {error && <p className="text-sm font-medium text-loss-strong">{error}</p>}
-      </CardContent>
-    </Card>
-  )
-}
-
-// The id is the whole point of showing anything: it's the argument to
-// scripts/restore-snapshot.ts, and it's unguessable, so an admin who doesn't
-// copy it now has to go find it in the database later.
-function SnapshotTaken({ id }: { id: string }) {
-  return (
-    <div className="rounded-lg border border-win-border bg-win-surface p-3">
-      <div className="text-sm font-semibold text-win-strong">
-        ✓ Snapshot taken
-      </div>
-      <p className="mt-1 text-xs break-all text-text-muted">
-        To roll back to this exact state:
-        <br />
-        <code className="tabular">
-          node --experimental-strip-types scripts/restore-snapshot.ts {id} --yes
-        </code>
-      </p>
-    </div>
-  )
 }
 
 export function ImportForm() {
@@ -246,13 +178,19 @@ function ImportReportCard({ report }: { report: ImportReport }) {
             </div>
             <p className="mt-1 text-xs text-text-muted">
               A save state was taken before this upload applied. If the sheet
-              was wrong, roll the whole menu back to how it was a moment ago:
+              was wrong, roll the whole menu back to how it was a moment ago
+              from{" "}
+              <Link
+                href="/admin/snapshots"
+                className="font-semibold text-indigo-700 underline"
+              >
+                Save States &amp; Undo
+              </Link>
+              {" "}— it&rsquo;s the newest <span className="font-semibold">pre-import</span>{" "}
+              one:
             </p>
             <p className="mt-1.5 text-xs break-all text-text-muted">
-              <code className="tabular">
-                node --experimental-strip-types scripts/restore-snapshot.ts{" "}
-                {report.snapshotId} --yes
-              </code>
+              <code className="tabular">{report.snapshotId}</code>
             </p>
           </div>
         )}
