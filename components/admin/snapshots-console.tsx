@@ -321,8 +321,8 @@ function ConfirmPanel({
           dashboard goes back to the betting console.
         </li>
         <li>
-          A <span className="font-semibold">pre-restore</span> save state is taken
-          first, so this is undoable. Accounts, invites and avatars aren&rsquo;t
+          A <span className="font-semibold">pre-restore</span>{" "}
+          save state is taken first, so this is undoable. Accounts, invites and avatars aren&rsquo;t
           touched.
         </li>
       </ul>
@@ -393,8 +393,8 @@ function RestoreDone({ manifest }: { manifest: RestoreManifest }) {
       <p className="mt-2.5 text-xs text-text-body">
         A save state of what was here a moment ago was taken first —{" "}
         <span className="font-semibold">if this was a mistake, restore that one.</span>{" "}
-        It&rsquo;s the newest <span className="font-semibold">pre-restore</span> row
-        in the list below:
+        It&rsquo;s the newest <span className="font-semibold">pre-restore</span>{" "}
+        row in the list below:
       </p>
       <p className="mt-1 text-xs break-all text-text-muted">
         <code className="tabular">{manifest.pre_restore_snapshot}</code>

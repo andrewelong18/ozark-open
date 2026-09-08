@@ -180,7 +180,7 @@ export default async function AdminClosePage() {
           Close &amp; settle
         </h1>
         <p className="mt-0.5 text-sm text-text-muted">
-          {tournament.name} · chase, close a phase, publish the results
+          {tournament.name} · chase, close a phase, post the leaderboard
         </p>
       </div>
 
