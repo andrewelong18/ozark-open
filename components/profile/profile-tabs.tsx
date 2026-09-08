@@ -181,10 +181,12 @@ function StatusPanel({ status }: { status: StatusModel }) {
   )
 }
 
-// Five pages, clean boundaries: people · menu · money · the clock · the
-// rulebook. Sprint 20 merged the old Participants and Roster buttons into
-// People; Sprint 25 added Close & Settle, the only one that matters on a
-// deadline; Sprint 23 added House Rules, the only one you should rarely need.
+// Six pages, clean boundaries: people · menu · money · the clock · the
+// rulebook · the undo. Sprint 20 merged the old Participants and Roster
+// buttons into People; Sprint 25 added Close & Settle, the only one that
+// matters on a deadline; Sprint 23 added House Rules, the only one you should
+// rarely need; Sprint 27 added Save States & Undo, the only one you reach for
+// when something has already gone wrong.
 //
 // Labels renamed Aug 23, 2026 to say what the page does rather than what it
 // is: "People" and "View All" told an admin standing in the clubhouse on
@@ -216,6 +218,11 @@ const ADMIN_PAGES: { href: string; label: string; blurb: string }[] = [
     label: "Manage House Rules",
     blurb: "Entry-fee bounds, bet caps and pick counts for this tournament.",
   },
+  {
+    href: "/admin/snapshots",
+    label: "Save States & Undo",
+    blurb: "Roll the bets, wagers and tournament row back to an earlier moment.",
+  },
 ]
 
 function AdminPanel() {
@@ -224,7 +231,7 @@ function AdminPanel() {
       <p className="text-sm text-text-muted">
         You&apos;re an admin. Manage the pool from here.
       </p>
-      {/* A list of destinations, not a toolbar: these are five separate pages,
+      {/* A list of destinations, not a toolbar: these are six separate pages,
           and a row per page — full width, tap-sized, chevroned — says that in a
           way a wrap of small buttons never did. */}
       <nav className="flex flex-col gap-2">
