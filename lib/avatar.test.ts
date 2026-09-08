@@ -12,7 +12,12 @@
 
 import test from "node:test"
 import assert from "node:assert/strict"
-import { avatarPath, uploadAvatar, type AvatarUploadClient } from "./avatar.ts"
+import {
+  AVATAR_MIME_TYPES,
+  avatarPath,
+  uploadAvatar,
+  type AvatarUploadClient,
+} from "./avatar.ts"
 
 const FILE = new Blob(["x".repeat(1024)], { type: "image/png" })
 const ME = "873b4df3-6077-4cbe-8d32-cd9a6fc475e5"
@@ -88,6 +93,39 @@ test("an oversize file is rejected without a round trip", async () => {
   const oversize = new Blob(["x".repeat(3 * 1024 * 1024)], { type: "image/png" })
   const error = await uploadAvatar(client, ME, oversize)
   assert.match(error!, /over 2 MB/)
+  assert.deepEqual(calls, [])
+})
+
+// ── #144: the bucket now enforces allowed_mime_types server-side ────────────
+// These pin the client half of that agreement. The SQL half lives in
+// supabase/migrations/20260908000001_avatars_bucket_limits.sql and must list
+// exactly AVATAR_MIME_TYPES.
+
+test("the accepted MIME list is the one the bucket migration mirrors", () => {
+  assert.deepEqual([...AVATAR_MIME_TYPES], [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+  ])
+})
+
+test("an unacceptable image type is rejected without a round trip", async () => {
+  const { client, calls } = fakeClient({ session: { user: { id: ME } } })
+  const svg = new Blob(["<svg/>"], { type: "image/svg+xml" })
+  const error = await uploadAvatar(client, ME, svg)
+  assert.match(error!, /JPG, PNG, WebP, or GIF/)
+  assert.deepEqual(calls, [], "Storage must not be touched")
+})
+
+test("an empty content type is refused here, not by the bucket", async () => {
+  // A browser reports "" for a file it cannot sniff. Before #144 the bucket
+  // had no MIME list, so this reached Storage and succeeded; with one set it
+  // would come back as a raw Storage rejection instead of a sentence.
+  const { client, calls } = fakeClient({ session: { user: { id: ME } } })
+  const unsniffable = new Blob(["x"], { type: "" })
+  const error = await uploadAvatar(client, ME, unsniffable)
+  assert.match(error!, /JPG, PNG, WebP, or GIF/)
   assert.deepEqual(calls, [])
 })
 

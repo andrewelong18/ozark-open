@@ -73,6 +73,17 @@ export function avatarPath(userId: string): string {
 export const AVATAR_BUCKET = "avatars"
 export const AVATAR_MAX_BYTES = 2 * 1024 * 1024
 
+/** The image types the bucket accepts. THIS LIST IS MIRRORED IN SQL by
+ *  supabase/migrations/20260908000001_avatars_bucket_limits.sql
+ *  (allowed_mime_types) — change one, change the other, or members get a raw
+ *  Storage rejection where they used to get a sentence (#144). */
+export const AVATAR_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+] as const
+
 /**
  * Upload a member's avatar. Returns a human-readable error message, or null
  * on success.
@@ -89,6 +100,16 @@ export async function uploadAvatar(
 ): Promise<string | null> {
   if (file.size > AVATAR_MAX_BYTES) {
     return "That image is over 2 MB — pick a smaller one."
+  }
+
+  // #144 set allowed_mime_types on the bucket, so an unacceptable type is now
+  // refused SERVER-side too. Catching it here keeps the message a sentence
+  // rather than a Storage error string. The case that matters is not an
+  // exotic format — the forms already gate those — but file.type === "",
+  // which a browser reports for anything it cannot sniff. That used to sail
+  // through to a bucket with no MIME list at all.
+  if (!(AVATAR_MIME_TYPES as readonly string[]).includes(file.type)) {
+    return "Choose a JPG, PNG, WebP, or GIF image."
   }
 
   // NOT load-bearing for which token gets attached — supabase-js already
