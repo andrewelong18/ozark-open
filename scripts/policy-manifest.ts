@@ -1,4 +1,4 @@
-// The RLS policy manifest (#154).
+// The RLS policy manifest (#154), and the function-grant manifest (#205).
 //
 // scripts/users-rls-roundtrip.ts would have caught the #99 bug. This catches
 // the NEXT one, without anyone having to think of it first.
@@ -23,6 +23,32 @@
 // that possible — so a read-only pg_policy query against prod is still worth
 // running when a token is around.
 //
+// ── THE SECOND MANIFEST: FUNCTION EXECUTE GRANTS (#205) ─────────────────────
+//
+// The policy manifest reads pg_policy only, and nothing in the repo read
+// pg_proc.proacl at all — so the project had NO drift check on function
+// grants. A migration adding
+//
+//     GRANT EXECUTE ON FUNCTION public.restore_snapshot(uuid) TO anon;
+//
+// passed npm test, tsc, lint, local-db-verify.sh and this script without a
+// murmur. That is sharp because the app has SECURITY DEFINER functions that
+// deliberately bypass RLS, and for several the REVOKE is the ENTIRE boundary:
+// take_snapshot() returns every open wager in the tournament, and
+// restore_snapshot() replaces the contents of all five money tables.
+//
+// Both manifests are written and asserted by the same --write mechanism, so
+// there is one habit rather than two.
+//
+// A NOTE ON THE `PUBLIC (default)` LINES. pg_proc.proacl is NULL for a
+// function whose grants were never touched, and NULL does not mean "no
+// access" — it means the built-in default, EXECUTE TO PUBLIC. That is the
+// dangerous case, so it is rendered loudly rather than as `none` (which here
+// means an ACL that exists and grants EXECUTE to nobody). Most of those lines
+// are trigger functions, which are reached through a trigger rather than a
+// call; the point of listing them is that the day one stops being a trigger
+// function, the manifest says so.
+//
 // Usage — normally you don't run this directly; scripts/local-db-verify.sh
 // does, right after the migrations are applied. To REGENERATE the manifest
 // after an intentional policy change:
@@ -39,6 +65,9 @@ import { fileURLToPath } from "node:url"
 const PGURI = process.env.PGURI ?? "postgresql://localhost:5432/ozark_roundtrip"
 const MANIFEST = fileURLToPath(
   new URL("../supabase/expected-policies.txt", import.meta.url)
+)
+const GRANTS_MANIFEST = fileURLToPath(
+  new URL("../supabase/expected-function-grants.txt", import.meta.url)
 )
 
 /** Stable, greppable, one policy per line:
@@ -67,39 +96,102 @@ const QUERY = `
    ORDER BY c.relname, p.polcmd, p.polname;
 `
 
-function currentManifest(): string {
-  const out = execFileSync("psql", [PGURI, "-X", "-v", "ON_ERROR_STOP=1", "-At", "-c", QUERY], {
+/** Stable, greppable, one function per line:
+ *    public.name(arg types) | roles with EXECUTE
+ *  The roles column is the whole point — a function moving from
+ *  `authenticated` to `authenticated,anon` is the failure this exists for.
+ *  `PUBLIC (default)` means proacl IS NULL: the built-in default of EXECUTE
+ *  TO PUBLIC, never touched by a migration. `none` means an ACL exists and
+ *  grants EXECUTE to nobody. The two are opposites and must not read alike. */
+const GRANTS_QUERY = `
+  SELECT n.nspname || '.' || p.proname ||
+         '(' || pg_get_function_identity_arguments(p.oid) || ') | ' ||
+         CASE
+           WHEN p.proacl IS NULL THEN 'PUBLIC (default)'
+           ELSE COALESCE(
+             (SELECT string_agg(
+                       CASE WHEN a.grantee = 0 THEN 'PUBLIC'
+                            ELSE a.grantee::regrole::text END,
+                       ',' ORDER BY 1)
+                FROM aclexplode(p.proacl) a
+               WHERE a.privilege_type = 'EXECUTE'),
+             'none')
+         END
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+   ORDER BY 1;
+`
+
+function runQuery(query: string): string {
+  const out = execFileSync("psql", [PGURI, "-X", "-v", "ON_ERROR_STOP=1", "-At", "-c", query], {
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
   })
   return out.trim().split("\n").filter(Boolean).join("\n") + "\n"
 }
 
-function main() {
-  const current = currentManifest()
+type Manifest = {
+  /** Path to the checked-in expectation. */
+  file: string
+  /** Basename, for messages. */
+  name: string
+  /** What one line is, plural — "RLS policies", "function EXECUTE grants". */
+  noun: string
+  query: string
+  /** Why a mismatch matters, printed under the diff. */
+  why: string
+}
 
-  if (process.argv.includes("--write")) {
-    writeFileSync(MANIFEST, current)
-    console.log(`Wrote ${current.trim().split("\n").length} policies to expected-policies.txt`)
-    return
+const MANIFESTS: Manifest[] = [
+  {
+    file: MANIFEST,
+    name: "supabase/expected-policies.txt",
+    noun: "RLS policies",
+    query: QUERY,
+    why:
+      `  If it isn't: a missing policy does not raise at runtime. It makes writes\n` +
+      `  match zero rows and report success — see #154.`,
+  },
+  {
+    file: GRANTS_MANIFEST,
+    name: "supabase/expected-function-grants.txt",
+    noun: "function EXECUTE grants",
+    query: GRANTS_QUERY,
+    why:
+      `  If it isn't: read the roles column. For the SECURITY DEFINER functions\n` +
+      `  the REVOKE is the entire security boundary — take_snapshot() returns\n` +
+      `  every open wager, restore_snapshot() replaces all five money tables.\n` +
+      `  A grant reaching 'anon' or 'PUBLIC' there is a production incident, not\n` +
+      `  a manifest that needs regenerating — see #205.`,
+  },
+]
+
+/** Returns true on match. Writes instead of asserting when --write is passed. */
+function reconcile(m: Manifest, write: boolean): boolean {
+  const current = runQuery(m.query)
+  const count = current.trim().split("\n").length
+
+  if (write) {
+    writeFileSync(m.file, current)
+    console.log(`Wrote ${count} ${m.noun} to ${m.name}`)
+    return true
   }
 
   let expected: string
   try {
-    expected = readFileSync(MANIFEST, "utf-8")
+    expected = readFileSync(m.file, "utf-8")
   } catch {
     console.error(
-      `No manifest at supabase/expected-policies.txt.\n` +
-        `Generate it once with:  PGURI=... node --experimental-strip-types scripts/policy-manifest.ts --write`
+      `No manifest at ${m.name}.\n` +
+        `Generate it once with:  POLICY_MANIFEST_WRITE=1 bash scripts/local-db-verify.sh`
     )
-    process.exit(1)
+    return false
   }
 
   if (current === expected) {
-    console.log(
-      `  ✓ ${current.trim().split("\n").length} RLS policies match supabase/expected-policies.txt`
-    )
-    return
+    console.log(`  ✓ ${count} ${m.noun} match ${m.name}`)
+    return true
   }
 
   const expectedLines = new Set(expected.trim().split("\n"))
@@ -107,19 +199,28 @@ function main() {
   const removed = [...expectedLines].filter((l) => !currentLines.has(l))
   const added = [...currentLines].filter((l) => !expectedLines.has(l))
 
-  console.error("  ✗ FAIL — the RLS policy set doesn't match supabase/expected-policies.txt\n")
+  console.error(`  ✗ FAIL — the ${m.noun} don't match ${m.name}\n`)
   // Removals first and named as such: a policy that disappeared is the
   // dangerous direction. An added policy widens access and wants review; a
   // removed one silently turns writes into no-ops, which is #99 exactly.
+  // For grants the asymmetry flips — an ADDED role is the widening — so both
+  // halves are labelled rather than left to the reader's assumption.
   for (const line of removed) console.error(`    MISSING (was expected): ${line}`)
   for (const line of added) console.error(`    UNEXPECTED (not in manifest): ${line}`)
   console.error(
     `\n  If this change is intentional, regenerate the manifest IN THE SAME COMMIT:\n` +
-      `    POLICY_MANIFEST_WRITE=1 bash scripts/local-db-verify.sh\n` +
-      `\n  If it isn't: a missing policy does not raise at runtime. It makes writes\n` +
-      `  match zero rows and report success — see #154.`
+      `    POLICY_MANIFEST_WRITE=1 bash scripts/local-db-verify.sh\n\n` +
+      m.why
   )
-  process.exit(1)
+  return false
+}
+
+function main() {
+  const write = process.argv.includes("--write")
+  // Reconcile every manifest before exiting, so one run reports both problems
+  // rather than hiding the second behind the first.
+  const ok = MANIFESTS.map((m) => reconcile(m, write)).every(Boolean)
+  if (!ok) process.exit(1)
 }
 
 main()

@@ -54,9 +54,10 @@ test("wagers on an open bet stay hidden, and reveal when it closes", async ({ pa
   await signOut(page)
   await signInAs(page, ACCOUNTS.approved)
   await page.goto("/bets")
-  await page.getByRole("button", { name: "Closed", exact: true }).click()
-
+  // Bet 1 does not move tabs when it closes — it is a Phase 1 bet before and
+  // after (#193). What changes is the card it renders and the badge on it.
   const closedCard = page.getByTestId("bet-1")
+  await expect(closedCard).toContainText("Closed")
   const toggle = closedCard.getByRole("button", { name: /(Show|Hide) 1 bettor\b/ })
   await expect(toggle).toBeVisible()
   await toggle.click()
@@ -96,11 +97,11 @@ test("results publish, and the pari-mutuel split renders", async ({ page }) => {
   await expect(page.getByText("Import Report")).toBeVisible()
 
   // --- the member's rollup, BEFORE the final unlock -------------------------
-  // Order matters and is the app's, not ours: /my-bets reads the newest
-  // upcoming-or-active tournament, so once the final publish flips it to
-  // `completed` this page correctly answers "No active tournament" and the
-  // rollup moves to /results. The per-pick payouts are a during-the-weekend
-  // view.
+  // Checked here rather than after the publish only because that is the order
+  // the weekend runs in. /my-bets reads `completed` tournaments too since
+  // Sprint 28 (#197) — people re-read their own card against the payouts all
+  // night — so this no longer goes dark at the flip. It used to, and the
+  // comment that used to be here said so.
   await signOut(page)
   await signInAs(page, ACCOUNTS.approved)
   await page.goto("/my-bets")
@@ -111,12 +112,12 @@ test("results publish, and the pari-mutuel split renders", async ({ page }) => {
   await signOut(page)
   await signInAs(page, ACCOUNTS.admin)
   await page.goto("/admin/close")
-  const publish = page.getByRole("button", { name: "Publish final results" })
+  const publish = page.getByRole("button", { name: "Post the leaderboard" })
   await expect(publish).toBeEnabled()
 
   // Wait for the write, not just the click. Navigating straight afterwards
-  // races the POST, and /results then renders "No results yet" off a
-  // tournament that is still active — a flake that looks exactly like a bug.
+  // races the POST, and the dashboard then renders the live betting console off
+  // a tournament that is still active — a flake that looks exactly like a bug.
   await Promise.all([
     page.waitForResponse(
       (r) => r.url().includes("/api/admin/close") && r.request().method() === "POST"
@@ -124,9 +125,20 @@ test("results publish, and the pari-mutuel split renders", async ({ page }) => {
     publish.click(),
   ])
 
-  // --- /results renders the split ------------------------------------------
-  await page.goto("/results")
-  await expect(page.getByRole("heading", { name: "Results" })).toBeVisible()
+  // --- the dashboard becomes the standings ---------------------------------
+  // Sprint 28 (#197): posting swaps the dashboard itself. /results is a
+  // redirect now, so this navigates to the page members actually land on.
+  await page.goto("/dashboard")
+  await expect(
+    page.getByRole("heading", { name: "Final Standings" })
+  ).toBeVisible()
+
+  // The betting console is GONE — this is the swap, and each of these is a
+  // module Pat named. The countdown included: both branches go, and the
+  // "Opening ceremony" fallback is the one that would otherwise survive.
+  await expect(page.getByText("Pool Total")).toHaveCount(0)
+  await expect(page.getByRole("link", { name: /Place Bets/ })).toHaveCount(0)
+  await expect(page.getByText("Opening ceremony")).toHaveCount(0)
 
   // Nothing pending, so the provisional caution must NOT be showing — that
   // banner suppresses the leader row and is the #108 inflation guard.
@@ -134,16 +146,15 @@ test("results publish, and the pari-mutuel split renders", async ({ page }) => {
 
   // The pool is the sum of every non-revoked entry fee, less voided stakes.
   //
-  // `exact` is load-bearing: /results says "Pool $N" twice — once in the gold
-  // header badge, once inside the copyable settlement summary, whose line reads
-  // "Pool $N · 3 entries". A substring match hits both and fails strict mode.
-  // This assertion predates the settlement summary (11f200e vs e9a4c7d, both
-  // Aug 9 2026) and has been failing ever since; nobody noticed because the e2e
-  // job is workflow_dispatch, not a merge gate. Exact-matching pins it to the
+  // `exact` used to be load-bearing: the page said "Pool $N" twice — once in
+  // the gold header badge, once inside the copyable settlement summary, whose
+  // line read "Pool $N · 3 entries" — so a substring match hit both and failed
+  // strict mode. That summary was removed on Sept 8, 2026, leaving the badge as
+  // the only "Pool $N" on the page. `exact` stays: it pins the assertion to the
   // badge, which is the element this test is actually about.
   const pool = await sumEntryFees()
   await expect(page.getByText(`Pool $${pool}`, { exact: true })).toBeVisible()
-  await expect(page.getByText("Top Payout")).toBeVisible()
+  await expect(page.getByText("Biggest Winner")).toBeVisible()
   await expect(page.getByText("Avery Approved").first()).toBeVisible()
 })
 

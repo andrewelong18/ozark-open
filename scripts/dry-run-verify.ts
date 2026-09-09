@@ -430,6 +430,34 @@ async function main() {
     runSql("SELECT count(*) FROM public.bet_placements") === "42"
   )
 
+  // #189: the seed's cleanup used to match `email LIKE '%@dryrun.ozark.test'`,
+  // far wider than the eight bettors it inserts — so it also deleted wagers
+  // the HAND-DRIVEN four had placed through the UI, silently. It ate one of
+  // Mike Yenzer's on the Sept 4 dry run.
+  //
+  // This harness could never catch that on its own: it runs the seeds against
+  // a database with no hand-placed wagers, which is exactly the case where an
+  // over-wide predicate is harmless. So plant one first. Dan Mercer is
+  // hand-driven, onboarded, and has a participant row here; his slate arrives
+  // later in 25-, so this row is his only Phase 1 wager right now.
+  runSql(`INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement)
+          SELECT u.id, pk.id, 1, pk.american_odds
+            FROM public.users u, public.bet_picks pk
+           WHERE u.email = 'dan.mercer@dryrun.ozark.test' AND pk.sheet_pick_id = 26`)
+  runSqlFile(path.join(SQL, "20-phase1-placements.sql"))
+  const danPhase1 = runSql(`SELECT count(*) FROM public.bet_placements p
+              JOIN public.users u ON u.id = p.user_id
+             WHERE u.email = 'dan.mercer@dryrun.ozark.test'`)
+  check(
+    "a hand-placed wager survives the Phase 1 seed (#189)",
+    danPhase1 === "1",
+    `1 → ${danPhase1}`
+  )
+  // Put the board back exactly as the checks above left it.
+  runSql(`DELETE FROM public.bet_placements p
+           USING public.users u
+           WHERE u.id = p.user_id AND u.email = 'dan.mercer@dryrun.ozark.test'`)
+
   // The hand-driven slates stand in for Act 4's browser session so the
   // printed payout table is the whole pool, not two thirds of it.
   runSqlFile(path.join(SQL, "25-phase1-handdriven-fallback.sql"))
@@ -527,6 +555,25 @@ async function main() {
   runSqlFile(path.join(SQL, "30-phase2-placements.sql"))
   runSqlFile(path.join(SQL, "35-phase2-handdriven-fallback.sql"))
   const afterPhase2 = runSql("SELECT count(*) FROM public.bet_placements")
+
+  // #189, the Phase 2 half. 30- used to wipe the Phase 2 rows of every
+  // @dryrun.ozark.test bettor, the hand-driven four included — and 35- has
+  // just placed exactly those by hand, so re-running 30- on its own is the
+  // real collision. The `!== "0"` guard is what stops this passing vacuously
+  // if the fallback ever stops seeding Dan.
+  const handDrivenPhase2 = `SELECT count(*) FROM public.bet_placements p
+       JOIN public.bet_picks pk ON pk.id = p.pick_id
+       JOIN public.bets b ON b.id = pk.bet_id
+       JOIN public.users u ON u.id = p.user_id
+      WHERE b.phase = 2 AND u.email = 'dan.mercer@dryrun.ozark.test'`
+  const danPhase2 = runSql(handDrivenPhase2)
+  runSqlFile(path.join(SQL, "30-phase2-placements.sql"))
+  check(
+    "hand-placed Phase 2 wagers survive the Phase 2 seed (#189)",
+    danPhase2 !== "0" && runSql(handDrivenPhase2) === danPhase2,
+    `${danPhase2} → ${runSql(handDrivenPhase2)}`
+  )
+
   // Same re-run guard as Phase 1 (#95), plus the promise both files make in
   // their headers: a Phase 2 re-seed must not touch Phase 1's odds snapshots.
   runSqlFile(path.join(SQL, "30-phase2-placements.sql"))

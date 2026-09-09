@@ -1,6 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import { useRef, useState } from "react"
+import { SnapshotButton } from "@/components/admin/snapshot-button"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
@@ -12,76 +14,10 @@ type ImportReport = {
   /** Sprint 11: the save state taken automatically just before this upload
    * applied. Optional only for defensiveness — the route always sends it. */
   snapshotId?: string | null
-}
-
-// Sprint 11: take a save state on demand. Sits above the upload because that's
-// the order you want it in — snapshot, then do the risky thing — even though
-// the import now takes its own snapshot automatically. This button is for the
-// OTHER risky moments: a Studio edit, a bulk approval, anything about to be
-// done by hand.
-function SnapshotButton() {
-  const [busy, setBusy] = useState(false)
-  const [taken, setTaken] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  async function snapshot() {
-    setBusy(true)
-    setError(null)
-    setTaken(null)
-    try {
-      const res = await fetch("/api/admin/snapshot", { method: "POST" })
-      const json = await res.json().catch(() => null)
-      if (!res.ok) {
-        setError(json?.error ?? `Snapshot failed (${res.status})`)
-        return
-      }
-      setTaken(json?.id ?? null)
-    } catch {
-      setError("Snapshot failed — check your connection and try again.")
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-3.5">
-        <div>
-          <div className="font-heading text-lg text-text-strong">Save state</div>
-          <p className="mt-0.5 text-sm text-text-muted">
-            Snapshots the bets, picks, wagers, participants and tournament row
-            as they are right now. Take one before editing anything by hand.
-            Imports snapshot themselves.
-          </p>
-        </div>
-        <Button type="button" variant="outline" onClick={snapshot} disabled={busy}>
-          {busy ? "Taking snapshot…" : "Snapshot now"}
-        </Button>
-        {taken && <SnapshotTaken id={taken} />}
-        {error && <p className="text-sm font-medium text-loss-strong">{error}</p>}
-      </CardContent>
-    </Card>
-  )
-}
-
-// The id is the whole point of showing anything: it's the argument to
-// scripts/restore-snapshot.ts, and it's unguessable, so an admin who doesn't
-// copy it now has to go find it in the database later.
-function SnapshotTaken({ id }: { id: string }) {
-  return (
-    <div className="rounded-lg border border-win-border bg-win-surface p-3">
-      <div className="text-sm font-semibold text-win-strong">
-        ✓ Snapshot taken
-      </div>
-      <p className="mt-1 text-xs break-all text-text-muted">
-        To roll back to this exact state:
-        <br />
-        <code className="tabular">
-          node --experimental-strip-types scripts/restore-snapshot.ts {id} --yes
-        </code>
-      </p>
-    </div>
-  )
+  /** Sprint 28: whether this can be the FINAL upload — the same two counts
+   * /api/admin/close runs, through the same finalizeReadiness(). Optional for
+   * the same defensiveness. */
+  readyToFinalize?: { ok: boolean; blockers: string[] } | null
 }
 
 export function ImportForm() {
@@ -246,15 +182,25 @@ function ImportReportCard({ report }: { report: ImportReport }) {
             </div>
             <p className="mt-1 text-xs text-text-muted">
               A save state was taken before this upload applied. If the sheet
-              was wrong, roll the whole menu back to how it was a moment ago:
+              was wrong, roll the whole menu back to how it was a moment ago
+              from{" "}
+              <Link
+                href="/admin/snapshots"
+                className="font-semibold text-indigo-700 underline"
+              >
+                Save States &amp; Undo
+              </Link>
+              {" "}— it&rsquo;s the newest <span className="font-semibold">pre-import</span>{" "}
+              one:
             </p>
             <p className="mt-1.5 text-xs break-all text-text-muted">
-              <code className="tabular">
-                node --experimental-strip-types scripts/restore-snapshot.ts{" "}
-                {report.snapshotId} --yes
-              </code>
+              <code className="tabular">{report.snapshotId}</code>
             </p>
           </div>
+        )}
+
+        {report.readyToFinalize && (
+          <PostLeaderboard readiness={report.readyToFinalize} />
         )}
 
         {report.unmatchedPickNames.length > 0 && (
@@ -282,5 +228,116 @@ function ImportReportCard({ report }: { report: ImportReport }) {
         )}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * The post, offered — never taken automatically.
+ *
+ * Pat's ask was that the leaderboard go up "when pat uploads his spreadsheet
+ * for the final time". It goes up on the tap right here, one step after that
+ * upload, and that step is the point: publishing ~32 people's payouts as a side
+ * effect of a file upload removes the one moment where somebody reads the
+ * numbers before everybody else does, which is the entire reason
+ * finalizeReadiness() was built (Sprint 25 / #108).
+ *
+ * When it is NOT ready, this shows the blockers. That is the more useful half
+ * on most uploads: those blockers are exactly what has to be fixed in the
+ * sheet, and until now finding them meant walking to another page.
+ *
+ * It posts through POST /api/admin/close, which stays the only writer of
+ * tournaments.status and re-runs the same guard server-side. Nothing here is
+ * trusted; this is a button, not an authority.
+ */
+function PostLeaderboard({
+  readiness,
+}: {
+  readiness: { ok: boolean; blockers: string[] }
+}) {
+  const [busy, setBusy] = useState(false)
+  const [posted, setPosted] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function post() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/admin/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "finalize" }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        setError(
+          Array.isArray(json?.errors)
+            ? json.errors.join(" ")
+            : (json?.error ?? `Posting failed (${res.status})`)
+        )
+        return
+      }
+      setPosted(true)
+    } catch {
+      setError("Posting failed — check your connection and try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (posted) {
+    return (
+      <div className="rounded-lg border border-win-border bg-win-surface p-3">
+        <div className="text-sm font-semibold text-win-strong">
+          The leaderboard is up.
+        </div>
+        <p className="mt-1 text-xs text-win-strong">
+          Every member&rsquo;s dashboard is now the final standings. If that was
+          a mistake, take it back down from{" "}
+          <Link href="/admin/close" className="font-semibold underline">
+            the close console
+          </Link>
+          .
+        </p>
+      </div>
+    )
+  }
+
+  if (!readiness.ok) {
+    return (
+      <div className="rounded-lg border border-border bg-surface-sunken p-3">
+        <div className="text-sm font-semibold text-text-strong">
+          Not the final upload yet
+        </div>
+        <ul className="mt-1 flex list-disc flex-col gap-1 pl-5 text-xs text-text-muted">
+          {readiness.blockers.map((blocker) => (
+            <li key={blocker}>{blocker}</li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-gold-200 bg-gold-100 p-3">
+      <div className="text-sm font-semibold text-text-strong">
+        Every bet is settled — ready to post
+      </div>
+      <p className="mt-1 text-xs text-text-muted">
+        This swaps every member&rsquo;s dashboard to the final standings. Read
+        the numbers first; you can take it back down afterwards.
+      </p>
+      <Button
+        variant="gold"
+        size="sm"
+        className="mt-2.5 h-11 sm:h-9"
+        disabled={busy}
+        onClick={post}
+      >
+        {busy ? "Posting…" : "Post the leaderboard"}
+      </Button>
+      {error && (
+        <p className="mt-2 text-sm font-medium text-loss-strong">{error}</p>
+      )}
+    </div>
   )
 }

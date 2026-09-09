@@ -26,6 +26,7 @@ import {
   TOURNAMENT_RULE_COLUMNS,
   type PlacementQueryRow,
 } from "@/lib/placements"
+import { FinalStandings } from "@/components/results/final-standings"
 import { ComplianceBanner } from "@/components/modules/compliance-banner"
 import { ActivityFeed } from "@/components/modules/activity-feed"
 import { loadActivityFeed } from "@/lib/activity-source"
@@ -54,7 +55,11 @@ export default async function DashboardPage() {
   const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     .select(`id, name, year, status, ${TOURNAMENT_RULE_COLUMNS}, ${TOURNAMENT_CLOCK_COLUMNS}`)
-    .in("status", ["upcoming", "active"])
+    // 'completed' is here so the dashboard can BECOME the final standings
+    // (Sprint 28 / #197). Without it a finalized tournament returns null and
+    // the front door reads "No active tournament" on the one night everybody
+    // opens the app.
+    .in("status", ["upcoming", "active", "completed"])
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -82,6 +87,21 @@ export default async function DashboardPage() {
   }
 
   const tournament = tournamentData as unknown as Tournament
+
+  // THE SWAP (Sprint 28 / #197). Once the book is closed this page stops being
+  // a betting console and becomes the settlement surface: standings, the
+  // copyable payout text, the feed. An EARLY RETURN rather than conditionals
+  // threaded through the 300 lines below, which also means none of the live
+  // reads — pool, participant, placements, phase bets — runs post-finalize.
+  if (tournament.status === "completed") {
+    return (
+      <FinalStandings
+        tournamentRow={tournamentData as unknown as Record<string, unknown>}
+        viewerUserId={user?.id ?? null}
+      />
+    )
+  }
+
   const rules = toTournamentRules(
     tournamentData as unknown as Record<string, unknown>
   )

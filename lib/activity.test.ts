@@ -10,6 +10,7 @@ import assert from "node:assert/strict"
 
 import {
   buildFeed,
+  joinEvents,
   phaseEventText,
   phaseEvents,
   placementEvents,
@@ -111,6 +112,128 @@ test("placementEvents drops rows it cannot render", () => {
   assert.deepEqual(
     placementEvents(rows).map((e) => e.name),
     ["Pat"]
+  )
+})
+
+// ---------------------------------------------------------------------------
+// joinEvents
+// ---------------------------------------------------------------------------
+
+test("joinEvents maps onboarded members to name-and-moment events", () => {
+  const members: FeedMember[] = [
+    {
+      id: "u1",
+      display_name: "Dan Mercer",
+      avatar_url: "https://example.test/dan.png",
+      onboarded_at: "2026-09-01T12:00:00Z",
+    },
+  ]
+
+  const [event] = joinEvents(members)
+  assert.deepEqual(event, {
+    kind: "join",
+    id: "join-u1",
+    at: "2026-09-01T12:00:00Z",
+    userId: "u1",
+    name: "Dan Mercer",
+    avatarUrl: "https://example.test/dan.png",
+  })
+  // The same shape a wager row carries, and for the same reason: an arrival is
+  // a name and a moment, and there is nothing else it is allowed to say.
+  assert.deepEqual(Object.keys(event).sort(), [
+    "at",
+    "avatarUrl",
+    "id",
+    "kind",
+    "name",
+    "userId",
+  ])
+})
+
+test("joinEvents skips members who haven't finished onboarding", () => {
+  // The distinction the whole event hangs on: a magic-link click creates the
+  // users row (display_name seeded with the email), and onboarded_at stays NULL
+  // until they set a real name. Announcing the first would put an email address
+  // in the feed and call it an arrival.
+  const members: FeedMember[] = [
+    { id: "u1", display_name: "newbie@test.local", onboarded_at: null },
+    { id: "u2", display_name: "Jake Long" },
+    { id: "u3", display_name: "Pat Ryan", onboarded_at: "2026-09-01T12:00:00Z" },
+  ]
+
+  assert.deepEqual(
+    joinEvents(members).map((e) => e.name),
+    ["Pat Ryan"]
+  )
+})
+
+test("joinEvents drops rows it cannot render", () => {
+  const members: FeedMember[] = [
+    { id: "u1", display_name: "   ", onboarded_at: "2026-09-01T12:00:00Z" },
+    { id: "", display_name: "No Id", onboarded_at: "2026-09-01T12:00:00Z" },
+    { id: "u3", display_name: "Bad Stamp", onboarded_at: "not-a-date" },
+    { id: "u4", display_name: "Pat Ryan", onboarded_at: "2026-09-01T12:00:00Z" },
+  ]
+
+  assert.deepEqual(
+    joinEvents(members).map((e) => e.name),
+    ["Pat Ryan"]
+  )
+})
+
+test("joinEvents keeps the newest arrivals when it caps", () => {
+  const members: FeedMember[] = Array.from({ length: 5 }, (_, i) => ({
+    id: `u${i}`,
+    display_name: `Member ${i}`,
+    onboarded_at: new Date(Date.parse("2026-09-01T12:00:00Z") + i * 60_000).toISOString(),
+  }))
+
+  assert.deepEqual(
+    joinEvents(members, 2).map((e) => e.name),
+    ["Member 4", "Member 3"]
+  )
+  // An uncapped call keeps everyone.
+  assert.equal(joinEvents(members).length, 5)
+})
+
+test("joinEvents is stable across identical rosters in a different order", () => {
+  // Every member backfilled by 20260720000000 shares a stamp, so ties are the
+  // normal case rather than the edge one — and a poll that ordered them
+  // differently would re-animate the rail every 20 seconds.
+  const at = "2026-07-20T00:00:00Z"
+  const members: FeedMember[] = [
+    { id: "u3", display_name: "Cee", onboarded_at: at },
+    { id: "u1", display_name: "Ay", onboarded_at: at },
+    { id: "u2", display_name: "Bee", onboarded_at: at },
+  ]
+
+  assert.deepEqual(
+    joinEvents(members, 2).map((e) => e.id),
+    joinEvents([...members].reverse(), 2).map((e) => e.id)
+  )
+})
+
+test("a join event sorts into the feed by when it happened", () => {
+  const feed = buildFeed(
+    [
+      betEvent(1, "2026-09-20T12:05:00Z"),
+      {
+        kind: "join",
+        id: "join-u9",
+        at: "2026-09-20T12:00:00Z",
+        userId: "u9",
+        name: "Late Arrival",
+        avatarUrl: null,
+      },
+    ],
+    [],
+    []
+  )
+
+  // Newest first: the wager sits above the arrival that preceded it.
+  assert.deepEqual(
+    feed.map((e) => e.id),
+    ["bet-1", "join-u9"]
   )
 })
 

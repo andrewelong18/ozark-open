@@ -1,0 +1,10 @@
+public.activity_placements(p_tournament_id uuid, p_limit integer) | postgres,authenticated
+public.admin_auth_activity() | postgres,authenticated
+public.enforce_placement_total() | PUBLIC (default)
+public.guard_users_self_update() | PUBLIC (default)
+public.handle_new_user() | PUBLIC (default)
+public.is_admin() | PUBLIC (default)
+public.restore_snapshot(p_id uuid) | postgres,authenticated
+public.snapshot_index(p_limit integer) | postgres,authenticated
+public.take_snapshot(p_trigger text, p_keep integer) | postgres,authenticated
+public.touch_updated_at() | PUBLIC (default)

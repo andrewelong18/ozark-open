@@ -10,6 +10,7 @@ import {
   type ExistingPick,
 } from "@/lib/import"
 import { toPhaseClock, TOURNAMENT_CLOCK_COLUMNS } from "@/lib/placements"
+import { finalizeReadiness } from "@/lib/payouts"
 import { takeSnapshot } from "@/lib/snapshots"
 
 // Spreadsheet ingestion endpoint (ADR 0001 §7). Writes run under the admin's
@@ -76,6 +77,11 @@ export async function POST(request: Request) {
     // The clock columns ride along so the stale-open warning can compare the
     // sheet against the phase deadlines, not just against itself (#122).
     .select(`id, ${TOURNAMENT_CLOCK_COLUMNS}`)
+    // DELIBERATELY not widened to 'completed' when the dashboard swap was
+    // (Sprint 28 / #197). Every other tournament read in the app took
+    // 'completed' so the app keeps working after the book closes; this one
+    // must not, because importing into a settled tournament would rewrite
+    // results the payouts have already been split from. Unpost first.
     .in("status", ["upcoming", "active"])
     .order("year", { ascending: false })
     .limit(1)
@@ -344,6 +350,52 @@ export async function POST(request: Request) {
       : []),
   ]
 
+  // Whether this upload was the LAST one — the same two counts POST
+  // /api/admin/close runs before it will post the leaderboard, through the same
+  // finalizeReadiness(). Re-read after the writes above, so they reflect the
+  // sheet just applied.
+  //
+  // Why here at all: the checklist used to send Pat to a second page to find
+  // out, and when the answer was "not yet" that page was the only thing that
+  // would tell him WHICH picks were still unscored. Reporting it beside the
+  // import counts puts the blockers next to the file that has to fix them.
+  //
+  // This does NOT post anything. The import offers; a human taps. Publishing
+  // ~32 people's payouts as a side effect of a file upload would remove the one
+  // moment where somebody reads the numbers first, which is the entire reason
+  // finalizeReadiness() exists (#108).
+  const [{ count: pendingPicks, error: pendingError }, { count: unclosedBets, error: unclosedError }] =
+    await Promise.all([
+      supabase
+        .from("bet_picks")
+        .select("id, bets!inner(tournament_id)", { count: "exact", head: true })
+        .eq("result", "pending")
+        .eq("bets.tournament_id", tournamentId),
+      supabase
+        .from("bets")
+        .select("id", { count: "exact", head: true })
+        .eq("tournament_id", tournamentId)
+        .neq("status", "closed"),
+    ])
+  // A counting failure degrades to "not ready" and never to a 500: the import
+  // itself already succeeded and its report has to render. Not offering the
+  // post is the safe direction — /admin/close is still there, and it runs the
+  // real guard again anyway.
+  const readyToFinalize =
+    pendingError || unclosedError
+      ? {
+          ok: false,
+          blockers: [
+            "Couldn't check whether every pick has a result, so the post isn't " +
+              "offered here. The import itself applied fine — post from the close " +
+              "console, which runs the same check.",
+          ],
+        }
+      : finalizeReadiness({
+          pendingPicks: pendingPicks ?? 0,
+          unclosedBets: unclosedBets ?? 0,
+        })
+
   return NextResponse.json({
     report: {
       bets: {
@@ -361,6 +413,10 @@ export async function POST(request: Request) {
       // The undo button for the upload just applied. Surfaced in the report
       // because this is the one moment an admin knows they might want it.
       snapshotId: snapshot.id,
+      // Whether this can be the final upload — { ok, blockers }. The report
+      // card turns `ok` into a one-tap post and the blockers into the list of
+      // what to go fix in the sheet.
+      readyToFinalize,
     },
   })
 }

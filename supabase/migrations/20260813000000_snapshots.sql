@@ -15,6 +15,22 @@
 -- KEEP IT BORING (the sprint's own words): a snapshot is a JSON dump of whole
 -- tables; restore is a script an admin runs. No restore UI, no diffing, no
 -- partial rollback, no undo stack.
+--
+-- AMENDED Sept 8, 2026 (Sprint 27, PRD §12 A21): "NO RESTORE UI" NO LONGER
+-- HOLDS. There is one, at /admin/snapshots, and it is the primary way back —
+-- see 20260908000000_snapshot_console.sql. The line above was right while
+-- restore was a developer's tool; it stopped being right when Sprint 23 settled
+-- that Pat runs the tournament without database access, which left the tool for
+-- the most likely weekend disaster as the one thing he could not reach.
+--
+-- The rest of the sentence still stands, and is still the instruction: no
+-- diffing, no partial rollback, no undo stack. Sprint 27 added exactly two
+-- functions and one CHECK value. scripts/restore-snapshot.ts is not retired
+-- either — it is the path that works when the app itself is down.
+--
+-- This comment is amended rather than left alone because a comment that
+-- contradicts shipped behaviour is drift, and the next person to read this file
+-- would have believed it.
 
 -- ---------------------------------------------------------------------------
 -- The table

@@ -1,9 +1,17 @@
 import { cn } from "@/lib/utils"
 
-export type BetStatus = "open" | "closed" | "resolved"
+export type BetStatus = "open" | "closed" | "resolved" | "unpublished"
 
 // Bet lifecycle. 'draft' is never surfaced. Open = inviting green, closed =
 // neutral, resolved = quiet indigo. Color is always paired with a label.
+//
+// 'unpublished' (Sprint 26 / #194) is the odd one out: it describes a PHASE
+// rather than a bet — the state behind Pat's "just say that phase 2 isn't open
+// yet" — and it is the only variant the per-bet cards never render. It sits in
+// the neutral family a step lighter than 'closed' (ink-300 vs ink-400) because
+// the two say different things about the same non-answer: closed means it
+// happened and is over, not-open-yet means it hasn't started. The label carries
+// that distinction; the colour only has to avoid contradicting it.
 const STATUS: Record<
   BetStatus,
   { label: string; className: string; dot: string }
@@ -24,6 +32,11 @@ const STATUS: Record<
     className:
       "border-status-resolved-border bg-status-resolved-surface text-status-resolved",
     dot: "bg-indigo-500",
+  },
+  unpublished: {
+    label: "Not open yet",
+    className: "border-neutral-border bg-neutral-surface text-neutral-tone",
+    dot: "bg-ink-300",
   },
 }
 

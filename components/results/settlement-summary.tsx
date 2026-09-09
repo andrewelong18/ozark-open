@@ -5,7 +5,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 
-// The copyable settlement summary on /results — the last mile of the product.
+// The copyable summary card — now only the admin-only entry-collection block.
 //
 // The text itself is built server-side by lib/settlement.ts. This component
 // decides nothing: it renders the string and copies it. Every caveat that
@@ -20,9 +20,11 @@ import { Card } from "@/components/ui/card"
 // Pressed on a phone, at night, at the end of the weekend. See close-console.
 const TOUCH = "h-11 sm:h-9"
 
-// The labels are props because /results renders this twice: once for the
-// payouts every member sees, and once, for an admin only, for the entry
-// collection. Two components would have been two copy behaviours.
+// The labels are props because the page used to render this twice: once for the
+// payouts every member saw, and once, for an admin only, for the entry
+// collection. The member-facing block retired on Sept 8, 2026 (PRD §12 A22), so
+// the admin's collection block is the only caller left — the props stay, and so
+// do the defaults, which now name a block that no longer renders.
 export function SettlementSummary({
   text,
   title = "Send the payouts",

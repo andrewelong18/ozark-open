@@ -125,7 +125,7 @@ Numbers use Montserrat with `font-variant-numeric: tabular-nums` — apply the
 | `OddsChip` | American odds chip; `size` sm/md/lg; `detail` reveals fractional + implied (from `lib/odds.ts`) |
 | `MoneyDisplay` | Money treatment; `cents`, `pl` (colors the sign), `onDark`, `size`, `weight` (uses `lib/money.ts`) |
 | `OutcomeBadge` | `hit`/`miss`/`push`/`void` — color + glyph + label |
-| `StatusBadge` | `open`/`closed`/`resolved` — dot + label |
+| `StatusBadge` | `open`/`closed`/`resolved`/`unpublished` — dot + label. `unpublished` ("Not open yet", Sprint 26) describes a *phase* rather than a bet and is the only variant no bet card renders |
 | `StakeInput` | Whole-dollar inline stake; unplaced/placed (gold flash)/error/disabled (client) |
 | `BetRow` | Workhorse row; action zone adapts to status. Interactive only when `onPlace` is passed |
 
@@ -389,6 +389,34 @@ Four things about that rule are deliberate:
 control computes under 16px on the phone project. Playwright can't observe the
 zoom itself (Chromium doesn't implement it), so the test asserts the condition
 iOS keys off, which is the part we control.
+
+## 4c. Browser icons
+
+Three files in `app/`, picked up by Next's metadata file convention — no
+`<link>` tags and no `icons` key in `metadata` (adding either would duplicate
+what the convention already emits):
+
+| File | Serves | Ground |
+|---|---|---|
+| `favicon.ico` | 16 / 32 / 48 | transparent |
+| `icon.png` | 512 | transparent |
+| `apple-icon.png` | 180 | opaque cream (`--ink-50` `#faf8f2`) |
+
+All three are the Missouri mark in its green colorway — body `#006747`, border
+and pin `#FDDA00` (the brand gold, `--gold-400`), flag `#C20F2F`, cup `#363535`.
+This is the same mark family as `public/ozark-mark.svg`, which carries the
+indigo colorway instead; the two are not interchangeable.
+
+Two things here are deliberate and will look like mistakes if you don't know:
+
+- **`apple-icon.png` is opaque on purpose.** iOS drops the alpha channel on the
+  home screen and composites what's left on **black**, so a transparent
+  apple-touch-icon ships a black tile. It also carries ~11% padding because iOS
+  applies its own rounded-corner mask.
+- **The other two are cropped tight, with no padding.** At 16px the mark is
+  already at the edge of legibility; a polite margin costs ~2 of 16 pixels and
+  is what tips the silhouette into mush. Regenerate from `app/icon.png` (512 is
+  the master) rather than re-deriving from a screenshot.
 
 ## 5. Using it
 

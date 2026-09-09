@@ -106,6 +106,30 @@ test("a wager reaches the feed as a name and a moment", async ({ page }) => {
   await expectNoPositions(page)
 })
 
+test("an onboarded member's arrival reaches the feed", async ({ page }) => {
+  // Every seeded account in supabase/seed-dev-accounts.sql has onboarded_at
+  // stamped, so the rail carries their arrivals — and the approved member's own
+  // is the one this asserts, because it is the name the other specs already
+  // pin. An arrival is held to the same shape a wager is: a name, three words
+  // and a stamp.
+  await signInAs(page, ACCOUNTS.approved)
+  await page.goto("/dashboard")
+
+  const joins = feed(page).getByTestId("activity-join-row")
+  await expect(joins.first()).toBeVisible()
+
+  const texts = await joins.allInnerTexts()
+  for (const raw of texts) {
+    const text = raw.replace(/\s+/g, " ").trim()
+    expect(text, `an arrival row said more than it should: ${text}`).toMatch(
+      /joined the sportsbook (now|\d+[mhd])$/
+    )
+  }
+  expect(texts.some((t) => t.includes(APPROVED_NAME))).toBe(true)
+
+  await expectNoPositions(page)
+})
+
 test("the house lines sit in the feed dressed as real rows", async ({ page }) => {
   // They are supposed to be indistinguishable to a reader (Andrew, Aug 31,
   // 2026), so the only thing a spec can check is that they are THERE and carry

@@ -93,7 +93,9 @@ const ROUTES: { path: string; as: string | null; heading?: RegExp }[] = [
   { path: "/bets", as: ACCOUNTS.approved, heading: /Bet Menu/ },
   { path: "/my-bets", as: ACCOUNTS.approved, heading: /My Bets/ },
   { path: "/leaderboard", as: ACCOUNTS.approved, heading: /Leaderboard/ },
-  { path: "/results", as: ACCOUNTS.approved },
+  // /results is a redirect to /dashboard since Sprint 28 (#197), and
+  // /dashboard is already two rows above — keeping the entry would measure the
+  // same page twice.
   { path: "/profile", as: ACCOUNTS.approved },
   { path: "/onboarding", as: ACCOUNTS.newbie },
   { path: "/admin/people", as: ACCOUNTS.admin },
@@ -227,11 +229,11 @@ test.describe("the bet menu under a thumb", () => {
     )
 
     await expectTappable(
-      page.getByRole("button", { name: "Closed", exact: true }),
-      "open/closed toggle"
+      page.getByRole("button", { name: "Phase 2", exact: true }),
+      "phase toggle"
     )
     await expectTappable(
-      page.getByRole("button", { name: "All Categories" }),
+      page.getByRole("button", { name: "All Bets" }),
       "filter chip"
     )
     await expectTappable(
@@ -241,7 +243,8 @@ test.describe("the bet menu under a thumb", () => {
   })
 
   test("the reveal toggle on a closed bet", async ({ page }) => {
-    await page.getByRole("button", { name: "Closed", exact: true }).click()
+    // The closed bets share the Phase 1 tab with the open ones since #193, so
+    // there is no view to switch to first.
     await expectTappable(
       page.getByRole("button", { name: /Show \d+ bettors?/ }).first(),
       "reveal toggle"

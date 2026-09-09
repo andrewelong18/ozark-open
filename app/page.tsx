@@ -44,8 +44,8 @@ const ROUNDS = [
     round: "Round 2",
     dow: "Fri",
     day: "25",
-    course: "Bear Creek Valley Golf Club",
-    town: "Osage Beach, Missouri",
+    course: "Lake Valley Golf Club",
+    town: "Camdenton, Missouri",
   },
   {
     round: "Round 3",

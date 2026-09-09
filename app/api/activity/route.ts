@@ -27,7 +27,9 @@ export async function GET() {
   const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     .select(`id, ${TOURNAMENT_CLOCK_COLUMNS}`)
-    .in("status", ["upcoming", "active"])
+    // 'completed' included (Sprint 28 / #197): the feed is the weekend's
+    // memory, and it keeps polling beside the final standings.
+    .in("status", ["upcoming", "active", "completed"])
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()

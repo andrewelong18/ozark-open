@@ -2,7 +2,8 @@
 # One-command local DB verification: spins up a throwaway Postgres cluster,
 # applies every migration + the Phase 1 seed over the stub Supabase auth
 # schema, runs the round-trip harnesses (import, placement RLS,
-# users RLS, activity feed, payout view, onboarding guard), and smoke-tests the admin chase SQL. No Supabase creds,
+# users RLS, activity feed, payout view, onboarding guard, collection,
+# snapshots, snapshot restore), and smoke-tests the admin chase SQL. No Supabase creds,
 # no TCP port (unix socket only), no leftovers — the cluster is deleted
 # on exit. This is the recipe from the round-trip scripts' headers, scripted.
 #
@@ -55,7 +56,8 @@ run_sql -c "
 echo "==> stub Supabase storage schema (avatars bucket migration)"
 run_sql -c "
   CREATE SCHEMA storage;
-  CREATE TABLE storage.buckets (id text PRIMARY KEY, name text, public boolean DEFAULT false);
+  CREATE TABLE storage.buckets (id text PRIMARY KEY, name text, public boolean DEFAULT false,
+                                file_size_limit bigint, allowed_mime_types text[]);
   CREATE TABLE storage.objects (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), bucket_id text, name text);
   ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
   CREATE FUNCTION storage.foldername(name text) RETURNS text[] LANGUAGE sql AS 'SELECT string_to_array(name, ''/'')';"
@@ -74,7 +76,7 @@ echo "    applied seed-sample-phase1.sql"
 echo "==> policy manifest (every RLS policy, against the checked-in expectation)"
 node --experimental-strip-types "$REPO/scripts/policy-manifest.ts" ${POLICY_MANIFEST_WRITE:+--write}
 
-echo "==> round trips (import → placement RLS → users RLS → payout view → onboarding guard → collection → snapshots)"
+echo "==> round trips (import → placement RLS → users RLS → payout view → onboarding guard → collection → snapshots → snapshot restore)"
 node --experimental-strip-types "$REPO/scripts/import-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/placement-roundtrip.ts"
 # users RLS (#154) runs after placement-roundtrip, which installs the
@@ -98,6 +100,10 @@ node --experimental-strip-types "$REPO/scripts/collection-roundtrip.ts"
 # → the five money tables match byte for byte. Last, because it deliberately
 # rewrites state and the checks above want the seed as the seed left it.
 node --experimental-strip-types "$REPO/scripts/snapshot-roundtrip.ts"
+# Sprint 27's restore RPC — the path /admin/snapshots presses, which shares no
+# code with the script above. Last, for the same reason snapshot-roundtrip.ts is
+# second-to-last: it deliberately rewrites state, several times over.
+node --experimental-strip-types "$REPO/scripts/snapshot-restore-roundtrip.ts"
 
 echo "==> admin chase SQL smoke (docs/admin/phase-compliance.sql)"
 psql "$PGURI" -X -v ON_ERROR_STOP=1 -f "$REPO/docs/admin/phase-compliance.sql"

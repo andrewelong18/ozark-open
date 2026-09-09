@@ -17,6 +17,7 @@ import { Collapse } from "@/components/ui/collapse"
 import { OddsChip } from "./odds-chip"
 import { MoneyDisplay } from "./money-display"
 import { StakeInput } from "./stake-input"
+import { StatusBadge, type BetStatus } from "./status-badge"
 
 export type PlacementPick = {
   id: string
@@ -34,6 +35,9 @@ export type PlacementPick = {
 
 export type BetPlacementCardProps = {
   title: string
+  /** This bet's lifecycle badge, computed once by the menu so both card
+   * types render the same answer (see betBadge in bets-menu.tsx). */
+  badge: BetStatus
   /** Pre-formatted total probability line, or null to omit. */
   totalProbability: string | null
   /** From bet_categories: false for Match / Group Match — pick-one UI. */
@@ -105,6 +109,7 @@ type RowState = {
  */
 export function BetPlacementCard({
   title,
+  badge,
   totalProbability,
   allowsMultiplePicks,
   picks,
@@ -304,6 +309,12 @@ export function BetPlacementCard({
             </div>
           )}
         </div>
+        {/* Same slot, same classes as ClosedBetCard's badge — an open card
+            carried none until Sprint 26 (#193), which was fine while the menu
+            partitioned open from closed and is not fine now that a phase holds
+            both in one list. An unlabelled card IS the ambiguity #104 was
+            about. */}
+        <StatusBadge status={badge} />
       </div>
 
       {picks.map((pick) => {

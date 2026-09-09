@@ -14,9 +14,13 @@ import type { ChaseList } from "@/lib/chase"
 // weekend that used to need a SQL editor.
 //
 // Both controls write through /api/admin/close, which re-checks everything
-// server-side; nothing here decides anything. The finalize button in
-// particular only *reports* the server's refusal — the guard is
-// finalizeReadiness() in lib/payouts.ts, not this component.
+// server-side; nothing here decides anything. The post button in particular
+// only *reports* the server's refusal — the guard is finalizeReadiness() in
+// lib/payouts.ts, not this component.
+//
+// Sprint 28 renamed the final control: it used to "publish final results",
+// which meant revealing /results. It now posts the leaderboard, which swaps
+// every member's dashboard, and it has a way back.
 
 // Every button on this page is pressed standing on a golf course, in the dark,
 // on the two evenings the tournament's money depends on. `size="sm"` draws a
@@ -276,23 +280,25 @@ export function CloseConsole({
         </label>
       </Card>
 
-      {/* ── The final unlock ──────────────────────────────────────────── */}
+      {/* ── Posting the leaderboard ───────────────────────────────────── */}
       <Card className="flex flex-col gap-3 p-4">
         <div>
           <div className="font-heading text-lg text-text-strong">
-            Publish final results
+            Post the leaderboard
           </div>
           <p className="mt-0.5 text-xs text-text-muted">
-            Saturday night, once every result is uploaded. This reveals
-            /results to everyone.
+            Saturday night, once every result is uploaded. This turns every
+            member&rsquo;s dashboard into the final standings — the betting
+            console, the countdown and the house rules all go.
           </p>
         </div>
 
         {finalized ? (
-          <p className="text-sm text-text-body">
-            Already published — <span className="font-semibold">/results</span>{" "}
-            is live.
-          </p>
+          <Unpost
+            busy={busy === "unfinalize"}
+            disabled={busy !== null}
+            onUnpost={() => send({ action: "unfinalize" }, "POST", "unfinalize")}
+          />
         ) : notReady ? (
           <div className="rounded-lg border border-caution-border bg-caution-surface p-3 text-sm text-caution-strong">
             <p className="font-semibold">Not ready yet.</p>
@@ -300,7 +306,7 @@ export function CloseConsole({
               {pendingPicks > 0 && (
                 <li>
                   {pendingPicks} pick{pendingPicks === 1 ? "" : "s"} with no
-                  result. Publishing now would split the pool across only the
+                  result. Posting now would split the pool across only the
                   settled wagers — every payout would come out too high, and
                   nothing on the page would look wrong.
                 </li>
@@ -321,10 +327,97 @@ export function CloseConsole({
             disabled={busy !== null}
             onClick={() => send({ action: "finalize" }, "POST", "finalize")}
           >
-            {busy === "finalize" ? "Publishing…" : "Publish final results"}
+            {busy === "finalize" ? "Posting…" : "Post the leaderboard"}
           </Button>
         )}
       </Card>
+    </div>
+  )
+}
+
+/**
+ * Taking the leaderboard back down.
+ *
+ * This is what makes the post on the import report safe to tap: without a way
+ * back, a premature post is undoable only through a snapshot restore or the
+ * database itself.
+ *
+ * TWO TAPS, NOT A TYPED WORD. /admin/snapshots asks an admin to type RESTORE
+ * because a restore destroys wagers irreversibly. Nothing is destroyed here —
+ * only tournaments.status moves, re-posting puts the identical standings back,
+ * and the numbers are recomputed from the same rows either way. Spending the
+ * typed-word ceremony on a reversible action is how it stops meaning anything
+ * on the one screen where it does.
+ *
+ * Inline rather than a modal, like every other confirm in this app
+ * (people-console's Revoke, bet-placement-card's Remove).
+ */
+function Unpost({
+  busy,
+  disabled,
+  onUnpost,
+}: {
+  busy: boolean
+  disabled: boolean
+  onUnpost: () => void
+}) {
+  const [arming, setArming] = useState(false)
+
+  if (!arming) {
+    return (
+      <div className="flex flex-col gap-2.5">
+        <p className="text-sm text-text-body">
+          <span className="font-semibold">The leaderboard is up.</span> Every
+          member&rsquo;s dashboard is the final standings.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          className={`${TOUCH} self-start`}
+          disabled={disabled}
+          onClick={() => setArming(true)}
+        >
+          Take it back down
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-caution-border bg-caution-surface p-3">
+      <div>
+        <div className="text-sm font-semibold text-caution-strong">
+          Take the leaderboard down?
+        </div>
+        <p className="mt-1 text-xs text-caution-strong">
+          Everyone reading their payout right now loses it — their dashboard
+          goes back to the betting console mid-sentence. Nothing is deleted:
+          every wager, result and entry fee stays exactly as it is, and posting
+          again brings back the same numbers.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="destructive"
+          className={TOUCH}
+          disabled={disabled}
+          onClick={onUnpost}
+        >
+          {busy ? "Taking it down…" : "Take it down"}
+        </Button>
+        {/* The cancel restates the safe outcome, never "Cancel" — the house
+            rule from people-console's "Keep access". */}
+        <Button
+          size="sm"
+          variant="ghost"
+          className={TOUCH}
+          disabled={disabled}
+          onClick={() => setArming(false)}
+        >
+          Leave it posted
+        </Button>
+      </div>
     </div>
   )
 }
