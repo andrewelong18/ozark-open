@@ -142,12 +142,12 @@ One row per person who ever logs in. Persists across tournaments forever.
 | `display_name` | `text` NOT NULL | E.g. "Dan Mercer" — what shows on bets and leaderboards. Set **once by the member** at onboarding (Sprint 16 / A12), then **admin-owned** (Studio / import name-matching, ADR 0001 §11). Defaults to the email until onboarding overwrites it. |
 | `nickname` | `text` NULL | Sprint 15 — a user-set *cosmetic* nickname shown next to `display_name` everywhere (a touch smaller, never a muted subtext). Null = none. Does **not** affect import name-matching. |
 | `avatar_url` | `text` NULL | Sprint 15 — public URL of the user's uploaded avatar in the `avatars` storage bucket (`<uid>/avatar`, cache-busted). Null → a branded initials placeholder renders. |
-| `bio` | `text` NULL | Sprint 18 — short profile blurb shown in the player profile modal. Admin-owned (Studio), pinned in the guard trigger. Dummy-seeded by the migration. |
+| `bio` | `text` NULL | Sprint 18 — short profile blurb shown in the player profile modal. Admin-owned (Studio), pinned in the guard trigger. Seeded with the real roster copy in Sprint 26 (§3.9). |
 | `hometown` | `text` NULL | Sprint 18 — "where they're from," shown in the modal header. Admin-owned. |
 | `member_since` | `smallint` NULL | Sprint 18 — first year in the Ozark Open; header meta + chart context. Admin-owned. |
 | `strength` | `text` NULL | Sprint 18 — one-line scouting strength (modal). Admin-owned. |
 | `weakness` | `text` NULL | Sprint 18 — one-line scouting weakness (modal). Admin-owned. |
-| `past_performance` | `jsonb` NULL | Sprint 18 — 4-year stats series for the modal chart, a JSON array of `{ "year": int, "value": number }` (oldest→newest). Admin-owned; a null/empty series falls back to a deterministic dummy in `lib/player-profile.ts` so the chart always draws. |
+| `past_performance` | `jsonb` NULL | Sprint 18, **reshaped Sprint 26** — the member's Ozark Open finishes, a JSON array of `{ "year": int, "place": text }` (oldest→newest). `place` is a **rank**, ties included verbatim (`"T15"`), not a score — it used to be `{ year, value }` drawn as a bar chart, which said the good end was the top. A year not played is simply absent, and a null/empty series renders **no section at all**; the deterministic dummy fallback is gone. Admin-owned, and written by the §3.9 seed trigger. |
 | `is_admin` | `boolean` NOT NULL DEFAULT `false` | Admins are Pat, Jake, Steve, Andrew. Not user-editable (guard trigger). |
 | `onboarded_at` | `timestamptz` NULL | Sprint 16 — stamped when the member completes the required first-run step. NULL → the middleware forces `/onboarding`. Also the guard's one-time-set window for `display_name` (see below). Existing members were backfilled as already-onboarded. Admin-created accounts (#124) are stamped at creation, because the admin has already named them. |
 | `created_by_user_id` | `uuid` NULL FK → `users.id` | Sprint 23 / #124 — the admin who created this account via `POST /api/admin/members`. NULL = the member registered themselves through the magic link, which is the truth for every row written before the migration (**no backfill**, same reasoning as `placed_by_user_id`). Records the *actor*; never changes whose account it is. |
@@ -161,7 +161,7 @@ One row per person who ever logs in. Persists across tournaments forever.
 
 **Admin writes (Sprint 23 / #124).** `"Admins can update any user"` — `USING (public.is_admin())` — added in `20260814000000_admin_manages_users.sql`. It is also a bug fix: until then the *only* `UPDATE` policy was the own-row one below, so the Sprint 23 / #99 display-name edit was a **silent no-op for every user but the acting admin** (RLS filtered the row out, zero rows matched, PostgREST returned success with no error, and the console reported "saved"). The trigger that permits the write exempts admins, but RLS is evaluated **before** the trigger, so no row ever reached it — and every local harness runs SQL as superuser, where RLS is bypassed, so nothing local could have caught it. `display_name` is load-bearing (`lib/import.ts` matches picks to people by it), so this was a rules bug, not a cosmetic one.
 
-**Self-serve edits (Sprint 15, refined Sprint 16).** An own-row `UPDATE` RLS policy (`auth.uid() = id`) lets a member update their own row, and a `BEFORE UPDATE` guard trigger (`guard_users_self_update`) pins `id`/`email`/`is_admin`/`created_at` for any logged-in non-admin. `display_name` + `onboarded_at` are also pinned **once `onboarded_at IS NOT NULL`** — so a member may set their own `display_name` exactly once (their `/onboarding` write, which also stamps `onboarded_at`), after which `/profile` can change only `nickname` + `avatar_url` (A12). The Sprint 18 profile fields (`bio`, `hometown`, `member_since`, `strength`, `weakness`, `past_performance`) are pinned for every self-serve update — admin/Studio-owned like `display_name`, never editable from `/profile` (`20260723000000_player_profiles.sql`). Admins (import name-matching runs under an admin session) and Studio/service writes (`auth.uid()` is null) are unaffected. Avatars live in a public `avatars` storage bucket where a user may write only under their own `<uid>/` prefix (`20260719000000_user_profiles.sql`, `20260719000001_avatars_bucket.sql`, `20260720000000_onboarding_and_bettor_approval.sql`).
+**Self-serve edits (Sprint 15, refined Sprint 16).** An own-row `UPDATE` RLS policy (`auth.uid() = id`) lets a member update their own row, and a `BEFORE UPDATE` guard trigger (`guard_users_self_update`) pins `id`/`email`/`is_admin`/`created_at` for any logged-in non-admin. `display_name` + `onboarded_at` are also pinned **once `onboarded_at IS NOT NULL`** — so a member may set their own `display_name` exactly once (their `/onboarding` write, which also stamps `onboarded_at`), after which `/profile` can change only `nickname` + `avatar_url` (A12). The Sprint 18 profile fields (`bio`, `hometown`, `member_since`, `strength`, `weakness`, `past_performance`) are pinned for every self-serve update — admin/Studio-owned like `display_name`, never editable from `/profile` (`20260723000000_player_profiles.sql`). Admins (import name-matching runs under an admin session) and Studio/service writes (`auth.uid()` is null) are unaffected. **One deliberate exception, Sprint 26:** the `users_seed_player_profile` trigger writes those same six columns, and fires *after* the guard on the same UPDATE — Postgres runs `BEFORE` triggers in name order, and `users_s…` sorts after `users_g…`. That ordering is the point: onboarding is a non-admin self-update, and it is the moment most members' real name first arrives. The guard still holds, because the values come from an admin-owned table (§3.9), never from anything the member typed. Avatars live in a public `avatars` storage bucket where a user may write only under their own `<uid>/` prefix (`20260719000000_user_profiles.sql`, `20260719000001_avatars_bucket.sql`, `20260720000000_onboarding_and_bettor_approval.sql`).
 
 ---
 
@@ -346,6 +346,31 @@ The **expected roster** — who we think is playing this year. Entered before an
 **No FK to `users`** — by design. The whole point of an invite is that the `users` row may not exist yet, so `/admin/people` matches the two by normalized email at read time (`lib/roster.ts`).
 
 **Written by the app since Sprint 20.** The console's paste box (`POST /api/admin/invites`) parses `name, email` lines and adds the missing ones, keyed on the same normalized email as the unique index above — so re-pasting the same list is a no-op. It only ever inserts, or fills in a name that changed; removing an invite is still a Studio job.
+
+---
+
+### 3.9 `player_profile_seed`
+
+The profile copy for the whole roster, **keyed by name rather than by user id** — because most of the people it describes don't have accounts yet. Added Sprint 26.
+
+| Column | Type | Notes |
+|---|---|---|
+| `name_key` | `text` PK | `lower(trim(display_name))`. The whole match key — interior whitespace is *not* normalized |
+| `hometown` | `text` | |
+| `member_since` | `smallint` | First Ozark Open |
+| `strength` | `text` | One-line scouting strength |
+| `weakness` | `text` | One-line scouting weakness |
+| `bio` | `text` | Short blurb |
+| `past_performance` | `jsonb` | `[{ "year": int, "place": text }]`, or NULL for a debutant |
+
+**Why a table and not just an `UPDATE`.** When Sprint 26 landed, 7 of the 27 players had accounts. The other 20 register between then and the tournament, and a one-shot `UPDATE` would have filled in the 7 and left everyone else on Sprint 18's placeholder copy until someone remembered to re-run it. `apply_player_profile_seed()` is a `BEFORE INSERT OR UPDATE OF display_name` trigger on `users`, so the profile arrives with the member on every path a real name arrives by: onboarding, an admin rename on `/admin/people`, and `POST /api/admin/members`. Signup itself sets `display_name` to the email, which matches nothing.
+
+**Two behaviors that are chosen, not incidental** — both pinned by `scripts/profile-seed-roundtrip.ts`:
+
+- A name matching no seed row **leaves the existing columns alone** rather than clearing them. The alternative would silently wipe a profile typed by hand in Studio every time someone's display name was edited. The cost is that renaming *off* a seeded name keeps the old copy until an admin fixes it.
+- `lower(trim())` is the entire key. `Ethan  Kipping` (two spaces) is a different person to the seed, and will render blank rather than wrong.
+
+**RLS:** enabled, with a single admin-only `ALL` policy. Nothing in the app reads this table — the trigger is `SECURITY DEFINER`, and the app only ever sees the copied values on the `users` row.
 
 ---
 
