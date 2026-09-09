@@ -91,6 +91,9 @@ TABLES=(
   bets
   bet_picks
   bet_placements
+  # Sprint 26's profile copy. No foreign keys — the join to users is by
+  # display_name, so it restores independently of the parent-first ordering.
+  player_profile_seed
   # Sprint 11's save states. No foreign keys, so it can sit last without
   # affecting the parent-first ordering the hand-restore path depends on.
   snapshots

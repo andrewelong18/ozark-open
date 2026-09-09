@@ -88,6 +88,10 @@ node --experimental-strip-types "$REPO/scripts/users-rls-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/activity-rls-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/payout-view-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/onboarding-guard-roundtrip.ts"
+# Sprint 26's profile seed trigger. Runs after onboarding-guard-roundtrip
+# because the two triggers fire on the same UPDATE and their ORDER is the
+# thing being asserted.
+node --experimental-strip-types "$REPO/scripts/profile-seed-roundtrip.ts"
 # Entry collection: the columns, who may write them, and the proof that wiping
 # every payment moves no payout. Runs after payout-view-roundtrip because that
 # is the view its last check compares before and after.

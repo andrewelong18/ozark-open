@@ -23,9 +23,10 @@ const NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Place Bets", href: "/bets" },
   { label: "My Bets", href: "/my-bets" },
+  { label: "Roster", href: "/roster" },
 ]
 
-/** Dashboard/Place Bets/My Bets, plus whatever the server appended. */
+/** Dashboard/Place Bets/My Bets/Roster, plus whatever the server appended. */
 function navItems(extraItems: NavItem[]): NavItem[] {
   return [...NAV, ...extraItems]
 }

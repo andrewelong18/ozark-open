@@ -10,16 +10,15 @@ import {
   type ProfileQueryRow,
 } from "@/lib/player-profile"
 import { Avatar } from "@/components/avatar"
-import { UserName } from "@/components/user-name"
 import { DialogClose, DialogTitle } from "@/components/ui/dialog"
-import { PlayerStatsChart } from "@/components/player/player-stats-chart"
+import { PlayerPlaces } from "@/components/player/player-places"
 
 // The profile modal body (Sprint 18). Rendered inside the shared Dialog by
 // PlayerProfileProvider. Fetches the member's profile lazily on open (users is
 // readable by every authenticated user — users_read_all RLS), painting the
 // header instantly from the `fallback` the clicked name already had, then
-// filling the rest when the row arrives. All content is dummy for now, seeded
-// in the migration and editable in Studio.
+// filling the rest when the row arrives. The content is the real roster copy
+// as of Sprint 26 — seeded from player_profile_seed, editable in Studio.
 
 export type PlayerFallback = {
   displayName: string
@@ -58,7 +57,7 @@ export function PlayerProfileModal({
         if (error) {
           console.error("[player-profile] read failed:", error.message)
         }
-        setProfile(normalizeProfileRow(data as ProfileQueryRow | null, userId))
+        setProfile(normalizeProfileRow(data as ProfileQueryRow | null))
         setLoading(false)
       })
     return () => {
@@ -114,13 +113,15 @@ export function PlayerProfileView({
           className="size-16 text-2xl shadow-md ring-2 ring-white/20 sm:size-24 sm:text-3xl"
         />
         <div className="min-w-0 flex-1">
-          <DialogTitle className="pr-6 text-white">
-            <UserName
-              displayName={displayName}
-              nickname={nickname}
-              nicknameClassName="text-gold-300"
-            />
-          </DialogTitle>
+          {/* Name and nickname stack here, unlike everywhere else in the app
+              (Sprint 15's inline UserName). This is the one place with room
+              for it, and the one place the nickname is the point. */}
+          <DialogTitle className="pr-6 text-white">{displayName}</DialogTitle>
+          {nickname && (
+            <div className="text-[0.95rem] leading-snug font-medium text-gold-300">
+              &ldquo;{nickname}&rdquo;
+            </div>
+          )}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-indigo-100">
             {profile?.hometown && (
               <span className="inline-flex items-center gap-1">
@@ -174,15 +175,18 @@ export function PlayerProfileView({
           )}
         </section>
 
-        {/* 4-year stats chart */}
-        <section>
-          <SectionLabel>Last 4 Ozark Opens</SectionLabel>
-          {loading || !profile ? (
-            <div className="h-32 animate-pulse rounded-xl bg-surface-sunken" />
-          ) : (
-            <PlayerStatsChart data={profile.past_performance} />
-          )}
-        </section>
+        {/* Past finishes. A member with no recorded places — a 2026 debutant,
+            or anyone the seed doesn't cover — gets no section at all, not an
+            empty one. Which is also why this can't render while loading: we
+            don't yet know whether the section exists. */}
+        {loading || !profile ? (
+          <div className="h-20 animate-pulse rounded-xl bg-surface-sunken" />
+        ) : profile.past_performance.length > 0 ? (
+          <section>
+            <SectionLabel>Past Finishes</SectionLabel>
+            <PlayerPlaces data={profile.past_performance} />
+          </section>
+        ) : null}
       </div>
     </div>
   )

@@ -61,6 +61,7 @@ export async function middleware(request: NextRequest) {
     "/dashboard",
     "/bets",
     "/my-bets",
+    "/roster",
     "/leaderboard",
     "/admin",
     "/results",

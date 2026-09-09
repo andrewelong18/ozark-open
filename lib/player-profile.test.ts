@@ -1,49 +1,70 @@
 // Unit tests for lib/player-profile.ts — the pure half of the profile modal:
-// row normalization + null fallbacks, past_performance parsing/sorting, the
-// deterministic dummy series, and bar-geometry scaling. Zero-dependency by
-// design: node:test via npm run test.
+// row normalization + null fallbacks, and past_performance parsing/sorting.
+// Zero-dependency by design: node:test via npm run test.
+//
+// Sprint 26 rewrote the series half of this file. The old cases covered a
+// score, a deterministic dummy filler and bar geometry; the data is now a
+// finishing PLACE, an absent series is meant to render nothing, and there are
+// no bars. What survives from the old suite is what still describes the
+// module: sorting, malformed-point tolerance, and the null-row fallbacks.
 
 import test from "node:test"
 import assert from "node:assert/strict"
-import {
-  chartBars,
-  dummyPastPerformance,
-  normalizeProfileRow,
-  parsePastPerformance,
-} from "./player-profile.ts"
+import { normalizeProfileRow, parsePastPerformance } from "./player-profile.ts"
 
 // ---------------------------------------------------------------------------
 // parsePastPerformance
 // ---------------------------------------------------------------------------
 
-test("parsePastPerformance sorts oldest→newest and coerces values", () => {
+test("parsePastPerformance sorts oldest→newest", () => {
   const out = parsePastPerformance([
-    { year: 2025, value: "70" },
-    { year: 2022, value: 40 },
-    { year: 2024, value: 55 },
+    { year: 2025, place: "6" },
+    { year: 2022, place: "1" },
+    { year: 2024, place: "2" },
   ])
   assert.deepEqual(
     out.map((p) => p.year),
     [2022, 2024, 2025]
   )
-  assert.equal(out[2].value, 70)
+})
+
+test("parsePastPerformance reads a tie as rank + tied, and keeps the label", () => {
+  const [p] = parsePastPerformance([{ year: 2024, place: "T15" }])
+  assert.deepEqual(p, { year: 2024, place: "T15", rank: 15, tied: true })
+})
+
+test("parsePastPerformance normalizes sloppy place cells", () => {
+  // Lowercase t, a trailing .0 from the spreadsheet, a numeric cell, padding.
+  assert.deepEqual(parsePastPerformance([{ year: 2023, place: "t9" }])[0].place, "T9")
+  assert.deepEqual(parsePastPerformance([{ year: 2023, place: "12.0" }])[0].place, "12")
+  assert.deepEqual(parsePastPerformance([{ year: 2023, place: 4 }])[0].place, "4")
+  assert.deepEqual(parsePastPerformance([{ year: 2023, place: " 7 " }])[0].place, "7")
 })
 
 test("parsePastPerformance drops malformed points, not the whole series", () => {
   const out = parsePastPerformance([
-    { year: 2023, value: 50 },
-    { year: null, value: 60 },
-    { value: 60 },
+    { year: 2023, place: "5" },
+    { year: null, place: "6" },
+    { place: "6" },
     { year: 2024 },
+    { year: 2024, place: "" },
+    { year: 2024, place: "0" }, // there is no 0th place
+    { year: 2024, place: "DNF" },
     "nope",
     null,
   ])
-  assert.deepEqual(out, [{ year: 2023, value: 50 }])
+  assert.deepEqual(out, [{ year: 2023, place: "5", rank: 5, tied: false }])
+})
+
+test("parsePastPerformance ignores the Sprint 18 {year, value} shape", () => {
+  // A database that predates the migration renders an empty section rather
+  // than scores relabelled as finishes.
+  assert.deepEqual(parsePastPerformance([{ year: 2024, value: 61 }]), [])
 })
 
 test("parsePastPerformance accepts a JSON string and rejects junk", () => {
-  assert.deepEqual(parsePastPerformance('[{"year":2024,"value":12}]'), [
-    { year: 2024, value: 12 },
+  assert.deepEqual(parsePastPerformance('[{"year":2024,"place":"12"}]'), [
+    { year: 2024, place: "12", rank: 12, tied: false },
   ])
   assert.deepEqual(parsePastPerformance("not json"), [])
   assert.deepEqual(parsePastPerformance(null), [])
@@ -51,92 +72,49 @@ test("parsePastPerformance accepts a JSON string and rejects junk", () => {
 })
 
 // ---------------------------------------------------------------------------
-// dummyPastPerformance
-// ---------------------------------------------------------------------------
-
-test("dummyPastPerformance is deterministic, 4 points, in range", () => {
-  const a = dummyPastPerformance("user-abc")
-  const b = dummyPastPerformance("user-abc")
-  assert.deepEqual(a, b)
-  assert.equal(a.length, 4)
-  assert.deepEqual(
-    a.map((p) => p.year),
-    [2022, 2023, 2024, 2025]
-  )
-  for (const p of a) {
-    assert.ok(p.value >= 40 && p.value < 95, `value ${p.value} in range`)
-  }
-})
-
-test("dummyPastPerformance differs across ids", () => {
-  assert.notDeepEqual(dummyPastPerformance("aaa"), dummyPastPerformance("zzz"))
-})
-
-// ---------------------------------------------------------------------------
 // normalizeProfileRow
 // ---------------------------------------------------------------------------
 
-test("normalizeProfileRow keeps real values and parses stats", () => {
-  const p = normalizeProfileRow(
-    {
-      display_name: "Dan Mercer",
-      nickname: "Merc",
-      avatar_url: "https://x/y",
-      bio: "A legend.",
-      hometown: "Branson, MO",
-      member_since: "2018",
-      strength: "Putting",
-      weakness: "Bunkers",
-      past_performance: [{ year: 2024, value: 61 }],
-    },
-    "id-1"
-  )
+test("normalizeProfileRow keeps real values and parses finishes", () => {
+  const p = normalizeProfileRow({
+    display_name: "Dan Mercer",
+    nickname: "Boom",
+    avatar_url: "https://x/y",
+    bio: "A legend.",
+    hometown: "Union, MO",
+    member_since: "2024",
+    strength: "Organizing side bets",
+    weakness: "Cock",
+    past_performance: [
+      { year: 2025, place: "1" },
+      { year: 2024, place: "T8" },
+    ],
+  })
   assert.equal(p.display_name, "Dan Mercer")
-  assert.equal(p.member_since, 2018)
-  assert.deepEqual(p.past_performance, [{ year: 2024, value: 61 }])
+  assert.equal(p.member_since, 2024)
+  assert.deepEqual(p.past_performance, [
+    { year: 2024, place: "T8", rank: 8, tied: true },
+    { year: 2025, place: "1", rank: 1, tied: false },
+  ])
 })
 
 test("normalizeProfileRow blanks/nulls fall back cleanly", () => {
-  const p = normalizeProfileRow(
-    { display_name: "  ", bio: "   ", member_since: null, past_performance: [] },
-    "id-2"
-  )
+  const p = normalizeProfileRow({
+    display_name: "  ",
+    bio: "   ",
+    member_since: null,
+    past_performance: [],
+  })
   assert.equal(p.display_name, "Unknown member")
   assert.equal(p.bio, null)
   assert.equal(p.member_since, null)
-  // Empty series → deterministic dummy so the chart still draws.
-  assert.equal(p.past_performance.length, 4)
-  assert.deepEqual(p.past_performance, dummyPastPerformance("id-2"))
+  // Stays empty — the modal drops the Past Finishes section entirely for a
+  // debutant rather than inventing a history for them.
+  assert.deepEqual(p.past_performance, [])
 })
 
 test("normalizeProfileRow tolerates a null row", () => {
-  const p = normalizeProfileRow(null, "id-3")
+  const p = normalizeProfileRow(null)
   assert.equal(p.display_name, "Unknown member")
-  assert.equal(p.past_performance.length, 4)
-})
-
-// ---------------------------------------------------------------------------
-// chartBars
-// ---------------------------------------------------------------------------
-
-test("chartBars scales to the max and flags the best year once", () => {
-  const bars = chartBars(
-    [
-      { year: 2022, value: 25 },
-      { year: 2023, value: 50 },
-      { year: 2024, value: 50 },
-    ],
-    100
-  )
-  assert.equal(bars[0].barHeight, 50) // 25/50 * 100
-  assert.equal(bars[1].barHeight, 100) // max fills height
-  assert.equal(bars[1].best, true)
-  assert.equal(bars[2].best, false) // only the first peak is gold
-})
-
-test("chartBars handles empty + all-zero series without dividing by zero", () => {
-  assert.deepEqual(chartBars([], 100), [])
-  const zero = chartBars([{ year: 2024, value: 0 }], 100)
-  assert.equal(zero[0].barHeight, 0)
-  assert.equal(zero[0].best, true)
+  assert.deepEqual(p.past_performance, [])
 })
