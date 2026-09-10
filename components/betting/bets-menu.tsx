@@ -543,9 +543,15 @@ export function BetsMenu({
             about BEHAVIOUR — exactly one active, and clicking the active one
             never deselects it — which selectRound/selectCategory guarantee
             either way. */}
-        <ScrollFadeRow role="group" aria-label="Filter by round" className="gap-1.5">
+        {/* Rows 2 and 3 are STYLED THE SAME, deliberately, because the label in
+            front of each is now what tells them apart. An earlier pass gave them
+            different shapes and weights to do that job wordlessly; naming them
+            says it outright, and once it is said the shape difference is just
+            two controls that look unrelated for no reason. */}
+        <FilterRow label="Round">
           <FilterChip
-            label="All Rounds"
+            label="All"
+            srLabel="All Rounds"
             active={filter.round === ALL}
             onClick={() => selectRound(ALL)}
           />
@@ -557,36 +563,24 @@ export function BetsMenu({
               onClick={() => selectRound(round)}
             />
           ))}
-        </ScrollFadeRow>
+        </FilterRow>
 
-        {/* The category row is deliberately a size down from the round row. Two
-            identical chip rows stacked read as one control that happens to wrap,
-            which is the ambiguity Pat's "three levels" is meant to remove; the
-            step down says the third level is subordinate to the second without
-            spending a label on it. The TAP TARGET does not shrink — the button
-            keeps its 44px and only the painted badge is smaller (see
-            FilterChip's `size`). */}
-        <ScrollFadeRow
-          role="group"
-          aria-label="Filter by category"
-          className="gap-1"
-        >
+        <FilterRow label="Category">
           <FilterChip
-            size="sm"
-            label="All Categories"
+            label="All"
+            srLabel="All Categories"
             active={filter.category === ALL}
             onClick={() => selectCategory(ALL)}
           />
           {CATEGORIES.map((category) => (
             <FilterChip
               key={category}
-              size="sm"
               label={category}
               active={filter.category === category}
               onClick={() => selectCategory(category)}
             />
           ))}
-        </ScrollFadeRow>
+        </FilterRow>
       </div>
 
       {/* TWO different nothings, and conflating them is how a member decides
@@ -726,83 +720,92 @@ export function BetsMenu({
 }
 
 /**
+ * The row that carries one filter level: its name, then its options.
+ *
+ * The label is what distinguishes the round row from the category row now, so
+ * the two rows are free to look identical — which is the point. It is a real
+ * visible label rather than an aria one, and the group is `aria-labelledby` it
+ * rather than carrying a duplicate string, so what a screen reader announces and
+ * what is painted cannot drift apart.
+ *
+ * The fixed label column costs about 60px of a phone's ~358px. That is real, and
+ * it is the trade being made knowingly: naming the levels beats inferring them
+ * from a leading "All Rounds" chip, and the row scrolls, so what the label takes
+ * is reachable rather than lost.
+ */
+function FilterRow({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  const id = `filter-row-${label.toLowerCase()}`
+  return (
+    <div className="flex items-center gap-2.5">
+      <span
+        id={id}
+        className="w-[3.75rem] shrink-0 text-[10px] font-bold tracking-[0.09em] text-text-muted uppercase"
+      >
+        {label}
+      </span>
+      <ScrollFadeRow
+        role="group"
+        aria-labelledby={id}
+        containerClassName="min-w-0 flex-1"
+        className="gap-1.5"
+      >
+        {children}
+      </ScrollFadeRow>
+    </div>
+  )
+}
+
+/**
  * One radio option in a filter row.
  *
- * `size="sm"` shrinks the PAINTED BADGE ONLY. The button stays 44px tall either
- * way — the small variant drops its own background and border and paints them on
- * an inner span instead, so the chip looks a size down while the thing a thumb
- * actually has to hit does not move. `e2e/mobile-layout.spec.ts` measures reach
- * from the centre outward and counts the element or any descendant as a hit, so
- * both the badge and the transparent padding around it still register.
+ * A small rectangle: solid indigo when selected, white when not. Both rows use
+ * it, because the row labels now say which level you are looking at and two
+ * controls doing the same job have no reason to look unrelated.
+ *
+ * The painted chip is 32px and the button around it is 44px — the tap target the
+ * repo holds every control to (`e2e/mobile-layout.spec.ts`). Keeping them
+ * separate is what lets the chip be small without the target following it down;
+ * the spec measures reach from the centre and counts the button or any
+ * descendant as a hit, so the transparent padding still registers.
  */
 function FilterChip({
   label,
+  srLabel,
   active,
   onClick,
-  size = "md",
 }: {
   label: string
+  /** Accessible name, when the visible text is too terse to stand alone —
+   *  two buttons both reading "All" are ambiguous to a screen reader and to a
+   *  locator alike. Must CONTAIN the visible text (WCAG 2.5.3). */
+  srLabel?: string
   active: boolean
   onClick: () => void
-  size?: "md" | "sm"
 }) {
-  if (size === "sm") {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        aria-pressed={active}
-        className="group inline-flex min-h-11 shrink-0 cursor-pointer items-center px-0.5"
-      >
-        <span
-          className={cn(
-            // SQUARED, not pill. The round row above is pill-shaped and sits on
-            // white; this one is rectangular and sits IN the page, borderless
-            // and recessed. Size alone did not separate them — two rows of the
-            // same pill in two sizes read as one control that wrapped, which is
-            // the exact ambiguity three levels are meant to remove. Shape and
-            // ground are what the eye sorts on; scale is what it sorts last.
-            "inline-flex h-7 items-center rounded-sm px-2.5 text-[11px] font-semibold whitespace-nowrap transition-colors duration-fast ease-standard",
-            // A SOLID fill, because nothing else states "selected" as flatly
-            // on a chip this small — but in warm INK, not brand indigo. Solid
-            // indigo-700 made a third-level filter the loudest thing on the
-            // page, inverting the hierarchy the shape change had just
-            // established. Ink is the only ramp free to take it: gold is the
-            // accent the design system rations, and green and red are spoken
-            // for — green is Open and a win, red is a loss, and a green "Match"
-            // chip would read as a status rather than a selection. Ink-600 on
-            // cream is ~7:1 against white text and sits INTO the page instead
-            // of jumping off it.
-            active
-              ? "bg-ink-600 text-white"
-              : "bg-surface-sunken text-text-muted group-hover:bg-ink-200 group-hover:text-text-strong"
-          )}
-        >
-          {label}
-        </span>
-      </button>
-    )
-  }
-
-  const paint = active
-    ? "border-indigo-200 bg-indigo-50 text-indigo-700"
-    : "border-border bg-surface-card text-text-muted"
-
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={cn(
-        // min-h-11 rather than an expanded pseudo hit area: chips sit shoulder
-        // to shoulder in a scrolling row, so overlapping targets would just
-        // move the mis-tap somewhere else.
-        "inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-full border px-3.5 text-xs font-semibold whitespace-nowrap transition-colors duration-fast ease-standard",
-        paint,
-        !active && "hover:border-border-strong hover:text-text-strong"
-      )}
+      aria-label={srLabel}
+      className="group inline-flex min-h-11 shrink-0 cursor-pointer items-center"
     >
-      {label}
+      <span
+        className={cn(
+          "inline-flex h-8 items-center rounded-sm border px-3 text-xs font-semibold whitespace-nowrap transition-colors duration-fast ease-standard",
+          active
+            ? "border-indigo-700 bg-indigo-700 text-white"
+            : "border-border bg-surface-card text-text-muted group-hover:border-border-strong group-hover:text-text-strong"
+        )}
+      >
+        {label}
+      </span>
     </button>
   )
 }

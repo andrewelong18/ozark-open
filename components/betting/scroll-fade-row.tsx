@@ -24,9 +24,10 @@ import { cn } from "@/lib/utils"
  */
 export function ScrollFadeRow({
   className,
+  containerClassName,
   children,
   ...rest
-}: React.ComponentPropsWithoutRef<"div">) {
+}: React.ComponentPropsWithoutRef<"div"> & { containerClassName?: string }) {
   const scroller = useRef<HTMLDivElement>(null)
   const [edges, setEdges] = useState({ start: false, end: false })
 
@@ -59,7 +60,7 @@ export function ScrollFadeRow({
   }, [measure])
 
   return (
-    <div className="relative">
+    <div className={cn("relative", containerClassName)}>
       <div
         ref={scroller}
         onScroll={measure}
