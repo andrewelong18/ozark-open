@@ -447,7 +447,19 @@ export function BetsMenu({
 
   return (
     <>
-      <div className="mb-6 flex flex-col gap-3">
+      {/* No gap on this stack — the spacing is set per edge, because a uniform
+          one does not LOOK uniform here. Every chip is a 32px badge inside a
+          44px tap target, so each row carries 6px of invisible slack top and
+          bottom. A flat 12px gap therefore painted 18px under the phase block
+          and 24px between the two chip rows: the round row read as attached to
+          the phase control and estranged from the category row, which is the
+          opposite of the truth about them.
+
+          So: 14px under the phase block (20px painted), and nothing between the
+          chip rows (12px painted). They group, and no tap target shrinks or
+          overlaps — the two rows' 44px buttons abut exactly, each owning its
+          own full height. */}
+      <div className="mb-6 flex flex-col">
         {/* Row 1: the PHASE, which is what the weekend is organised around, and
             underneath it that phase's own state. The badge used to sit next to
             the <h1> and describe the whole book, which is why it read "Open"
@@ -476,7 +488,7 @@ export function BetsMenu({
           // control with two states rather than two links that happen to sit in
           // a row; a bare underline left the unselected phase looking like body
           // copy.
-          className="flex w-full gap-1 rounded-xl border border-border bg-surface-sunken p-1"
+          className="mb-3.5 flex w-full gap-1 rounded-xl border border-border bg-surface-sunken p-1"
         >
           {PHASE_OPTIONS.map((value) => {
             const active = phase === value
