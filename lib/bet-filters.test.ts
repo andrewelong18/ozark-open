@@ -31,7 +31,6 @@ import {
   allOf,
   filterPhases,
   flattenBets,
-  isNarrowed,
   isOpenBet,
   phaseHasBets,
   reconcileFilter,
@@ -296,12 +295,9 @@ test("reconciling to the same phase changes nothing", () => {
 // Small helpers the menu leans on
 // ---------------------------------------------------------------------------
 
-test("allOf is the unfiltered view, and isNarrowed says so", () => {
+test("allOf is the unfiltered view of a phase", () => {
   assert.deepEqual(allOf(2), { phase: 2, round: ALL, category: ALL })
-  assert.equal(isNarrowed(allOf(1)), false)
-  assert.equal(isNarrowed(f(1, "round_1")), true)
-  assert.equal(isNarrowed(f(1, ALL, "Match")), true)
-  assert.equal(isNarrowed(f(1, "round_1", "Match")), true)
+  assert.deepEqual(allOf(1), { phase: 1, round: ALL, category: ALL })
 })
 
 test("flattenBets reads every bet in the tree", () => {

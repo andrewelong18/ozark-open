@@ -100,11 +100,6 @@ export function allOf(phase: Phase): BetFilter {
   return { phase, round: ALL, category: ALL }
 }
 
-/** Is anything narrowing the phase right now? */
-export function isNarrowed(filter: BetFilter): boolean {
-  return filter.round !== ALL || filter.category !== ALL
-}
-
 // ---------------------------------------------------------------------------
 // Status — no longer an axis, but still the thing a badge and the ordering ask
 // about
