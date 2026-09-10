@@ -33,6 +33,7 @@ import {
   roundOptions,
   type BetFilter,
 } from "@/lib/bet-filters"
+import { ScrollFadeRow } from "@/components/betting/scroll-fade-row"
 import { CATEGORIES, ROUND_LABEL } from "@/lib/bet-taxonomy"
 import type { Phase, PhaseState } from "@/lib/phases"
 import { cn } from "@/lib/utils"
@@ -446,35 +447,95 @@ export function BetsMenu({
 
   return (
     <>
-      <div className="mb-6 flex flex-col gap-3">
+      {/* No gap on this stack — the spacing is set per edge, because a uniform
+          one does not LOOK uniform here. Every chip is a 32px badge inside a
+          44px tap target, so each row carries 6px of invisible slack top and
+          bottom. A flat 12px gap therefore painted 18px under the phase block
+          and 24px between the two chip rows: the round row read as attached to
+          the phase control and estranged from the category row, which is the
+          opposite of the truth about them.
+
+          So: 14px under the phase block (20px painted), and nothing between the
+          chip rows (12px painted). They group, and no tap target shrinks or
+          overlaps — the two rows' 44px buttons abut exactly, each owning its
+          own full height. */}
+      <div className="mb-6 flex flex-col">
         {/* Row 1: the PHASE, which is what the weekend is organised around, and
-            beside it that phase's own state. The badge used to sit next to the
-            <h1> and describe the whole book, which is why it read "Open"
+            underneath it that phase's own state. The badge used to sit next to
+            the <h1> and describe the whole book, which is why it read "Open"
             mid-tournament while the phase you were looking at was closed
-            (#194). It belongs with the control that decides what it describes. */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="inline-flex w-fit items-center gap-0.5 rounded-full border border-border bg-surface-sunken p-0.5">
-            {PHASE_OPTIONS.map((value) => {
-              const active = phase === value
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => selectPhase(value)}
-                  aria-pressed={active}
+            (#194). It belongs with the control that decides what it describes.
+
+            It was a pill-shaped segmented control pinned left with the badge
+            floating off to the right — which on desktop put the two apart by
+            most of a column, and left the reader to infer that the badge
+            described the selected tab rather than the page. It is now a full
+            -width heading rule: two tabs sharing the row, the active one
+            underlined, and the badge centred beneath both. Full width means the
+            menu's width, since this sits inside the same column the cards do —
+            edge to edge on a phone, the content column on a desktop.
+
+            It LOOKS like a tab bar and is deliberately not one in ARIA: the
+            tabs pattern owes a tabpanel, aria-controls and roving tabindex, and
+            a half-built one is worse than none. Same call as the chips — these
+            stay aria-pressed buttons in a labelled group. */}
+        <div
+          role="group"
+          aria-label="Filter by phase"
+          // An outlined, sunken track with a raised active segment — the
+          // segmented-control vocabulary the pill version had, at the width and
+          // weight of a heading. The outline is what makes it read as ONE
+          // control with two states rather than two links that happen to sit in
+          // a row; a bare underline left the unselected phase looking like body
+          // copy.
+          className="mb-3.5 flex w-full gap-1 rounded-xl border border-border bg-surface-sunken p-1"
+        >
+          {PHASE_OPTIONS.map((value) => {
+            const active = phase === value
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => selectPhase(value)}
+                aria-pressed={active}
+                // The badge lives INSIDE the button, so without an explicit
+                // label the button's accessible name becomes "Phase 2 Not open
+                // yet" — a name that changes as the tournament runs, and one no
+                // locator or spoken instruction can rely on. The name is pinned
+                // to "Phase N"; the status is announced after it, as the
+                // description it actually is.
+                aria-label={`Phase ${value}`}
+                aria-describedby={`phase-${value}-state`}
+                className={cn(
+                  "flex flex-1 cursor-pointer flex-col items-center gap-1.5 rounded-lg border-b-2 px-2 pt-2 pb-2 transition-colors duration-fast ease-standard",
+                  active
+                    ? "border-indigo-700 bg-surface-card shadow-xs"
+                    : "border-transparent hover:bg-surface-card/60"
+                )}
+              >
+                <span
                   className={cn(
-                    "min-h-11 cursor-pointer rounded-full px-4 py-1.5 text-sm font-semibold transition-colors duration-fast ease-standard",
-                    active
-                      ? "bg-surface-card text-text-strong shadow-xs"
-                      : "text-text-muted hover:text-text-strong"
+                    // Azalea, matching the round headings this sits above —
+                    // DESIGN_SYSTEM: display type is for headings, and that is
+                    // what these are now. Indigo-700 for the selected one is
+                    // the same treatment the UI kit gives a section heading.
+                    "font-heading text-lg leading-none transition-colors duration-fast ease-standard",
+                    active ? "text-indigo-700" : "text-text-muted"
                   )}
                 >
                   Phase {value}
-                </button>
-              )
-            })}
-          </div>
-          <StatusBadge status={PHASE_BADGE[phaseStates[phase]]} />
+                </span>
+                {/* BOTH phases show their own state, each under its own label.
+                    One badge for the selected phase made the reader carry the
+                    other one in their head — "is Phase 2 open yet?" is the
+                    question the tab is there to answer, and answering it only
+                    after you tap is answering it too late. */}
+                <span id={`phase-${value}-state`}>
+                  <StatusBadge status={PHASE_BADGE[phaseStates[value]]} />
+                </span>
+              </button>
+            )
+          })}
         </div>
 
         {/* Rows 2 and 3: the ROUND, then the CATEGORY. They were one merged
@@ -494,13 +555,15 @@ export function BetsMenu({
             about BEHAVIOUR — exactly one active, and clicking the active one
             never deselects it — which selectRound/selectCategory guarantee
             either way. */}
-        <div
-          role="group"
-          aria-label="Filter by round"
-          className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
+        {/* Rows 2 and 3 are STYLED THE SAME, deliberately, because the label in
+            front of each is now what tells them apart. An earlier pass gave them
+            different shapes and weights to do that job wordlessly; naming them
+            says it outright, and once it is said the shape difference is just
+            two controls that look unrelated for no reason. */}
+        <FilterRow label="Round">
           <FilterChip
-            label="All Rounds"
+            label="All"
+            srLabel="All Rounds"
             active={filter.round === ALL}
             onClick={() => selectRound(ALL)}
           />
@@ -512,15 +575,12 @@ export function BetsMenu({
               onClick={() => selectRound(round)}
             />
           ))}
-        </div>
+        </FilterRow>
 
-        <div
-          role="group"
-          aria-label="Filter by category"
-          className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
+        <FilterRow label="Category">
           <FilterChip
-            label="All Categories"
+            label="All"
+            srLabel="All Categories"
             active={filter.category === ALL}
             onClick={() => selectCategory(ALL)}
           />
@@ -532,7 +592,7 @@ export function BetsMenu({
               onClick={() => selectCategory(category)}
             />
           ))}
-        </div>
+        </FilterRow>
       </div>
 
       {/* TWO different nothings, and conflating them is how a member decides
@@ -671,12 +731,78 @@ export function BetsMenu({
   )
 }
 
+/**
+ * The row that carries one filter level: its name, then its options.
+ *
+ * The label is what distinguishes the round row from the category row now, so
+ * the two rows are free to look identical — which is the point. It is a real
+ * visible label rather than an aria one, and the group is `aria-labelledby` it
+ * rather than carrying a duplicate string, so what a screen reader announces and
+ * what is painted cannot drift apart.
+ *
+ * The fixed label column costs about 60px of a phone's ~358px. That is real, and
+ * it is the trade being made knowingly: naming the levels beats inferring them
+ * from a leading "All Rounds" chip, and the row scrolls, so what the label takes
+ * is reachable rather than lost.
+ */
+function FilterRow({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  const id = `filter-row-${label.toLowerCase()}`
+  return (
+    <ScrollFadeRow
+      role="group"
+      aria-labelledby={id}
+      className="items-center gap-1.5"
+    >
+      {/* The label rides INSIDE the scroller, as the row's first item. As a
+          fixed column outside it, it held 60px of a phone's 358px hostage on
+          every row forever; here it scrolls away with everything else, so the
+          width it costs is borrowed rather than spent.
+
+          Its width is its text, not a fixed column, so the gap to the first chip
+          is the same as the gap between chips — one rhythm per row. That does
+          mean "Round" and "Category" start their chips at different x
+          positions, which is fine: the label is read, not aligned to. */}
+      <span
+        id={id}
+        className="shrink-0 pr-1 text-[10px] font-bold tracking-[0.09em] text-text-body uppercase"
+      >
+        {label}
+      </span>
+      {children}
+    </ScrollFadeRow>
+  )
+}
+
+/**
+ * One radio option in a filter row.
+ *
+ * A small rectangle: solid indigo when selected, white when not. Both rows use
+ * it, because the row labels now say which level you are looking at and two
+ * controls doing the same job have no reason to look unrelated.
+ *
+ * The painted chip is 32px and the button around it is 44px — the tap target the
+ * repo holds every control to (`e2e/mobile-layout.spec.ts`). Keeping them
+ * separate is what lets the chip be small without the target following it down;
+ * the spec measures reach from the centre and counts the button or any
+ * descendant as a hit, so the transparent padding still registers.
+ */
 function FilterChip({
   label,
+  srLabel,
   active,
   onClick,
 }: {
   label: string
+  /** Accessible name, when the visible text is too terse to stand alone —
+   *  two buttons both reading "All" are ambiguous to a screen reader and to a
+   *  locator alike. Must CONTAIN the visible text (WCAG 2.5.3). */
+  srLabel?: string
   active: boolean
   onClick: () => void
 }) {
@@ -685,17 +811,19 @@ function FilterChip({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={cn(
-        // min-h-11 rather than an expanded pseudo hit area: chips sit shoulder
-        // to shoulder in a scrolling row, so overlapping targets would just
-        // move the mis-tap somewhere else.
-        "inline-flex min-h-11 shrink-0 items-center rounded-full border px-3.5 text-xs font-semibold whitespace-nowrap transition-colors duration-fast ease-standard",
-        active
-          ? "border-indigo-200 bg-indigo-50 text-indigo-700"
-          : "border-border bg-surface-card text-text-muted hover:border-border-strong hover:text-text-strong"
-      )}
+      aria-label={srLabel}
+      className="group inline-flex min-h-11 shrink-0 cursor-pointer items-center"
     >
-      {label}
+      <span
+        className={cn(
+          "inline-flex h-8 items-center rounded-sm border px-3 text-xs font-semibold whitespace-nowrap transition-colors duration-fast ease-standard",
+          active
+            ? "border-indigo-700 bg-indigo-700 text-white"
+            : "border-border bg-surface-card text-text-muted group-hover:border-border-strong group-hover:text-text-strong"
+        )}
+      >
+        {label}
+      </span>
     </button>
   )
 }
