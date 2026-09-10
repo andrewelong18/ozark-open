@@ -33,6 +33,7 @@ import {
   roundOptions,
   type BetFilter,
 } from "@/lib/bet-filters"
+import { ScrollFadeRow } from "@/components/betting/scroll-fade-row"
 import { CATEGORIES, ROUND_LABEL } from "@/lib/bet-taxonomy"
 import type { Phase, PhaseState } from "@/lib/phases"
 import { cn } from "@/lib/utils"
@@ -448,33 +449,81 @@ export function BetsMenu({
     <>
       <div className="mb-6 flex flex-col gap-3">
         {/* Row 1: the PHASE, which is what the weekend is organised around, and
-            beside it that phase's own state. The badge used to sit next to the
-            <h1> and describe the whole book, which is why it read "Open"
+            underneath it that phase's own state. The badge used to sit next to
+            the <h1> and describe the whole book, which is why it read "Open"
             mid-tournament while the phase you were looking at was closed
-            (#194). It belongs with the control that decides what it describes. */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="inline-flex w-fit items-center gap-0.5 rounded-full border border-border bg-surface-sunken p-0.5">
-            {PHASE_OPTIONS.map((value) => {
-              const active = phase === value
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => selectPhase(value)}
-                  aria-pressed={active}
+            (#194). It belongs with the control that decides what it describes.
+
+            It was a pill-shaped segmented control pinned left with the badge
+            floating off to the right — which on desktop put the two apart by
+            most of a column, and left the reader to infer that the badge
+            described the selected tab rather than the page. It is now a full
+            -width heading rule: two tabs sharing the row, the active one
+            underlined, and the badge centred beneath both. Full width means the
+            menu's width, since this sits inside the same column the cards do —
+            edge to edge on a phone, the content column on a desktop.
+
+            It LOOKS like a tab bar and is deliberately not one in ARIA: the
+            tabs pattern owes a tabpanel, aria-controls and roving tabindex, and
+            a half-built one is worse than none. Same call as the chips — these
+            stay aria-pressed buttons in a labelled group. */}
+        <div
+          role="group"
+          aria-label="Filter by phase"
+          // An outlined, sunken track with a raised active segment — the
+          // segmented-control vocabulary the pill version had, at the width and
+          // weight of a heading. The outline is what makes it read as ONE
+          // control with two states rather than two links that happen to sit in
+          // a row; a bare underline left the unselected phase looking like body
+          // copy.
+          className="flex w-full gap-1 rounded-xl border border-border bg-surface-sunken p-1"
+        >
+          {PHASE_OPTIONS.map((value) => {
+            const active = phase === value
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => selectPhase(value)}
+                aria-pressed={active}
+                // The badge lives INSIDE the button, so without an explicit
+                // label the button's accessible name becomes "Phase 2 Not open
+                // yet" — a name that changes as the tournament runs, and one no
+                // locator or spoken instruction can rely on. The name is pinned
+                // to "Phase N"; the status is announced after it, as the
+                // description it actually is.
+                aria-label={`Phase ${value}`}
+                aria-describedby={`phase-${value}-state`}
+                className={cn(
+                  "flex flex-1 cursor-pointer flex-col items-center gap-1.5 rounded-lg border-b-2 px-2 pt-2 pb-2 transition-colors duration-fast ease-standard",
+                  active
+                    ? "border-indigo-700 bg-surface-card shadow-xs"
+                    : "border-transparent hover:bg-surface-card/60"
+                )}
+              >
+                <span
                   className={cn(
-                    "min-h-11 cursor-pointer rounded-full px-4 py-1.5 text-sm font-semibold transition-colors duration-fast ease-standard",
-                    active
-                      ? "bg-surface-card text-text-strong shadow-xs"
-                      : "text-text-muted hover:text-text-strong"
+                    // Azalea, matching the round headings this sits above —
+                    // DESIGN_SYSTEM: display type is for headings, and that is
+                    // what these are now. Indigo-700 for the selected one is
+                    // the same treatment the UI kit gives a section heading.
+                    "font-heading text-lg leading-none transition-colors duration-fast ease-standard",
+                    active ? "text-indigo-700" : "text-text-muted"
                   )}
                 >
                   Phase {value}
-                </button>
-              )
-            })}
-          </div>
-          <StatusBadge status={PHASE_BADGE[phaseStates[phase]]} />
+                </span>
+                {/* BOTH phases show their own state, each under its own label.
+                    One badge for the selected phase made the reader carry the
+                    other one in their head — "is Phase 2 open yet?" is the
+                    question the tab is there to answer, and answering it only
+                    after you tap is answering it too late. */}
+                <span id={`phase-${value}-state`}>
+                  <StatusBadge status={PHASE_BADGE[phaseStates[value]]} />
+                </span>
+              </button>
+            )
+          })}
         </div>
 
         {/* Rows 2 and 3: the ROUND, then the CATEGORY. They were one merged
@@ -494,11 +543,7 @@ export function BetsMenu({
             about BEHAVIOUR — exactly one active, and clicking the active one
             never deselects it — which selectRound/selectCategory guarantee
             either way. */}
-        <div
-          role="group"
-          aria-label="Filter by round"
-          className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
+        <ScrollFadeRow role="group" aria-label="Filter by round" className="gap-1.5">
           <FilterChip
             label="All Rounds"
             active={filter.round === ALL}
@@ -512,14 +557,22 @@ export function BetsMenu({
               onClick={() => selectRound(round)}
             />
           ))}
-        </div>
+        </ScrollFadeRow>
 
-        <div
+        {/* The category row is deliberately a size down from the round row. Two
+            identical chip rows stacked read as one control that happens to wrap,
+            which is the ambiguity Pat's "three levels" is meant to remove; the
+            step down says the third level is subordinate to the second without
+            spending a label on it. The TAP TARGET does not shrink — the button
+            keeps its 44px and only the painted badge is smaller (see
+            FilterChip's `size`). */}
+        <ScrollFadeRow
           role="group"
           aria-label="Filter by category"
-          className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="gap-1"
         >
           <FilterChip
+            size="sm"
             label="All Categories"
             active={filter.category === ALL}
             onClick={() => selectCategory(ALL)}
@@ -527,12 +580,13 @@ export function BetsMenu({
           {CATEGORIES.map((category) => (
             <FilterChip
               key={category}
+              size="sm"
               label={category}
               active={filter.category === category}
               onClick={() => selectCategory(category)}
             />
           ))}
-        </div>
+        </ScrollFadeRow>
       </div>
 
       {/* TWO different nothings, and conflating them is how a member decides
@@ -671,15 +725,69 @@ export function BetsMenu({
   )
 }
 
+/**
+ * One radio option in a filter row.
+ *
+ * `size="sm"` shrinks the PAINTED BADGE ONLY. The button stays 44px tall either
+ * way — the small variant drops its own background and border and paints them on
+ * an inner span instead, so the chip looks a size down while the thing a thumb
+ * actually has to hit does not move. `e2e/mobile-layout.spec.ts` measures reach
+ * from the centre outward and counts the element or any descendant as a hit, so
+ * both the badge and the transparent padding around it still register.
+ */
 function FilterChip({
   label,
   active,
   onClick,
+  size = "md",
 }: {
   label: string
   active: boolean
   onClick: () => void
+  size?: "md" | "sm"
 }) {
+  if (size === "sm") {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={active}
+        className="group inline-flex min-h-11 shrink-0 cursor-pointer items-center px-0.5"
+      >
+        <span
+          className={cn(
+            // SQUARED, not pill. The round row above is pill-shaped and sits on
+            // white; this one is rectangular and sits IN the page, borderless
+            // and recessed. Size alone did not separate them — two rows of the
+            // same pill in two sizes read as one control that wrapped, which is
+            // the exact ambiguity three levels are meant to remove. Shape and
+            // ground are what the eye sorts on; scale is what it sorts last.
+            "inline-flex h-7 items-center rounded-sm px-2.5 text-[11px] font-semibold whitespace-nowrap transition-colors duration-fast ease-standard",
+            // A SOLID fill, because nothing else states "selected" as flatly
+            // on a chip this small — but in warm INK, not brand indigo. Solid
+            // indigo-700 made a third-level filter the loudest thing on the
+            // page, inverting the hierarchy the shape change had just
+            // established. Ink is the only ramp free to take it: gold is the
+            // accent the design system rations, and green and red are spoken
+            // for — green is Open and a win, red is a loss, and a green "Match"
+            // chip would read as a status rather than a selection. Ink-600 on
+            // cream is ~7:1 against white text and sits INTO the page instead
+            // of jumping off it.
+            active
+              ? "bg-ink-600 text-white"
+              : "bg-surface-sunken text-text-muted group-hover:bg-ink-200 group-hover:text-text-strong"
+          )}
+        >
+          {label}
+        </span>
+      </button>
+    )
+  }
+
+  const paint = active
+    ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+    : "border-border bg-surface-card text-text-muted"
+
   return (
     <button
       type="button"
@@ -689,10 +797,9 @@ function FilterChip({
         // min-h-11 rather than an expanded pseudo hit area: chips sit shoulder
         // to shoulder in a scrolling row, so overlapping targets would just
         // move the mis-tap somewhere else.
-        "inline-flex min-h-11 shrink-0 items-center rounded-full border px-3.5 text-xs font-semibold whitespace-nowrap transition-colors duration-fast ease-standard",
-        active
-          ? "border-indigo-200 bg-indigo-50 text-indigo-700"
-          : "border-border bg-surface-card text-text-muted hover:border-border-strong hover:text-text-strong"
+        "inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-full border px-3.5 text-xs font-semibold whitespace-nowrap transition-colors duration-fast ease-standard",
+        paint,
+        !active && "hover:border-border-strong hover:text-text-strong"
       )}
     >
       {label}
