@@ -33,6 +33,7 @@ import {
   reconcileFacet,
   type Facet,
 } from "@/lib/bet-filters"
+import { ROUND_LABEL } from "@/lib/bet-taxonomy"
 import type { Phase, PhaseState } from "@/lib/phases"
 import { cn } from "@/lib/utils"
 
@@ -83,17 +84,6 @@ export type CategoryGroup = { name: string; bets: Bet[] }
 export type RoundGroup = { round: string; categories: CategoryGroup[] }
 export type PhaseGroup = { phase: number; rounds: RoundGroup[] }
 
-const ROUND_LABEL: Record<string, string> = {
-  tournament: "Tournament",
-  round_1: "Round 1",
-  round_2: "Round 2",
-  round_3: "Round 3",
-}
-// The compact round labels ("R1", "R3") are gone with the tab strip that held
-// them (Sprint 26 / #193 — Andrew): rounds are chips in one scrolling row
-// alongside the categories now, and they're spelled out. ROUND_LABEL above
-// already had the full names, so the chips and the section headings finally
-// read the same.
 const PHASE_OPTIONS: Phase[] = [1, 2]
 
 /** A phase's own state, as a badge. `phaseState()` already answers this for the

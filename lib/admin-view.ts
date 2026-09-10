@@ -8,6 +8,7 @@
 // Pure module by design — no Supabase, no "@/" alias imports — so the
 // node:test suite exercises the exact code the page runs.
 
+import { roundRank } from "./bet-taxonomy.ts"
 import { toResult, type PickResult } from "./closed-bets.ts"
 import {
   buildResultsTable,
@@ -142,13 +143,6 @@ export function normalizeAdminRows(
 // ---------------------------------------------------------------------------
 // The View-sheet grouping — one section per bettor, money columns rolled up
 // ---------------------------------------------------------------------------
-
-const ROUND_ORDER = ["tournament", "round_1", "round_2", "round_3"] as const
-
-function roundRank(round: string): number {
-  const i = (ROUND_ORDER as readonly string[]).indexOf(round)
-  return i === -1 ? ROUND_ORDER.length : i
-}
 
 /** One bettor's section: their placements in menu order plus the same money
  * row /results shows (theoretical, actual-as-it-stands, refunded voids). */
