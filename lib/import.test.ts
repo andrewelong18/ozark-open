@@ -18,9 +18,9 @@ import {
   validateSheet,
   type ExistingBet,
 } from "./import.ts"
+import { CATEGORIES } from "./bet-taxonomy.ts"
 import type { PhaseClock } from "./phases.ts"
 
-const CATEGORIES = ["Top Finisher", "Match", "Prop Bet"]
 
 const HEADER =
   "phase,status,round,category,bet_id,pick_id,bet,pick," +
@@ -33,6 +33,8 @@ type RowSpec = {
   pickId: number
   result?: string
   title?: string
+  category?: string
+  round?: string
 }
 
 function row(spec: RowSpec): string {
@@ -43,12 +45,14 @@ function row(spec: RowSpec): string {
     pickId,
     result = "Pending",
     title = `Bet ${betId}`,
+    category = "Top Finisher",
+    round = "Round 1",
   } = spec
   return [
     phase,
     status,
-    "Round 1",
-    "Top Finisher",
+    round,
+    category,
     betId,
     pickId,
     title,
@@ -64,7 +68,7 @@ function row(spec: RowSpec): string {
 async function validate(specs: RowSpec[]) {
   const csv = [HEADER, ...specs.map(row)].join("\n")
   const parsed = await parseSheet(Buffer.from(csv, "utf-8"), "sheet.csv")
-  return validateSheet(parsed, CATEGORIES)
+  return validateSheet(parsed)
 }
 
 // ---------------------------------------------------------------------------
@@ -426,4 +430,45 @@ test("unlandedWrite catches the silent one: success, zero rows", () => {
 test("unlandedWrite catches a partial batch", () => {
   const out = unlandedWrite("12 picks", null, 9, 12)
   assert.match(out!, /only 9 of 12/)
+})
+
+// ---------------------------------------------------------------------------
+// The category contract — the five of PRD §6, pinned in code
+// ---------------------------------------------------------------------------
+//
+// Before Sept 10 2026 validateSheet() took the legal names as an argument and
+// the route passed it every row of `bet_categories` — a table with no CHECK
+// constraint. One stray row there and an off-contract category imported cleanly
+// and then appeared on the bet menu as a filter chip. Pat, driving the menu:
+// "Medalist is not a bet category." He is right: Medalist is a bet TITLE, filed
+// under Top Finisher (see supabase/seed-sample-phase1.sql).
+
+test("a category outside the five rejects the file and names all five", async () => {
+  const result = await validate([{ pickId: 1, category: "Medalist" }])
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.errors.length, 1)
+  assert.match(result.errors[0], /unknown category "Medalist"/)
+  for (const name of CATEGORIES) assert.match(result.errors[0], new RegExp(name))
+})
+
+test("each of the five is accepted, case-insensitively", async () => {
+  for (const [i, name] of CATEGORIES.entries()) {
+    const result = await validate([
+      { pickId: 1, betId: i + 1, category: name.toUpperCase() },
+    ])
+    assert.equal(result.ok, true, `${name} was rejected`)
+    if (result.ok) assert.equal(result.rows[0].category, name)
+  }
+})
+
+test("a bad category rejects the WHOLE file, not just its row (PRD §8.2)", async () => {
+  const result = await validate([
+    { pickId: 1, betId: 1 },
+    { pickId: 2, betId: 2, category: "Medalist" },
+  ])
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  // No partial import: `rows` is not reachable on a failed validation at all.
+  assert.ok(!("rows" in result))
 })

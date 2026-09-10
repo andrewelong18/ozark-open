@@ -25,14 +25,15 @@ import {
 } from "@/lib/closed-bets"
 import type { OnBehalfOf } from "@/lib/placements"
 import {
-  ALL_FACET,
-  availableCategories,
-  availableRounds,
+  ALL,
+  allOf,
   filterPhases,
   phaseHasBets,
-  reconcileFacet,
-  type Facet,
+  reconcileFilter,
+  roundOptions,
+  type BetFilter,
 } from "@/lib/bet-filters"
+import { CATEGORIES, ROUND_LABEL } from "@/lib/bet-taxonomy"
 import type { Phase, PhaseState } from "@/lib/phases"
 import { cn } from "@/lib/utils"
 
@@ -83,17 +84,6 @@ export type CategoryGroup = { name: string; bets: Bet[] }
 export type RoundGroup = { round: string; categories: CategoryGroup[] }
 export type PhaseGroup = { phase: number; rounds: RoundGroup[] }
 
-const ROUND_LABEL: Record<string, string> = {
-  tournament: "Tournament",
-  round_1: "Round 1",
-  round_2: "Round 2",
-  round_3: "Round 3",
-}
-// The compact round labels ("R1", "R3") are gone with the tab strip that held
-// them (Sprint 26 / #193 — Andrew): rounds are chips in one scrolling row
-// alongside the categories now, and they're spelled out. ROUND_LABEL above
-// already had the full names, so the chips and the section headings finally
-// read the same.
 const PHASE_OPTIONS: Phase[] = [1, 2]
 
 /** A phase's own state, as a badge. `phaseState()` already answers this for the
@@ -380,11 +370,13 @@ export function BetsMenu({
   // Which phase the menu opens on. Decided on the server by closingPhase() —
   // Phase 2 the moment any Phase 2 bet is published, Phase 1 before that — so
   // the tab you land on is the one the tournament is actually in.
-  const [phase, setPhase] = useState<Phase>(defaultPhase)
-  // Exactly ONE secondary filter at a time — a round, or a category, or
-  // neither. Never both; that's what "one filter at a time" buys, and it's
-  // why no selection can empty the page.
-  const [facet, setFacet] = useState<Facet>(ALL_FACET)
+  //
+  // All three levels live in ONE piece of state, because level 1 reconciles
+  // level 2 (Round 1 does not exist in Phase 2) and a phase flip has to move
+  // both atomically. Pat, Sept 10: three filters, each a radio group, all three
+  // composing.
+  const [filter, setFilter] = useState<BetFilter>(() => allOf(defaultPhase))
+  const phase = filter.phase
   // Rule-violation messages surface as one floating toast (see BetErrorToast)
   // instead of inline, so the stake input never reflows.
   const [toastError, setToastError] = useState<string | null>(null)
@@ -402,53 +394,26 @@ export function BetsMenu({
   // its own message, not an error (Sprint 26 / #193).
   const published = useMemo(() => phaseHasBets(phases, phase), [phases, phase])
 
-  // Rounds and categories present IN THE SELECTED PHASE, so every chip offered
-  // is guaranteed to match at least one bet.
-  const roundChips = useMemo(
-    () => availableRounds(phases, phase),
-    [phases, phase]
-  )
-  const categoryChips = useMemo(
-    () => availableCategories(phases, phase),
-    [phases, phase]
-  )
-  // One row, rounds then categories (Sprint 26 / #193 — Andrew). It's worth
-  // rendering only when there's an actual choice to make: a single chip beside
-  // "All Bets" filters nothing.
-  const chips = useMemo(
-    () => [
-      ...roundChips.map((value) => ({ kind: "round" as const, value, label: ROUND_LABEL[value] ?? value })),
-      ...categoryChips.map((value) => ({ kind: "category" as const, value, label: value })),
-    ],
-    [roundChips, categoryChips]
-  )
-  const showChips = chips.length > 1
-
-  // A selection made in one phase may not exist in the other — Round 1 is a
-  // Phase 1 round and Round 3 a Phase 2 one, so a round facet essentially never
-  // survives a tab change. Reconcile rather than render an empty page.
-  const activeFacet = useMemo(
-    () => reconcileFacet(phases, phase, facet),
-    [phases, phase, facet]
-  )
+  // The rounds this phase CAN hold (ADR 0001 §4), not the ones it currently
+  // holds. Static on purpose — see lib/bet-filters.ts's header. Phase 1 offers
+  // Round 1 before a Round 1 bet exists, and the empty state below covers it.
+  const rounds = roundOptions(phase)
 
   const filteredPhases = useMemo(
-    () => filterPhases(phases, phase, activeFacet),
-    [phases, phase, activeFacet]
+    () => filterPhases(phases, filter),
+    [phases, filter]
   )
 
-  // What the active chip is called, so an empty result can name the thing that
-  // emptied it rather than saying "no bets" and leaving the reader to work out
-  // which of the controls above did it.
   /** The tab that isn't selected. Two phases, so this is a flip, not a search. */
   const otherPhase: Phase = phase === 1 ? 2 : 1
 
-  const activeChipLabel =
-    activeFacet.kind === "all"
-      ? null
-      : (chips.find(
-          (c) => c.kind === activeFacet.kind && c.value === activeFacet.value
-        )?.label ?? activeFacet.value)
+  // What is currently narrowing the phase, in the order the rows are stacked,
+  // so an empty result names every condition that caused it rather than saying
+  // "no bets" and leaving the reader to work out which of three rows did it.
+  const activeLabels = [
+    filter.round === ALL ? null : (ROUND_LABEL[filter.round] ?? filter.round),
+    filter.category === ALL ? null : filter.category,
+  ].filter((label): label is string => label !== null)
 
   // Replays the list's entrance whenever the filter changes, by alternating
   // between two identical keyframes (a CSS animation restarts only when its
@@ -460,18 +425,24 @@ export function BetsMenu({
   // derived state: it discards this render and re-runs immediately, before
   // paint. In an effect it would be a cascading render, and
   // react-hooks/set-state-in-effect rejects it.
-  const facetKey = `${phase}|${activeFacet.kind}|${
-    activeFacet.kind === "all" ? "" : activeFacet.value
-  }`
-  const [swap, setSwap] = useState({ key: facetKey, phase: "a" as "a" | "b" })
-  if (swap.key !== facetKey) {
-    setSwap({ key: facetKey, phase: swap.phase === "a" ? "b" : "a" })
+  const filterKey = `${filter.phase}|${filter.round}|${filter.category}`
+  const [swap, setSwap] = useState({ key: filterKey, phase: "a" as "a" | "b" })
+  if (swap.key !== filterKey) {
+    setSwap({ key: filterKey, phase: swap.phase === "a" ? "b" : "a" })
   }
 
-  // Selecting any chip replaces whatever was selected — one facet at a time,
-  // which is what lets a single row hold both dimensions without anything to
-  // reason about.
-  const selectChip = (next: Facet) => setFacet(next)
+  // Each row is a radio group: a click REPLACES that row's value and leaves the
+  // other two rows alone. Clicking the active chip is a no-op rather than a
+  // deselect — that's what makes it a radio and not a checkbox, and it's the
+  // behaviour Pat asked for by name.
+  const selectPhase = (next: Phase) =>
+    setFilter((current) => reconcileFilter(current, next))
+  const selectRound = (round: BetFilter["round"]) =>
+    setFilter((current) => ({ ...current, round }))
+  const selectCategory = (category: BetFilter["category"]) =>
+    setFilter((current) => ({ ...current, category }))
+  const clearFacets = () =>
+    setFilter((current) => ({ ...current, round: ALL, category: ALL }))
 
   return (
     <>
@@ -489,7 +460,7 @@ export function BetsMenu({
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setPhase(value)}
+                  onClick={() => selectPhase(value)}
                   aria-pressed={active}
                   className={cn(
                     "min-h-11 cursor-pointer rounded-full px-4 py-1.5 text-sm font-semibold transition-colors duration-fast ease-standard",
@@ -506,47 +477,78 @@ export function BetsMenu({
           <StatusBadge status={PHASE_BADGE[phaseStates[phase]]} />
         </div>
 
-        {/* Row 2: ONE chip row holding both secondary dimensions — rounds then
-            categories (Sprint 26 / #193 — Andrew). They were a tab strip and a
-            chip row on separate lines, which was two rows of chrome for a model
-            that has only ever allowed one selection at a time. Merging them is
-            the honest rendering of that, and it gives the page back a row on
-            the device it's read on. Scrolls horizontally with no visible
-            scrollbar; every chip is a 44px target. */}
-        {showChips && (
-          <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {/* Rows 2 and 3: the ROUND, then the CATEGORY. They were one merged
+            chip row (Sprint 26 / #193) because the model underneath allowed
+            only one of them to be active at a time; Pat rejected that on Sept
+            10 and asked for three levels that compose, so they are two rows
+            again — and this time they are genuinely independent.
+
+            BOTH ROWS ALWAYS RENDER, and their options are fixed. Nothing here
+            is derived from the bets that happen to be loaded, so the row you
+            reach for is in the same place on Thursday morning and Saturday
+            night. Each scrolls horizontally with no visible scrollbar; every
+            chip is a 44px target.
+
+            They are aria-pressed buttons in a labelled group rather than
+            role="radio". Pat's "function like a radio button" is a statement
+            about BEHAVIOUR — exactly one active, and clicking the active one
+            never deselects it — which selectRound/selectCategory guarantee
+            either way. */}
+        <div
+          role="group"
+          aria-label="Filter by round"
+          className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          <FilterChip
+            label="All Rounds"
+            active={filter.round === ALL}
+            onClick={() => selectRound(ALL)}
+          />
+          {rounds.map((round) => (
             <FilterChip
-              label="All Bets"
-              active={activeFacet.kind === "all"}
-              onClick={() => selectChip(ALL_FACET)}
+              key={round}
+              label={ROUND_LABEL[round] ?? round}
+              active={filter.round === round}
+              onClick={() => selectRound(round)}
             />
-            {chips.map((chip) => (
-              <FilterChip
-                key={`${chip.kind}:${chip.value}`}
-                label={chip.label}
-                active={
-                  activeFacet.kind === chip.kind &&
-                  activeFacet.value === chip.value
-                }
-                onClick={() => selectChip({ kind: chip.kind, value: chip.value })}
-              />
-            ))}
-          </div>
-        )}
+          ))}
+        </div>
+
+        <div
+          role="group"
+          aria-label="Filter by category"
+          className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          <FilterChip
+            label="All Categories"
+            active={filter.category === ALL}
+            onClick={() => selectCategory(ALL)}
+          />
+          {CATEGORIES.map((category) => (
+            <FilterChip
+              key={category}
+              label={category}
+              active={filter.category === category}
+              onClick={() => selectCategory(category)}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* THREE different nothings, and conflating them is how a member decides
-          the app is broken. Each one names the thing that caused it and offers
-          the tap that undoes it.
+      {/* TWO different nothings, and conflating them is how a member decides
+          the app is broken. Each names what caused it and offers the tap that
+          undoes it.
 
           1. The phase has nothing published — the bets exist but are still
              `hidden`, so the admin hasn’t opened the window. Pat asked for this
              one by name.
-          2. The phase has bets but the active chip matches none of them. This is
-             unreachable by construction — one facet at a time, every chip derived
-             from this phase (lib/bet-filters.ts) — and it is here anyway,
-             because "unreachable" is a property of today’s code and a member
-             staring at a blank list deserves better than our confidence. */}
+          2. The phase has bets but this combination of round and category
+             matches none of them. Sprint 26 shipped this as unreachable by
+             construction; three independent filters make it REACHABLE, which is
+             the price of Pat's Sept 10 revision (PRD §12 A23). It is a designed
+             screen now, not a hedge: it names every active condition, because
+             with two rows narrowing at once "no bets" would leave the reader to
+             work out which one did it. */}
       {!published ? (
         <div className="py-6">
           <EmptyState
@@ -565,7 +567,7 @@ export function BetsMenu({
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => setPhase(otherPhase)}
+                  onClick={() => selectPhase(otherPhase)}
                 >
                   See Phase {otherPhase} instead
                 </Button>
@@ -579,16 +581,14 @@ export function BetsMenu({
             glyph="🔍"
             title="No bets match this filter"
             message={
-              activeChipLabel
-                ? `Nothing in Phase ${phase} is filed under “${activeChipLabel}”.`
+              activeLabels.length > 0
+                ? `Nothing in Phase ${phase} is filed under ${activeLabels
+                    .map((label) => `“${label}”`)
+                    .join(" + ")}.`
                 : `Nothing in Phase ${phase} matches the current filter.`
             }
             action={
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => selectChip(ALL_FACET)}
-              >
+              <Button variant="secondary" size="sm" onClick={clearFacets}>
                 Show all Phase {phase} bets
               </Button>
             }

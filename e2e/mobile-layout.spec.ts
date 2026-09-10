@@ -232,9 +232,19 @@ test.describe("the bet menu under a thumb", () => {
       page.getByRole("button", { name: "Phase 2", exact: true }),
       "phase toggle"
     )
+    // Both secondary rows since Pat's Sept 10 revision — the round row and the
+    // category row are separate controls again, so each owes its own 44px.
     await expectTappable(
-      page.getByRole("button", { name: "All Bets" }),
-      "filter chip"
+      page.getByRole("button", { name: "All Rounds" }),
+      "round filter chip"
+    )
+    await expectTappable(
+      page.getByRole("button", { name: "All Categories" }),
+      "category filter chip"
+    )
+    await expectTappable(
+      page.getByRole("button", { name: "Prop Bet", exact: true }),
+      "category filter chip (last in the scrolling row)"
     )
     await expectTappable(
       page.getByRole("link", { name: /Review all/ }),

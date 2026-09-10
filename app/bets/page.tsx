@@ -29,6 +29,7 @@ import {
 } from "@/lib/placements"
 import { phaseClosedByClock, phaseState, wageringOpen, type Phase, type PhaseState } from "@/lib/phases"
 import { sortPicks } from "@/lib/pick-order"
+import { categoryRank, roundRank } from "@/lib/bet-taxonomy"
 import {
   buildComplianceSummary,
   normalizeMyBets,
@@ -42,15 +43,6 @@ import {
 type PickQueryRow = Omit<Pick, "player_avatar_url"> & {
   users: { avatar_url: string | null } | { avatar_url: string | null }[] | null
 }
-
-const ROUND_ORDER = ["tournament", "round_1", "round_2", "round_3"] as const
-const CATEGORY_ORDER = [
-  "Top Finisher",
-  "Top X Finisher",
-  "Match",
-  "Group Match",
-  "Prop Bet",
-]
 
 // The sheet arrives unsorted; the menu orders phase → round → category
 // (ADR 0001 §7), bets WAGERABLE-FIRST then by their stable sheet IDs, and picks
@@ -76,15 +68,6 @@ function groupBets(bets: Bet[]): PhaseGroup[] {
     cats.get(catName)!.push(bet)
   }
 
-  const roundRank = (r: string) => {
-    const i = (ROUND_ORDER as readonly string[]).indexOf(r)
-    return i === -1 ? ROUND_ORDER.length : i
-  }
-  const catRank = (c: string) => {
-    const i = CATEGORY_ORDER.indexOf(c)
-    return i === -1 ? CATEGORY_ORDER.length : i
-  }
-
   return Array.from(phases.entries())
     .sort(([a], [b]) => a - b)
     .map(([phase, rounds]) => ({
@@ -94,7 +77,7 @@ function groupBets(bets: Bet[]): PhaseGroup[] {
         .map(([round, cats]) => ({
           round,
           categories: Array.from(cats.entries())
-            .sort(([a], [b]) => catRank(a) - catRank(b))
+            .sort(([a], [b]) => categoryRank(a) - categoryRank(b))
             .map(([name, bets]) => ({
               name,
               bets: bets

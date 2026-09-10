@@ -138,12 +138,13 @@ test.describe("filter swap", () => {
     await signInAs(page, ACCOUNTS.approved)
     await page.goto("/bets")
 
-    // Narrow to one round first, then widen back to "All Bets". Widening is the
-    // direction that cannot filter the card away, whichever round the fixture
-    // happens to put it in — a specific chip would depend on the sheet.
+    // Narrow to one round first, then widen back to "All Rounds". Widening is
+    // the direction that cannot filter the card away, whichever round the
+    // fixture happens to put it in — a specific chip would depend on the sheet.
     //
-    // Rounds and categories share one chip row since #193, and the round chips
-    // are spelled out ("Round 1", not "R1").
+    // Rounds and categories are separate rows again since Pat's Sept 10
+    // revision; the round row is the one that always offers a real choice, and
+    // its chips are spelled out ("Round 1", not "R1").
     const chips = page.getByRole("button", { name: /^(Round [123]|Tournament)$/ })
     if ((await chips.count()) === 0) test.skip(true, "no round chips in this fixture")
     await chips.first().click()
@@ -158,7 +159,7 @@ test.describe("filter swap", () => {
     await expect(field).toHaveValue("7")
 
     const before = await list.getAttribute("data-swap")
-    await page.getByRole("button", { name: "All Bets", exact: true }).click()
+    await page.getByRole("button", { name: "All Rounds", exact: true }).click()
 
     // The container flipped, so the entrance replayed…
     await expect(list).not.toHaveAttribute("data-swap", before!)

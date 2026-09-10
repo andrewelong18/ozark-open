@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/modules/empty-state"
 import { LoadError } from "@/components/modules/load-error"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import { OddsChip } from "@/components/betting/odds-chip"
+import { ROUND_LABEL } from "@/lib/bet-taxonomy"
 import { checkPickMinimum, checkTournamentTotal } from "@/lib/validation"
 import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
 import { RulesCard } from "@/components/modules/rules-card"
@@ -31,13 +32,6 @@ import {
 // join normalization live in lib/my-bets.ts. Each row shows the wager's
 // odds_at_placement snapshot, never the pick's live odds (those are the bet
 // menu's job, sheet-verbatim).
-
-const ROUND_LABEL: Record<string, string> = {
-  tournament: "Tournament",
-  round_1: "Round 1",
-  round_2: "Round 2",
-  round_3: "Round 3",
-}
 
 type Participant = { entry_fee: number; is_player: boolean }
 
