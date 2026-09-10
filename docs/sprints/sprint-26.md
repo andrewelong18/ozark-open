@@ -125,3 +125,98 @@ reasoning about it. The same pass found a spec asserting
   ([#202](https://github.com/andrewelong18/ozark-open/issues/202)). Nothing
   depends on it today, but the next person to use that seed for anything
   phase-related would get a green run that proves nothing.
+
+---
+
+## Follow-up — Sept 10, 2026: three filter levels (PRD §12 A23)
+
+Pat drove the menu a third time and rejected the chip-row merge this sprint made
+during its build. His revision, verbatim:
+
+> There should be three levels of filters:
+>
+> 1. The top filter should be Phase 1 and Phase 2. Both can always be visible. If
+>    there aren't any bets published you can say that bets for Phase 1 or Phase 2
+>    will be released soon (or at a particular time).
+> 2. The middle filter should be the round that the bets are associated with.
+>    These include Round 1, Round 3, and Tournament. There will never be a Round
+>    3 bet for Phase 1 or a Round 1 bet for Phase 2.
+> 3. The bottom filter is bet category. Top Finisher, Top X Finisher, Match,
+>    Group Match, and Prop Bet are the only options. Medalist is not a bet
+>    category.
+>
+> In all three cases, the toggle should function like a radio button, where you
+> may only choose one condition for each filter at a time.
+
+Level 1 was already this sprint's work and barely changed. Levels 2 and 3 are
+the change, and the interesting word in the ask is **"three levels"** — they have
+to *compose*. `lib/bet-filters.ts` allowed exactly one secondary facet, so
+"Phase 1 + Round 1 + Match" was not merely unrendered, it was unrepresentable:
+clicking Match replaced Round 1.
+
+**What shipped**
+
+- `lib/bet-taxonomy.ts` — one home for `CATEGORIES`, `ROUND_ORDER`,
+  `ROUND_LABEL` and the new `ROUNDS_BY_PHASE`. The lists were spread across four
+  files; three filter rows reading them on every render is the wrong moment to
+  add a fifth copy.
+- `Facet` → `BetFilter { phase, round, category }`. `filterPhases()` applies the
+  round and the category as two independent predicates. `reconcileFilter()`
+  drops a round the new phase cannot hold and always keeps the category.
+- The options went **static**. `availableRounds` / `availableCategories` /
+  `facetIsAvailable` are gone; rows come from `ROUNDS_BY_PHASE` and `CATEGORIES`.
+- The importer stopped trusting `bet_categories` for *names*. See below.
+
+**What this cost, and why we paid**
+
+#104's guarantee — no selectable option can empty the page — is gone. Phase 1
+offers Round 1, and offers Prop Bet, and there is no Round 1 Prop Bet. This
+sprint had already conceded the point at the phase level; it now applies one
+level down. Two things pay for it, neither a fourth control: the rows are fixed
+and stop reshuffling as the sheet is uploaded, and the "no bets match this
+filter" screen — which this sprint shipped calling itself unreachable by
+construction — is now a real, reachable, E2E-asserted state that names **both**
+active conditions.
+
+**"Medalist is not a bet category" was a real hole**
+
+`bet_categories` has no CHECK constraint, and `validateSheet()` took the legal
+names as an argument the route filled from *every row of that table*. A stray
+row was enough to make an off-contract category importable and then render it as
+a filter chip, because `availableCategories()` appended unknowns sorted last. In
+this repo Medalist is a bet **title**, filed under Top Finisher. The five are
+pinned in code now, `validateSheet()` drops the parameter so no caller can widen
+the set, and a missing canonical row stops an import rather than resolving a
+`category_id` to `undefined`.
+
+**Verified locally:** `npm test` (528 pass, up from 523) · `npx tsc --noEmit` ·
+`npm run lint` · `npm run build` · `bash scripts/dry-run-verify.sh` end to end,
+pool unchanged at $425 − $32 = **$393**, which is the check that proves a
+presentation change stayed one.
+
+**`npm run test:e2e` ran this time** — 73 passed, 8 failed. The three new filter
+specs pass. **All 8 failures reproduce identically on `main`** (70 passed, same 8
+names, from the same freshly-reset database), so none is a regression: they are
+this sprint's own residue, #201 — specs written when Docker was unavailable and
+therefore never executed. Filed separately; not fixed here.
+
+### The sabotage check, again
+
+Sprint 26 recorded that its fixture had phase and status perfectly correlated,
+which would have let a no-op rewrite pass. The same trap exists one level down:
+if every round held exactly one category, filtering by round and filtering by
+category would be the same operation on the fixture. `bet-filters.test.ts` now
+guarantees a round holding two categories **and** a category spanning two rounds,
+and was proven able to fail — dropping the category predicate reddens three
+tests, the round predicate three, the phase five.
+
+### Residue
+
+- The filter is still client `useState`, so a selection is unshareable and dies
+  on reload. Real gap, not Pat's ask, filed.
+- Pat's optional "or at a particular time" is not honoured: `tournaments` has
+  `phase1_closes_at` / `phase2_closes_at` and no *opens_at*, so there is no time
+  to name without a schema change.
+- The prod `bet_categories` table has not been inspected for the stray row that
+  most likely put "Medalist" on Pat's screen — no prod credentials in the build
+  session. Filed.
