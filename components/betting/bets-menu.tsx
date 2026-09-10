@@ -742,22 +742,28 @@ function FilterRow({
 }) {
   const id = `filter-row-${label.toLowerCase()}`
   return (
-    <div className="flex items-center gap-2.5">
+    <ScrollFadeRow
+      role="group"
+      aria-labelledby={id}
+      className="items-center gap-1.5"
+    >
+      {/* The label rides INSIDE the scroller, as the row's first item. As a
+          fixed column outside it, it held 60px of a phone's 358px hostage on
+          every row forever; here it scrolls away with everything else, so the
+          width it costs is borrowed rather than spent.
+
+          Its width is its text, not a fixed column, so the gap to the first chip
+          is the same as the gap between chips — one rhythm per row. That does
+          mean "Round" and "Category" start their chips at different x
+          positions, which is fine: the label is read, not aligned to. */}
       <span
         id={id}
-        className="w-[3.75rem] shrink-0 text-[10px] font-bold tracking-[0.09em] text-text-muted uppercase"
+        className="shrink-0 pr-1 text-[10px] font-bold tracking-[0.09em] text-text-body uppercase"
       >
         {label}
       </span>
-      <ScrollFadeRow
-        role="group"
-        aria-labelledby={id}
-        containerClassName="min-w-0 flex-1"
-        className="gap-1.5"
-      >
-        {children}
-      </ScrollFadeRow>
-    </div>
+      {children}
+    </ScrollFadeRow>
   )
 }
 
