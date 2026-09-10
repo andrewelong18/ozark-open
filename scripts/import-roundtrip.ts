@@ -142,10 +142,7 @@ async function main() {
 
   const parsed = await parseSheet(fs.readFileSync(SHEET), SHEET)
   const state0 = fetchState(tournamentId)
-  const validation = validateSheet(
-    parsed,
-    state0.categories.map((c) => c.name)
-  )
+  const validation = validateSheet(parsed)
   if (!validation.ok) {
     console.error("Sheet failed contract validation:\n" + validation.errors.join("\n"))
     process.exit(1)

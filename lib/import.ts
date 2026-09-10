@@ -8,6 +8,7 @@
 
 import ExcelJS from "exceljs"
 
+import { CATEGORIES } from "./bet-taxonomy.ts"
 import { stripStrokeSuffix } from "./pick-label.ts"
 import {
   deadlineFor,
@@ -231,10 +232,7 @@ function asText(value: CellValue): string {
  * error list — a file with any contract error is rejected whole; the caller
  * must not partially import.
  */
-export function validateSheet(
-  parsed: ParsedSheet,
-  categoryNames: string[]
-): ValidationResult {
+export function validateSheet(parsed: ParsedSheet): ValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
 
@@ -249,8 +247,15 @@ export function validateSheet(
     return { ok: false, errors: ["The sheet has no data rows."] }
   }
 
+  // Matched against the FIVE of PRD §6, not against whatever `bet_categories`
+  // happens to hold. That table has no CHECK constraint, so before Sept 10 2026
+  // a stray row in it was enough to make an off-contract category importable —
+  // and then to put it on the bet menu as a filter chip. Pat, driving the menu:
+  // "Medalist is not a bet category." He was right; Medalist is a bet TITLE.
+  // The table still supplies the ids `bets.category_id` points at; it no longer
+  // decides which names are legal.
   const categoryByLower = new Map(
-    categoryNames.map((name) => [name.toLowerCase(), name])
+    CATEGORIES.map((name) => [name.toLowerCase(), name as string])
   )
 
   const rows: SheetRow[] = []
@@ -284,7 +289,7 @@ export function validateSheet(
       categoryByLower.get(asText(cells.category).toLowerCase()) ?? null
     if (!category) {
       fail(
-        `unknown category "${asText(cells.category)}" — expected one of: ${categoryNames.join(", ")}`
+        `unknown category "${asText(cells.category)}" — expected one of: ${CATEGORIES.join(", ")}`
       )
     }
 

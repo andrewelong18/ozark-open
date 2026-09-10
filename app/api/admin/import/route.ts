@@ -9,6 +9,7 @@ import {
   type ExistingBet,
   type ExistingPick,
 } from "@/lib/import"
+import { CATEGORIES } from "@/lib/bet-taxonomy"
 import { toPhaseClock, TOURNAMENT_CLOCK_COLUMNS } from "@/lib/placements"
 import { finalizeReadiness } from "@/lib/payouts"
 import { takeSnapshot } from "@/lib/snapshots"
@@ -41,6 +42,14 @@ export async function POST(request: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer())
 
+  // `bet_categories` supplies the IDS that `bets.category_id` points at — it is
+  // no longer the authority on which category NAMES are legal. That moved into
+  // lib/bet-taxonomy.ts on Sept 10 2026, because the table has no CHECK
+  // constraint and a stray row in it was enough to make an off-contract
+  // category importable and then render it as a filter chip ("Medalist is not a
+  // bet category" — Pat). A stray extra row here is now inert; a MISSING one is
+  // a misconfigured database and stops the import cold rather than failing later
+  // on a `category_id` that resolved to undefined.
   const { data: categoriesData, error: categoriesError } = await supabase
     .from("bet_categories")
     .select("id, name")
@@ -51,6 +60,17 @@ export async function POST(request: Request) {
     )
   }
   const categories = categoriesData as { id: string; name: string }[]
+  const missingCategories = CATEGORIES.filter(
+    (name) => !categories.some((c) => c.name === name)
+  )
+  if (missingCategories.length > 0) {
+    return NextResponse.json(
+      {
+        error: `Bet categories are misconfigured — the database is missing: ${missingCategories.join(", ")}. Nothing was imported.`,
+      },
+      { status: 500 }
+    )
+  }
 
   let parsed
   try {
@@ -63,10 +83,7 @@ export async function POST(request: Request) {
   }
 
   // Contract errors reject the whole file — no partial imports (PRD §8.2).
-  const validation = validateSheet(
-    parsed,
-    categories.map((c) => c.name)
-  )
+  const validation = validateSheet(parsed)
   if (!validation.ok) {
     return NextResponse.json({ errors: validation.errors }, { status: 400 })
   }
