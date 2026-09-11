@@ -283,8 +283,9 @@ REVOKE ALL ON FUNCTION public.restore_snapshot(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.restore_snapshot(uuid) TO authenticated;
 
 -- BOTH SNAPSHOT FUNCTIONS MUST STAY VOLATILE (the default, by omission).
--- PostgREST runs a STABLE or IMMUTABLE function inside SET TRANSACTION READ
--- ONLY, so marking either one would kill every write inside it in production
--- while every psql-driven check in this repo stayed green — the same blindness
--- that produced the bug above. Asserted in
--- scripts/snapshot-restore-roundtrip.ts alongside the WHERE check.
+-- Not asserted anywhere, and deliberately so: Postgres itself refuses
+-- "DELETE is not allowed in a non-volatile function", on a direct psql
+-- connection exactly as over PostgREST, so the restore round trip catches a
+-- volatility marker on its very first restore. Unlike the WHERE clause above,
+-- this one needs no extra guard — which was worth establishing by sabotage
+-- rather than assuming either way.
