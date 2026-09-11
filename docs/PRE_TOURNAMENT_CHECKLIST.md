@@ -112,6 +112,19 @@ so the project can pause and the automatic save states can stop.
       take a minute or fail outright. Wake it, and expect no automatic snapshots to have been taken
       while it slept.)*
 
+- [ ] **Press the restore button once, on purpose.** `/admin/snapshots` → **Snapshot now**, then
+      **Restore this** on *that* save state — the newest one, seconds old, so every delta on the
+      confirmation panel reads `0` and the worst case is a no-op. Type `RESTORE`. You should get a
+      manifest whose restored counts match the save state's. Expect one extra `pre-restore` row
+      afterwards; that's correct, and it prunes nothing.
+      **Do this even though it feels pointless, and do not rehearse on an old save state.** Restore
+      is the only admin control with no other way to exercise it, and on Sept 11, 2026 that cost us:
+      the button had never been pressed in production, and when Pat finally tried it he got
+      `DELETE requires a WHERE clause` — dead since it shipped, while every check in the repo was
+      green. If the sentence you get back is not a manifest, read
+      `docs/DATA_SAFETY.md` § Troubleshooting and **stop** — an undo button you find out is broken
+      at 10pm on tournament Friday is worse than no undo button, because you were counting on it.
+
 - [ ] **Send people `https://ozark-open.com` — not a `.vercel.app` link.** Since Aug 23, 2026
       the app forces this itself: every other production alias 308s to `ozark-open.com`, and the
       magic-link email is built from it. Paste the wrong URL and a member is bounced to the right

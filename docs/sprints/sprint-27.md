@@ -57,6 +57,7 @@ Four sabotages, each run and each reverted:
 | `set_config('ozark.restoring', 'on', true)` removed | "an over-cap wager restores — the guard stood down" |
 | `take_snapshot('pre-restore', NULL)` changed to keep=1 | "the snapshot it restored still exists" |
 | `describeDelta`'s sign inverted | 2 of the 5 new unit tests |
+| One `WHERE true` dropped from `restore_snapshot()` *(added Sept 11, 2026 — see the defect below)* | "no plpgsql/sql function in public holds a WHERE-less DELETE or UPDATE", naming the function and the statement |
 
 **Three decisions taken during the build**, none of them in the plan as written:
 
@@ -87,4 +88,49 @@ phone.
 manifest has no coverage of function `EXECUTE` grants **at all**, which this sprint's two new
 `SECURITY DEFINER` functions made worth naming: for several of them the `REVOKE … FROM anon` *is*
 the whole boundary, and today nothing but a hand-written round-trip check would notice a bad
-`GRANT`. The prod migration is still to apply.
+`GRANT`. ~~The prod migration is still to apply.~~ **It was applied** — the defect below proves
+it, since the failing statement is the seventh in a function whose first six ran in production.
+
+### Defect found in production — Sept 11, 2026
+
+**The restore button was dead from the day it shipped.** Pat pressed **Restore this** on a
+two-day-old save state and got `The restore did not happen: DELETE requires a WHERE clause`.
+Nothing was lost — the body is one transaction, so it rolled back whole, `pre-restore` state
+included — but for three days the app's only undo button had never worked, and every check in this
+file was green.
+
+`restore_snapshot()` cleared the five money tables with six unqualified `DELETE`s. Supabase
+preloads **`pg-safeupdate`** on the `authenticator` LOGIN role that PostgREST connects as: a
+`post_parse_analyze_hook` rejecting any `CMD_DELETE`/`CMD_UPDATE` whose `jointree->quals` is NULL.
+It is a **parse-tree** check, it fires for statements **inside plpgsql**, and `SECURITY DEFINER`
+does not bypass it — definer rights change the privilege context, not which libraries the session
+loaded. Fixed by `20260911000000_restore_snapshot_where_clause.sql`: the same body with six
+`WHERE true`, which the planner folds away and which names no column.
+
+**The honest reading of this sprint's "Done when".** It was satisfied by a harness that is
+structurally blind to the only difference that mattered. `scripts/snapshot-restore-roundtrip.ts`
+was written *because* the RPC path "shares no code" with the script — and then reached it the same
+way the script does, over `psql` as the database owner, imitating the role with
+`SET ROLE authenticated`. `session_preload_libraries` resolves at **connect** time for the **login**
+role, so `SET ROLE` never loads the extension. Thirty checks could not have caught this, and
+"a faithful port of the script's transaction" was exactly the wrong thing to aim for on one line:
+the port was faithful, and the original was only ever exercised as the database owner.
+
+Two consequences, both taken:
+
+1. **The blindness is now hazard 8 in that harness** — asserted against the *installed*
+   `pg_proc.prosrc` rather than the migration files, since `20260908000000` still contains the bare
+   deletes and migrations are immutable. A volatility assertion was drafted alongside it and then
+   **removed**: the sabotage showed Postgres refuses `DELETE is not allowed in a non-volatile
+   function` on a psql connection exactly as over PostgREST, so checks 3-7 already catch a
+   volatility marker on the first restore. It would have been a check that only fires where
+   another already has — counted, and guarding nothing. Establishing that by sabotage rather than
+   assuming it either way is the same discipline as the rest of this table.
+2. **`PRE_TOURNAMENT_CHECKLIST.md` now has a restore rehearsal** in *Week of*. The root cause
+   underneath the SQL is that nobody had pressed the button in production. Restore is the only
+   admin control with no other way to exercise it.
+
+**No new PRD §12 entry.** A21 still describes the intended design correctly; this was a defect in
+its implementation, not a decision. Had the fix been `TRUNCATE` or disabling `safeupdate`
+role-wide, it would have needed one — the migration header says so, so the next person can see why
+it didn't.
