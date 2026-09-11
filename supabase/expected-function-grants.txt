@@ -1,5 +1,6 @@
 public.activity_placements(p_tournament_id uuid, p_limit integer) | postgres,authenticated
 public.admin_auth_activity() | postgres,authenticated
+public.apply_player_profile_seed() | PUBLIC (default)
 public.enforce_placement_total() | PUBLIC (default)
 public.guard_users_self_update() | PUBLIC (default)
 public.handle_new_user() | PUBLIC (default)
