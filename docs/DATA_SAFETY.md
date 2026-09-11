@@ -282,6 +282,12 @@ through the script (`scripts/snapshot-roundtrip.ts`) and once through the RPC th
 gate by SQLSTATE, that the listing never returns `payload`, that the `pre-restore` save state
 holds the state from *before* the restore, and that `tournament_invites` survives.
 
+Since Sept 11, 2026 it also asserts something about the **installed** function that no amount of
+restoring can reveal, because both harnesses reach Postgres over `psql` as the database owner while
+the app reaches it through PostgREST as `authenticated`: that no function in `public` holds a
+`WHERE`-less `DELETE` or `UPDATE`, which is exactly what broke the button. That property is not
+provable by exercising the restore locally — which is the whole point of asserting it.
+
 ### The schedule
 
 Scheduled snapshots run on **Supabase pg_cron**, inside the database, so the app holds no cron
@@ -374,6 +380,24 @@ original.
 ---
 
 ## Troubleshooting
+
+**A restore says `The restore did not happen: DELETE requires a WHERE clause`** — **nothing was
+changed.** This was a real defect, found in production on Sept 11, 2026 and fixed by migration
+`20260911000000_restore_snapshot_where_clause.sql`: `restore_snapshot()` cleared the five money
+tables with `DELETE` statements that carried no `WHERE`, and Supabase preloads `pg-safeupdate` on
+the role PostgREST connects as, which refuses exactly that. The restore is one transaction, so it
+rolled back whole — including its own `pre-restore` save state, which is why none is left behind.
+If you still see this sentence, that migration is **not applied to production**; apply it and press
+the button again. Nothing else about the save state is wrong, and none of them were damaged.
+
+**`Couldn't reach the server.` after pressing Restore this** — this one is ambiguous and the
+ambiguity matters: the restore may well have **committed**. The database commits before the browser
+gets its answer, so a connection that dies in that window shows you a failure over a success.
+**Reload `/admin/snapshots` and look at the top of the list.** A new `pre-restore` save state, dated
+seconds ago, means the restore went through; the row counts on the page will agree with the save
+state you picked. No `pre-restore` row means it didn't, and nothing changed. Do not press Restore
+again before looking — a second restore is safe (it would just replay the same state) but it makes
+the list harder to read.
 
 **`pg_dump: aborting because of server version mismatch`** — your `pg_dump` is older than the
 server. The script says so, drops `full.dump`, and **carries on**, because the CSVs still hold every

@@ -24,6 +24,25 @@
 //      the very race migration 20260902000001 prevents — must restore.
 //   7. THE PRUNE CANNOT EAT ITS OWN TAIL. Restoring must not evict the
 //      snapshot being restored.
+//   8. THE TWO PROPERTIES THIS HARNESS IS OTHERWISE BLIND TO, because it
+//      talks to Postgres over psql as the database owner while production
+//      talks to it through PostgREST as `authenticated`. Sprint 27 shipped
+//      `DELETE FROM public.bet_placements;` and checks 1-7 went green for
+//      three days while the button was dead in prod, answering "DELETE
+//      requires a WHERE clause" to every press: the `authenticator` LOGIN
+//      role has session_preload_libraries = safeupdate, a
+//      post_parse_analyze_hook that rejects CMD_DELETE/CMD_UPDATE whose
+//      jointree->quals is NULL — inside plpgsql, SECURITY DEFINER or not —
+//      and session_preload_libraries resolves at CONNECT time for the LOGIN
+//      role, so the `SET ROLE authenticated` below never loads it.
+//
+//      Volatility was checked here too for one draft, on the theory that
+//      PostgREST runs a STABLE function in a read-only transaction where psql
+//      does not. It was removed once the sabotage showed Postgres refuses
+//      "DELETE is not allowed in a non-volatile function" on BOTH paths, at
+//      which point checks 3-7 catch a volatility marker immediately and
+//      loudly. A check that only fires where another already has is worse
+//      than none here, because it is counted.
 //
 // EVERY ONE OF THESE WAS PROVEN ABLE TO FAIL by sabotaging the thing it
 // guards and watching it go red; the transcripts are in the commit that added
@@ -37,6 +56,7 @@
 //   PGURI=... node --experimental-strip-types scripts/snapshot-restore-roundtrip.ts
 
 import { execFileSync } from "node:child_process"
+import { readFileSync } from "node:fs"
 
 const PGURI = process.env.PGURI ?? "postgresql://localhost:5432/ozark_roundtrip"
 
@@ -421,6 +441,66 @@ function main() {
   check("a save state missing a table is refused, by name", truncatedRefused)
   check("...and changed nothing", stateChecksum() === beforeRefusal)
   runSql(`DELETE FROM public.snapshots WHERE id = '${truncated}';`)
+
+  // ── 8. what psql cannot see ────────────────────────────────────────────
+  //
+  // Asserted against the INSTALLED definition rather than the migration files,
+  // for three reasons: 20260908000000 still contains the six WHERE-less
+  // deletes and migrations are immutable, so a file lint would have to
+  // allowlist the very file that caused the bug; supabase/dry-run/90-teardown
+  // .sql carries a seventh (harmless, psql-only) one it would also trip over;
+  // and prosrc after the migrations apply in order IS the truth, whichever
+  // file is stale. It also covers every plpgsql/sql function in `public` for
+  // free, without naming any of them.
+  //
+  // THE LIMIT, stated rather than glossed: this is a text property. It proves
+  // no WHERE-less DML is installed. It does NOT prove pg-safeupdate accepts
+  // these statements — that needs the extension, which is not in the Ubuntu
+  // archive, so the behavioural version is filed as an issue, not built here.
+  //
+  // Comments are stripped before splitting, because the fixed function's own
+  // comment quotes the bare statement that broke it.
+  console.log("\n  what psql cannot see")
+
+  const wherelessDml = runSql(`
+    SELECT coalesce(string_agg(x.proname || ': ' || left(x.stmt, 80), ' | '), '')
+    FROM (
+      SELECT p.proname,
+             btrim(regexp_replace(frag, '\\s+', ' ', 'g')) AS stmt
+      FROM pg_proc p
+      JOIN pg_language l ON l.oid = p.prolang
+      JOIN pg_namespace n ON n.oid = p.pronamespace,
+      LATERAL regexp_split_to_table(
+        regexp_replace(p.prosrc, '--[^\n]*', '', 'g'), ';'
+      ) AS frag
+      WHERE n.nspname = 'public'
+        AND l.lanname IN ('plpgsql', 'sql')
+        AND frag ~* '^\\s*(DELETE\\s+FROM|UPDATE)\\s'
+        AND frag !~* '\\mWHERE\\M'
+    ) x;`)
+  check(
+    "no plpgsql/sql function in public holds a WHERE-less DELETE or UPDATE",
+    wherelessDml === "",
+    wherelessDml === ""
+      ? undefined
+      : `${wherelessDml} — pg-safeupdate is preloaded on authenticator, so PostgREST refuses these`
+  )
+
+  // The other half of "the same transaction expressed twice": a DOCUMENTATION
+  // invariant, not a runtime one. The WHERE is not load-bearing over psql — the
+  // script connects as the owner, where safeupdate is not preloaded — but
+  // 20260908000000 line 126 says the two must stay identical, which makes any
+  // divergence a defect someone has to explain.
+  const scriptSrc = readFileSync(
+    new URL("./restore-snapshot.ts", import.meta.url),
+    "utf-8"
+  )
+  const scriptDeletes = scriptSrc.match(/^DELETE FROM public\.\w+\s+WHERE true;$/gm) ?? []
+  check(
+    "scripts/restore-snapshot.ts still expresses the same six deletes",
+    scriptDeletes.length === 6,
+    `${scriptDeletes.length} of 6`
+  )
 
   console.log(
     failures === 0

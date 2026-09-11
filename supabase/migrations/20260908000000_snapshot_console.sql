@@ -274,6 +274,16 @@ BEGIN
     INTO v_invites
     FROM public.tournament_invites t;
 
+  -- SUPERSEDED BY MIGRATION 20260911000000 — DO NOT READ THIS BLOCK AS
+  -- SHIPPED BEHAVIOUR. These six deletes carry no WHERE clause, and Supabase
+  -- preloads pg-safeupdate on the `authenticator` role PostgREST connects as,
+  -- which refuses WHERE-less DML inside a SECURITY DEFINER plpgsql body as
+  -- readily as at top level. So this function answered "DELETE requires a
+  -- WHERE clause" to every restore pressed from /admin/snapshots, while every
+  -- psql-driven check in this repo stayed green. 20260911000000 replaces the
+  -- function with the same body and six `WHERE true`, and explains why at
+  -- length. The rest of this file is still current.
+  --
   -- Children first, so no foreign key is violated on the way down.
   DELETE FROM public.bet_placements;
   DELETE FROM public.bet_picks;

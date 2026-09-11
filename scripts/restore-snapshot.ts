@@ -218,6 +218,18 @@ if (!confirmed) {
 //
 // One transaction: a restore that half-applied would leave the money data in a
 // state that never existed, which is worse than either endpoint.
+//
+// WHY EVERY DELETE BELOW CARRIES `WHERE true`. It is not needed on this path:
+// psql connects as the database owner, where pg-safeupdate is not preloaded, so
+// a bare `DELETE FROM public.bet_placements;` runs fine from here — and did, for
+// a month. It is needed in public.restore_snapshot() (migration
+// 20260911000000), because PostgREST connects as `authenticator`, which has
+// session_preload_libraries = safeupdate and refuses WHERE-less DML inside a
+// SECURITY DEFINER body. The clause is mirrored here for one reason:
+// 20260908000000 line 126 says this transaction and that function's are "the
+// same transaction expressed twice, and they must stay that way", and a reader
+// comparing the two must not find a difference they have to explain.
+// scripts/snapshot-restore-roundtrip.ts asserts they match.
 
 const payload = `(SELECT payload FROM public.snapshots WHERE id = ${sqlLiteral(snapshotId)})`
 
@@ -237,13 +249,14 @@ SET LOCAL ozark.restoring = 'on';
 CREATE TEMP TABLE _kept_invites ON COMMIT DROP AS
   SELECT * FROM public.tournament_invites;
 
--- Children first, so no foreign key is violated on the way down.
-DELETE FROM public.bet_placements;
-DELETE FROM public.bet_picks;
-DELETE FROM public.bets;
-DELETE FROM public.tournament_participants;
-DELETE FROM public.tournament_invites;
-DELETE FROM public.tournaments;
+-- Children first, so no foreign key is violated on the way down. The
+-- \`WHERE true\` is not load-bearing HERE (see the note above), only identical.
+DELETE FROM public.bet_placements          WHERE true;
+DELETE FROM public.bet_picks               WHERE true;
+DELETE FROM public.bets                    WHERE true;
+DELETE FROM public.tournament_participants WHERE true;
+DELETE FROM public.tournament_invites      WHERE true;
+DELETE FROM public.tournaments             WHERE true;
 
 -- Parents first on the way back up.
 INSERT INTO public.tournaments
