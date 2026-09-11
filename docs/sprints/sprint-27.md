@@ -130,6 +130,13 @@ Two consequences, both taken:
    underneath the SQL is that nobody had pressed the button in production. Restore is the only
    admin control with no other way to exercise it.
 
+**Filed not fixed:** [#223](https://github.com/andrewelong18/ozark-open/issues/223) — the
+*behavioural* version of hazard 8, which means loading `pg-safeupdate` into the verify cluster on a
+real `authenticator` login role. It needs a PGDG package that is not in the Ubuntu archive, so it
+would make the CI `database` job depend on a third-party apt repo, and a "skip if missing" variant
+is worse than nothing here. [#222](https://github.com/andrewelong18/ozark-open/issues/222) carries
+the prod application, which the authoring session could not do (no `SUPABASE_ACCESS_TOKEN`).
+
 **No new PRD §12 entry.** A21 still describes the intended design correctly; this was a defect in
 its implementation, not a decision. Had the fix been `TRUNCATE` or disabling `safeupdate`
 role-wide, it would have needed one — the migration header says so, so the next person can see why
