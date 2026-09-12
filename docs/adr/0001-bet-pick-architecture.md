@@ -113,6 +113,12 @@ A pick's result is displayed **only when it is not `pending`**. Pending results 
 
 Admins publish and update the bet menu by uploading the spreadsheet (xlsx/CSV) to a single admin-gated page, **`/admin/import`**. The app validates the column contract, **upserts** by the sheet-native keys (`bet_id` for bets, `pick_id` for picks), and shows an import report (row counts; unmatched pick names; warnings such as odds changed on a bet that already has placements). Re-uploads at each itinerary point (Thursday night results, Friday night Phase 2 release, Saturday night results) are the normal workflow and must be idempotent. The importer must tolerate unsorted rows; the UI orders by phase → round → category.
 
+**7a. The sweep — the other half of the upsert** *(added Sept 12, 2026 — Sprint 29, PRD §12 A24).* Upsert-by-sheet-key was only ever additive, so a bet the sheet stopped listing stayed on the menu forever. The importer now also **deletes** bets and picks the uploaded sheet no longer lists, under three rules:
+
+- **Scope is the phases the sheet mentions.** A file carrying only phase-2 rows sweeps phase 2 and cannot touch a staged phase 1. This is narrower than the literal ask ("all bets not in the sheet") and deliberately so — it is what makes a partial upload merely wrong rather than catastrophic.
+- **A sweep is confirmed, never automatic.** The first pass writes nothing, takes no save state, and returns the list; a human approves it. "Import without deleting" keeps the pre-Sprint-29 additive behaviour one tap away.
+- **Rows carrying wagers are kept by default.** They are reported with their bettors and amounts and need a second, separate confirmation, which hard-deletes the placements — §9's void semantics are for a bet that *happened and didn't count*, which is a different thing from a bet that should never have been on the menu. The pre-import snapshot is the audit trail for that delete; see PRD §12 A24 for the full argument and §10 for what it reverses.
+
 This is the **single exception** to the "Supabase Studio is the CMS, no custom admin UI" convention. Studio remains the CMS for users, participants, tournament parameters, and data fixes.
 
 ### 8. The sheet is authoritative for odds display values

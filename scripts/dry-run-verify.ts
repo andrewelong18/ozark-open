@@ -29,6 +29,8 @@ import fs from "node:fs"
 import path from "node:path"
 import {
   buildImportPlan,
+  planSweep,
+  sweepIsEmpty,
   clockStaleOpenWarnings,
   parseSheet,
   validateSheet,
@@ -202,6 +204,18 @@ async function upload(file: string, tid: string, opts: { expectIdempotent?: bool
           `${c.from.fractionalOdds} → ${c.to.fractionalOdds}.`
       ),
   ]
+
+  // Sprint 29: the four weekend uploads must sweep NOTHING. If a checked-in
+  // lifecycle sheet ever starts offering to delete rows, the phase-scoping
+  // rule is wrong and the real weekend is about to lose a menu — so this is
+  // asserted on every upload rather than once at the end.
+  const sweep = planSweep(validation.rows, state.bets, state.picks, [])
+  check(
+    `${file} sweeps nothing — the menu it drops is empty`,
+    sweepIsEmpty(sweep),
+    `bets ${JSON.stringify([...sweep.bets.clean, ...sweep.bets.wagered].map((t) => t.sheetId))}, ` +
+      `picks ${JSON.stringify([...sweep.picks.clean, ...sweep.picks.wagered].map((t) => t.sheetId))}`
+  )
 
   applyPlan(plan, tid)
   console.log(

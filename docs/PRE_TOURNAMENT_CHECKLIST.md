@@ -27,7 +27,30 @@ Every one of them is the same spreadsheet, re-uploaded to `/admin/import`. Upser
 | 3 | **Friday night** | Phase 2 bets flipped `hidden` → `open`, Tournament odds updated |
 | 4 | **Saturday night** | Final `result` per pick; every bet `closed` |
 
-Uploads never touch anybody's wagers. Only participants write those, through the app.
+### What to expect if the upload pauses to ask (Sprint 29)
+
+Since Sprint 29 an upload also **deletes** the bets and picks its sheet no longer lists, so
+whenever there is anything to delete the upload stops and shows you a panel first. **Nothing has
+been imported at that point and no save state has been taken** — the page is asking, not
+reporting.
+
+- It only compares against **the phases your sheet actually contains.** Uploading a Phase 2-only
+  file cannot delete Phase 1. The panel says which phases it looked at.
+- **Rows nobody has bet on** are listed for deletion behind one button. Read the list. On uploads
+  2–4 it should normally be empty — if it names bets you expect to still be live, the sheet is
+  wrong, not the app. Take **Cancel** or **Import without deleting** and go fix the sheet.
+- **Rows that carry wagers are kept unless you say otherwise**, on a separate button, with the
+  bettors named. Clearing them deletes those wagers for good. Two things to know before you tap
+  it: **the pool doesn't change** (it's the sum of entry fees, not of wagers), and the people named
+  **drop below their entry fee and are told nothing** — you have to text them.
+- Whatever you choose, a save state is taken before anything is written, so
+  `/admin/snapshots` undoes the whole upload.
+
+Mid-tournament, a bet with real wagers falling out of the sheet is almost always a mistake in the
+sheet. The safe answer at a tee box is **Import without deleting**, then sort the sheet out later.
+
+Other than that one path, uploads never touch anybody's wagers. Only participants write those,
+through the app.
 
 ---
 

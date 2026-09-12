@@ -807,3 +807,193 @@ export function buildImportPlan(
   plan.unmatchedPickNames = [...unmatched].sort((a, b) => a.localeCompare(b))
   return plan
 }
+
+// ---------------------------------------------------------------------------
+// The sweep: rows the sheet no longer lists (Sprint 29)
+//
+// buildImportPlan() above is purely additive — it upserts by sheet id and has
+// no concept of a row the sheet stopped mentioning, so a bet dropped from the
+// spreadsheet stayed on the menu forever. That is the Sept 11 defect: a Phase 1
+// refresh left 19 stale bets live and clearing them needed database access.
+//
+// Two rules carry the whole design:
+//
+// 1. SCOPE IS THE PHASES THE SHEET MENTIONS, not the whole tournament. A sheet
+//    carrying only phase-2 rows sweeps phase 2 and cannot touch a staged phase
+//    1. The alternative — "anything not in this file dies" — makes a partial
+//    upload at 10pm on a phone catastrophic rather than merely wrong.
+//
+// 2. A TARGET IS `wagered` IF ANY PLACEMENT REFERENCES IT, deleted_at or not.
+//    bet_placements.pick_id has no ON DELETE CASCADE (deliberately — "money
+//    rows must never vanish as a side effect"), and deleted_at is a column,
+//    not a row removal, so a soft-deleted wager still holds the key. Splitting
+//    on `deleted_at IS NULL` here would produce a delete set the database then
+//    refuses, which is the one failure mode this split exists to prevent.
+// ---------------------------------------------------------------------------
+
+/** A placement as the sweep needs to see it — every row, soft-deleted included. */
+export type PlacementRef = {
+  pick_id: string
+  amount: number
+  bettorName: string
+}
+
+export type SweepTarget = {
+  /** The uuid the delete addresses. */
+  id: string
+  /** sheet_bet_id for a bet, sheet_pick_id for a pick — what Pat reads. */
+  sheetId: number
+  /** Bet title, or pick label. */
+  label: string
+  phase: number
+  /** Bets only; a pick has no status of its own. */
+  status?: string
+  /** Picks only: which bet it sits under, for a report line that makes sense. */
+  betTitle?: string
+  /** Bets only: how much disappears with it. */
+  pickCount?: number
+  wagerCount: number
+  wagerTotal: number
+  /** One entry per bettor, amounts summed — the chase list. */
+  bettors: { name: string; amount: number }[]
+}
+
+export type SweepPlan = {
+  /** The phases this sheet mentions; the sweep sees nothing outside them. */
+  phases: number[]
+  bets: { clean: SweepTarget[]; wagered: SweepTarget[] }
+  picks: { clean: SweepTarget[]; wagered: SweepTarget[] }
+  /** Stable over the same delete set, and only that set. The confirm request
+   *  echoes it so a menu that moved between the preview and the confirm is
+   *  refused rather than silently swept to a different shape. */
+  fingerprint: string
+}
+
+/** Is there anything at all to confirm? */
+export function sweepIsEmpty(sweep: SweepPlan): boolean {
+  return (
+    sweep.bets.clean.length === 0 &&
+    sweep.bets.wagered.length === 0 &&
+    sweep.picks.clean.length === 0 &&
+    sweep.picks.wagered.length === 0
+  )
+}
+
+/** FNV-1a over the sorted uuids. Hand-rolled rather than node:crypto so this
+ *  module stays dependency-free and importable anywhere; it is a change
+ *  detector between two requests seconds apart, not a security boundary. */
+function fingerprintOf(ids: string[]): string {
+  let hash = 0x811c9dc5
+  for (const ch of [...ids].sort().join("|")) {
+    hash ^= ch.charCodeAt(0)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash.toString(16).padStart(8, "0")
+}
+
+/** Roll a pick's placements into the bettor list a report line shows. */
+function wagerSummary(placements: PlacementRef[]) {
+  const byBettor = new Map<string, number>()
+  let wagerTotal = 0
+  for (const p of placements) {
+    byBettor.set(p.bettorName, (byBettor.get(p.bettorName) ?? 0) + p.amount)
+    wagerTotal += p.amount
+  }
+  return {
+    wagerCount: placements.length,
+    wagerTotal,
+    bettors: [...byBettor]
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name)),
+  }
+}
+
+export function planSweep(
+  rows: SheetRow[],
+  existingBets: ExistingBet[],
+  existingPicks: ExistingPick[],
+  placements: PlacementRef[]
+): SweepPlan {
+  const phases: number[] = [...new Set<number>(rows.map((r) => r.phase))].sort()
+  const sheetBetIds = new Set(rows.map((r) => r.sheetBetId))
+  const sheetPickIds = new Set(rows.map((r) => r.sheetPickId))
+
+  const placementsByPick = new Map<string, PlacementRef[]>()
+  for (const p of placements) {
+    const list = placementsByPick.get(p.pick_id)
+    if (list) list.push(p)
+    else placementsByPick.set(p.pick_id, [p])
+  }
+  const picksByBet = new Map<string, ExistingPick[]>()
+  for (const pick of existingPicks) {
+    const list = picksByBet.get(pick.bet_id)
+    if (list) list.push(pick)
+    else picksByBet.set(pick.bet_id, [pick])
+  }
+
+  const plan: SweepPlan = {
+    phases,
+    bets: { clean: [], wagered: [] },
+    picks: { clean: [], wagered: [] },
+    fingerprint: "",
+  }
+
+  for (const bet of existingBets) {
+    // Rule 1: outside the sheet's phases, this bet does not exist as far as the
+    // sweep is concerned — not even to be reported.
+    if (!phases.includes(bet.phase)) continue
+
+    const betPicks = picksByBet.get(bet.id) ?? []
+
+    if (!sheetBetIds.has(bet.sheet_bet_id)) {
+      // The whole bet goes; its picks follow by ON DELETE CASCADE, so they are
+      // never listed separately — they would double-count in the report and in
+      // the fingerprint.
+      const summary = wagerSummary(
+        betPicks.flatMap((p) => placementsByPick.get(p.id) ?? [])
+      )
+      const target: SweepTarget = {
+        id: bet.id,
+        sheetId: bet.sheet_bet_id,
+        label: bet.title,
+        phase: bet.phase,
+        status: bet.status,
+        pickCount: betPicks.length,
+        ...summary,
+      }
+      plan.bets[summary.wagerCount > 0 ? "wagered" : "clean"].push(target)
+      continue
+    }
+
+    // The bet survives, so its own picks are judged individually — a player
+    // dropped from a Top Finisher slate is the same bug at a smaller scale.
+    for (const pick of betPicks) {
+      if (sheetPickIds.has(pick.sheet_pick_id)) continue
+      const summary = wagerSummary(placementsByPick.get(pick.id) ?? [])
+      const target: SweepTarget = {
+        id: pick.id,
+        sheetId: pick.sheet_pick_id,
+        label: pick.label,
+        phase: bet.phase,
+        betTitle: bet.title,
+        ...summary,
+      }
+      plan.picks[summary.wagerCount > 0 ? "wagered" : "clean"].push(target)
+    }
+  }
+
+  const bySheetId = (a: SweepTarget, b: SweepTarget) => a.sheetId - b.sheetId
+  plan.bets.clean.sort(bySheetId)
+  plan.bets.wagered.sort(bySheetId)
+  plan.picks.clean.sort(bySheetId)
+  plan.picks.wagered.sort(bySheetId)
+
+  plan.fingerprint = fingerprintOf([
+    ...plan.bets.clean,
+    ...plan.bets.wagered,
+    ...plan.picks.clean,
+    ...plan.picks.wagered,
+  ].map((t) => t.id))
+
+  return plan
+}
