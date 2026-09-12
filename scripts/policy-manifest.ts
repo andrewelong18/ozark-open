@@ -102,7 +102,23 @@ const QUERY = `
  *  `authenticated` to `authenticated,anon` is the failure this exists for.
  *  `PUBLIC (default)` means proacl IS NULL: the built-in default of EXECUTE
  *  TO PUBLIC, never touched by a migration. `none` means an ACL exists and
- *  grants EXECUTE to nobody. The two are opposites and must not read alike. */
+ *  grants EXECUTE to nobody. The two are opposites and must not read alike.
+ *
+ *  The OWNER is excluded from the roles column. It always holds EXECUTE
+ *  implicitly, so it carries no information — and its NAME is whoever ran
+ *  initdb: `postgres` on the machine the manifest was first written on,
+ *  `runner` in CI, and the developer's own username on a Mac. Including it
+ *  made the manifest environment-specific, so this check failed on every CI
+ *  run from Sept 8 2026 (#212) until it was fixed, on a diff that named five
+ *  functions and meant nothing. A gate that is always red is not a gate.
+ *
+ *  The roles are sorted by their rendered NAME, not by `ORDER BY 1`. Inside an
+ *  aggregate a bare integer is a constant expression, not a positional
+ *  reference, so `ORDER BY 1` does not sort at all — it emits grant order,
+ *  which is an artifact of which GRANT statement ran first and therefore
+ *  environment-specific in exactly the way the owner exclusion above is
+ *  fixing. Invisible while every line has one non-owner grantee; a live
+ *  Supabase database has `service_role` on several. */
 const GRANTS_QUERY = `
   SELECT n.nspname || '.' || p.proname ||
          '(' || pg_get_function_identity_arguments(p.oid) || ') | ' ||
@@ -112,9 +128,11 @@ const GRANTS_QUERY = `
              (SELECT string_agg(
                        CASE WHEN a.grantee = 0 THEN 'PUBLIC'
                             ELSE a.grantee::regrole::text END,
-                       ',' ORDER BY 1)
+                       ',' ORDER BY CASE WHEN a.grantee = 0 THEN 'PUBLIC'
+                                         ELSE a.grantee::regrole::text END)
                 FROM aclexplode(p.proacl) a
-               WHERE a.privilege_type = 'EXECUTE'),
+               WHERE a.privilege_type = 'EXECUTE'
+                 AND a.grantee IS DISTINCT FROM p.proowner),
              'none')
          END
     FROM pg_proc p
