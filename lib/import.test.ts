@@ -15,8 +15,12 @@ import {
   unlandedWrite,
   clockStaleOpenWarnings,
   parseSheet,
+  planSweep,
+  sweepIsEmpty,
   validateSheet,
   type ExistingBet,
+  type ExistingPick,
+  type PlacementRef,
 } from "./import.ts"
 import { CATEGORIES } from "./bet-taxonomy.ts"
 import type { PhaseClock } from "./phases.ts"
@@ -471,4 +475,201 @@ test("a bad category rejects the WHOLE file, not just its row (PRD §8.2)", asyn
   if (result.ok) return
   // No partial import: `rows` is not reachable on a failed validation at all.
   assert.ok(!("rows" in result))
+})
+
+// ---------------------------------------------------------------------------
+// planSweep — rows the sheet no longer lists (Sprint 29)
+//
+// Pat, Sept 11: "anytime I upload a sheet it should delete all bets that aren't
+// in the sheet being uploaded. It can warn me that I am about to delete some
+// bets." The warning half is the route's; this is the half that decides WHAT.
+// ---------------------------------------------------------------------------
+
+function sweepBet(
+  sheetBetId: number,
+  phase: 1 | 2 = 1,
+  status = "open"
+): ExistingBet {
+  return {
+    id: `bet-uuid-${sheetBetId}`,
+    sheet_bet_id: sheetBetId,
+    category_id: "cat-1",
+    title: `Bet ${sheetBetId}`,
+    phase,
+    round: "round_1",
+    status,
+    total_probability: 1,
+  }
+}
+
+function sweepPick(sheetPickId: number, sheetBetId: number): ExistingPick {
+  return {
+    id: `pick-uuid-${sheetPickId}`,
+    bet_id: `bet-uuid-${sheetBetId}`,
+    sheet_pick_id: sheetPickId,
+    label: `Pick ${sheetPickId}`,
+    american_odds: 110,
+    fractional_odds: "11/10",
+    probability: 0.476,
+    player_user_id: null,
+    result: "pending",
+  }
+}
+
+async function sweepFor(
+  specs: RowSpec[],
+  existingBets: ExistingBet[],
+  existingPicks: ExistingPick[],
+  placements: PlacementRef[] = []
+) {
+  const validation = await validate(specs)
+  assert.ok(validation.ok, "fixture sheet should validate")
+  return planSweep(validation.rows, existingBets, existingPicks, placements)
+}
+
+test("sweep: a sheet that still lists everything sweeps nothing", async () => {
+  const sweep = await sweepFor(
+    [{ pickId: 1, betId: 1 }],
+    [sweepBet(1)],
+    [sweepPick(1, 1)]
+  )
+  assert.equal(sweepIsEmpty(sweep), true)
+})
+
+test("sweep: a bet the sheet dropped is swept, picks and all", async () => {
+  const sweep = await sweepFor(
+    [{ pickId: 1, betId: 1 }],
+    [sweepBet(1), sweepBet(2)],
+    [sweepPick(1, 1), sweepPick(2, 2), sweepPick(3, 2)]
+  )
+  assert.equal(sweep.bets.clean.length, 1)
+  assert.equal(sweep.bets.clean[0].sheetId, 2)
+  assert.equal(sweep.bets.clean[0].pickCount, 2)
+  // Its picks go by ON DELETE CASCADE — listing them too would double-count
+  // them in the report and in the fingerprint.
+  assert.equal(sweep.picks.clean.length, 0)
+})
+
+test("sweep: scope is the phases the SHEET mentions, not the tournament", async () => {
+  // The one that makes a partial upload survivable: a phase-1 sheet must not
+  // offer to delete the staged phase-2 menu sitting beside it.
+  const sweep = await sweepFor(
+    [{ pickId: 1, betId: 1, phase: 1 }],
+    [sweepBet(1, 1), sweepBet(9, 2, "hidden")],
+    [sweepPick(1, 1), sweepPick(9, 9)]
+  )
+  assert.deepEqual(sweep.phases, [1])
+  assert.equal(sweepIsEmpty(sweep), true)
+})
+
+test("sweep: a phase-2 sheet reaches the phase-2 bet it dropped", async () => {
+  const sweep = await sweepFor(
+    [{ pickId: 1, betId: 1, phase: 2 }],
+    [sweepBet(1, 2), sweepBet(9, 2, "hidden")],
+    [sweepPick(1, 1), sweepPick(9, 9)]
+  )
+  assert.deepEqual(sweep.bets.clean.map((b) => b.sheetId), [9])
+})
+
+test("sweep: a pick dropped from a SURVIVING bet is swept on its own", async () => {
+  const sweep = await sweepFor(
+    [{ pickId: 1, betId: 1 }],
+    [sweepBet(1)],
+    [sweepPick(1, 1), sweepPick(2, 1)]
+  )
+  assert.equal(sweep.bets.clean.length, 0)
+  assert.deepEqual(sweep.picks.clean.map((p) => p.sheetId), [2])
+  assert.equal(sweep.picks.clean[0].betTitle, "Bet 1")
+})
+
+test("sweep: a dropped bet carrying wagers lands in `wagered`, never `clean`", async () => {
+  const sweep = await sweepFor(
+    [{ pickId: 1, betId: 1 }],
+    [sweepBet(1), sweepBet(2)],
+    [sweepPick(1, 1), sweepPick(2, 2)],
+    [{ pick_id: "pick-uuid-2", amount: 7, bettorName: "Dan Mercer" }]
+  )
+  assert.equal(sweep.bets.clean.length, 0)
+  assert.equal(sweep.bets.wagered.length, 1)
+  assert.equal(sweep.bets.wagered[0].wagerTotal, 7)
+  assert.deepEqual(sweep.bets.wagered[0].bettors, [
+    { name: "Dan Mercer", amount: 7 },
+  ])
+})
+
+test("sweep: one bettor's several wagers roll into one chase-list entry", async () => {
+  const sweep = await sweepFor(
+    [{ pickId: 1, betId: 1 }],
+    [sweepBet(1), sweepBet(2)],
+    [sweepPick(1, 1), sweepPick(2, 2), sweepPick(3, 2)],
+    [
+      { pick_id: "pick-uuid-2", amount: 5, bettorName: "Dan Mercer" },
+      { pick_id: "pick-uuid-3", amount: 4, bettorName: "Dan Mercer" },
+      { pick_id: "pick-uuid-3", amount: 6, bettorName: "Jake Kohne" },
+    ]
+  )
+  const target = sweep.bets.wagered[0]
+  assert.equal(target.wagerCount, 3)
+  assert.equal(target.wagerTotal, 15)
+  // Biggest first — the person to text first.
+  assert.deepEqual(target.bettors, [
+    { name: "Dan Mercer", amount: 9 },
+    { name: "Jake Kohne", amount: 6 },
+  ])
+})
+
+test("sweep: a SOFT-DELETED wager still makes a target `wagered`", async () => {
+  // The trap this split exists to avoid. deleted_at is a column, not a row
+  // removal, so the FK still holds — classing this as `clean` would build a
+  // delete set the database then refuses.
+  const sweep = await sweepFor(
+    [{ pickId: 1, betId: 1 }],
+    [sweepBet(1), sweepBet(2)],
+    [sweepPick(1, 1), sweepPick(2, 2)],
+    // The caller passes EVERY placement row, deleted or not; this is one the
+    // bettor removed weeks ago.
+    [{ pick_id: "pick-uuid-2", amount: 3, bettorName: "Casey Sideline" }]
+  )
+  assert.equal(sweep.bets.clean.length, 0)
+  assert.equal(sweep.bets.wagered.length, 1)
+})
+
+test("sweep: a dropped PICK carrying wagers is `wagered` too", async () => {
+  const sweep = await sweepFor(
+    [{ pickId: 1, betId: 1 }],
+    [sweepBet(1)],
+    [sweepPick(1, 1), sweepPick(2, 1)],
+    [{ pick_id: "pick-uuid-2", amount: 12, bettorName: "Mike Yenzer" }]
+  )
+  assert.equal(sweep.picks.clean.length, 0)
+  assert.deepEqual(sweep.picks.wagered.map((p) => p.sheetId), [2])
+  assert.equal(sweep.picks.wagered[0].wagerTotal, 12)
+})
+
+test("sweep: the fingerprint is stable over input order", async () => {
+  const a = await sweepFor(
+    [{ pickId: 1, betId: 1 }],
+    [sweepBet(1), sweepBet(2), sweepBet(3)],
+    [sweepPick(1, 1), sweepPick(2, 2), sweepPick(3, 3)]
+  )
+  const b = await sweepFor(
+    [{ pickId: 1, betId: 1 }],
+    [sweepBet(3), sweepBet(1), sweepBet(2)],
+    [sweepPick(3, 3), sweepPick(1, 1), sweepPick(2, 2)]
+  )
+  assert.equal(a.fingerprint, b.fingerprint)
+})
+
+test("sweep: the fingerprint changes when the delete set does", async () => {
+  const two = await sweepFor(
+    [{ pickId: 1, betId: 1 }],
+    [sweepBet(1), sweepBet(2), sweepBet(3)],
+    [sweepPick(1, 1), sweepPick(2, 2), sweepPick(3, 3)]
+  )
+  const one = await sweepFor(
+    [{ pickId: 1, betId: 1 }],
+    [sweepBet(1), sweepBet(2)],
+    [sweepPick(1, 1), sweepPick(2, 2)]
+  )
+  assert.notEqual(two.fingerprint, one.fingerprint)
 })
