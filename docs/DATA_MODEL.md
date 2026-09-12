@@ -294,6 +294,8 @@ The options within a bet — one row per pick in the spreadsheet, upserted by th
 
 Each individual wager: one row per (user, pick) pair where money was placed.
 
+**Neither FK cascades, and that is the load-bearing fact about this table.** `pick_id` references `bet_picks(id)` with no `ON DELETE` clause, so Postgres refuses to delete a pick that any placement points at — soft-deleted placements included, since `deleted_at` is a column and not a row removal. Money cannot vanish as a side effect of a menu edit. The one path that deletes a placement at all is `public.sweep_bets()` (§4.2), and it has to delete the wager *first and explicitly*, on a confirmation of its own.
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` PK | |
@@ -428,6 +430,30 @@ actual(user) = theoretical(user) / sum(theoretical(all)) × pool_total
 
 ---
 
+### 4.2 `sweep_bets()` — the import's delete half
+
+*Added Sprint 29 (`20260912000000_import_sweep.sql`; PRD §12 A24).*
+
+```
+public.sweep_bets(p_bet_ids uuid[], p_pick_ids uuid[], p_clear_wagers boolean)
+  RETURNS jsonb   -- { bets, picks, placements }: rows actually deleted
+  SECURITY DEFINER, search_path = ''
+```
+
+`/api/admin/import` calls it **after** every upsert has landed, with the ids `planSweep()` (`lib/import.ts`) named — bets and picks the uploaded sheet no longer lists, scoped to the phases that sheet mentions.
+
+Why a function rather than policies and three PostgREST calls:
+
+- **Atomicity.** PostgREST cannot span calls, so placements → picks → bets across three requests can half-apply, and the half that lands first is the money.
+- **Narrowness.** There is deliberately no `DELETE` policy on `bet_placements` (§5); adding one would grant admins a blanket delete on the money table to serve one path. The `REVOKE ALL … FROM PUBLIC, anon` on this function is the tighter boundary, and it is asserted in `supabase/expected-function-grants.txt`.
+
+Two refusals are built in, both raising rather than returning:
+
+- **A finalized tournament** (`tournaments.status = 'completed'`) is refused outright. The route already filters its tournament read to `upcoming`/`active`; this repeats it where a different caller cannot bypass it, because a sweep rewrites results the payouts were split from.
+- **`p_clear_wagers = false` with wagers in the way** is refused *by `bet_id` and title* — not by letting the foreign key's `23503` and a constraint name reach an admin on a phone. Nothing is deleted in that case; the function raises before its first `DELETE`.
+
+`p_clear_wagers = true` hard-deletes the placements. That is the exception PRD §12 A24 authorises and §10 records; the audit trail is the `pre-import` snapshot, which carries `bet_placements` in full and which `restore_snapshot()` puts back. `scripts/import-roundtrip.ts` asserts that round trip rather than assuming it.
+
 ## 5. Row-Level Security Highlights
 
 Policies live inline in each table's migration file under `supabase/migrations/` (e.g., `20260507000000_users_table.sql`, `20260507000001_tournaments.sql`, `20260507000002_bets.sql`).
@@ -444,7 +470,7 @@ Summary:
 
 - **`bets`**: anyone authenticated can `SELECT` rows where `status != 'hidden'`. Only admins can `INSERT` / `UPDATE` / `DELETE` (in practice: the import route, running as the admin).
 - **`bet_picks`**: readable whenever the parent bet is readable (not `hidden`). Write: admins only (the import route).
-- **`bet_placements`**: a user can `SELECT` / `INSERT` / `UPDATE` / soft-delete their own rows while the parent bet is `open`. Other users' placements are visible only when the bet is `closed`. Admins can read all, and (Sprint 23 / #101) can `INSERT` / `UPDATE` rows for **another** bettor through a separate admin-scoped pair that requires `public.is_admin() AND placed_by_user_id = auth.uid()` — the member's own-rows policies are unchanged, and the attribution clause means the database refuses an admin who claims someone else entered the wager. No `DELETE` policy for anyone, admins included.
+- **`bet_placements`**: a user can `SELECT` / `INSERT` / `UPDATE` / soft-delete their own rows while the parent bet is `open`. Other users' placements are visible only when the bet is `closed`. Admins can read all, and (Sprint 23 / #101) can `INSERT` / `UPDATE` rows for **another** bettor through a separate admin-scoped pair that requires `public.is_admin() AND placed_by_user_id = auth.uid()` — the member's own-rows policies are unchanged, and the attribution clause means the database refuses an admin who claims someone else entered the wager. No `DELETE` policy for anyone, admins included — removals through the app are soft. The import sweep's hard delete does **not** get one either; it goes through `public.sweep_bets()`, a `SECURITY DEFINER` function whose `REVOKE` is the boundary (§4.2). Granting an admin `DELETE` on the money table to serve one importer path would be a far wider grant than the job needs, and a write RLS filters to zero rows comes back as success with `error === null`.
 - **`tournament_participants`**: anyone authenticated can `SELECT`. Only admins can `INSERT` / `UPDATE`.
 - **`bet_categories`, `tournaments`**: read by all authenticated users; write by admins only.
 - **`users`**: readable by all authenticated users (`20260717000002_users_read_all.sql` — closed-bet views and payouts show everyone's `display_name`, PRD §12 Q12; fine for a private pool behind login). Writes: an own-row `UPDATE` for members (narrowed by the guard trigger) plus `"Admins can update any user"` (`20260814000000`, Sprint 23 / #124) — the latter is what makes the #99 display-name edit actually land; before it, admin name corrections were a silent no-op (see §3.1).
@@ -498,6 +524,7 @@ Summary:
 - `20260831000000_activity_feed.sql` — `bets.opened_at` + the `activity_placements()` definer read behind the dashboard feed (A16)
 - `20260902000000_entry_collection.sql` — `tournament_participants.paid_amount` / `paid_at` / `paid_note` (A17)
 - `20260902000001_placement_total_guard.sql` — `enforce_placement_total()`: PRD §7 rule 6 as a locked, re-summing trigger (A18)
+- `20260912000000_import_sweep.sql` — Sprint 29: `sweep_bets()`, the import's delete half (§4.2, A24)
 
 **Still to come** (see `ROADMAP.md`): nothing scheduled.
 
