@@ -5,9 +5,12 @@ import {
   unlandedWrite,
   clockStaleOpenWarnings,
   parseSheet,
+  planSweep,
+  sweepIsEmpty,
   validateSheet,
   type ExistingBet,
   type ExistingPick,
+  type PlacementRef,
 } from "@/lib/import"
 import { CATEGORIES } from "@/lib/bet-taxonomy"
 import { toPhaseClock, TOURNAMENT_CLOCK_COLUMNS } from "@/lib/placements"
@@ -27,6 +30,14 @@ export async function POST(request: Request) {
 
   const formData = await request.formData()
   const file = formData.get("file")
+  // The sweep's two-pass handshake (Sprint 29). Absent on the first upload:
+  // the route answers 409 with what it would delete and writes nothing. Present
+  // on the second, where "false" is the "Import without deleting" escape — the
+  // purely additive behaviour every upload had before this sprint.
+  const confirmSweep = formData.get("confirm_sweep")
+  const sweepConfirmed = confirmSweep === "true"
+  const clearWagered = formData.get("clear_wagered") === "true"
+  const sentFingerprint = formData.get("sweep_fingerprint")
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file uploaded." }, { status: 400 })
@@ -172,6 +183,98 @@ export async function POST(request: Request) {
     users
   )
 
+  // ---------------------------------------------------------------------
+  // The sweep: rows the sheet no longer lists (Sprint 29)
+  //
+  // EVERY placement on every existing pick, soft-deleted included, because
+  // deleted_at is a column and not a row removal — the foreign key still
+  // holds, so a "live placements only" read here would build a delete set the
+  // database then refuses (lib/import.ts, planSweep rule 2).
+  // ---------------------------------------------------------------------
+  let placementRefs: PlacementRef[] = []
+  let sweepLookupFailed: string | null = null
+  if (existingPicks.length > 0) {
+    const { data: placementRows, error: placementsError } = await supabase
+      .from("bet_placements")
+      // `users!bet_placements_user_id_fkey`, never a bare `users`: the table
+      // has carried two FKs to users since Sprint 23 and the ambiguous embed
+      // is a PGRST201 that renders as "nobody bet on this" (#134).
+      .select(
+        "pick_id, amount, users!bet_placements_user_id_fkey ( display_name )"
+      )
+      .in(
+        "pick_id",
+        existingPicks.map((p) => p.id)
+      )
+    if (placementsError) {
+      sweepLookupFailed = placementsError.message
+    } else {
+      placementRefs = (
+        (placementRows ?? []) as unknown as {
+          pick_id: string
+          amount: number | string
+          users: { display_name: string } | null
+        }[]
+      ).map((row) => ({
+        pick_id: row.pick_id,
+        amount: Number(row.amount),
+        bettorName: row.users?.display_name ?? "Unknown bettor",
+      }))
+    }
+  }
+
+  // A failed lookup SKIPS the sweep and says so, rather than proceeding blind.
+  // Guessing "no placements" would hand sweep_bets() a delete set the FK
+  // rejects, turning a clean upload into a 500 — and the wrong direction to
+  // guess in is the one that deletes things.
+  const sweep = sweepLookupFailed
+    ? null
+    : planSweep(rows, existingBets, existingPicks, placementRefs)
+
+  // Pass 1: nothing has been written and no snapshot taken. Hand back what
+  // would go and let a human look at it. Deliberately BEFORE takeSnapshot(),
+  // so a preview doesn't accrue a save state nobody asked for.
+  if (sweep && !sweepIsEmpty(sweep) && confirmSweep === null) {
+    return NextResponse.json(
+      { needsConfirmation: true, sweep },
+      { status: 409 }
+    )
+  }
+
+  // Pass 2: the menu is re-read and the plan recomputed from the file, never
+  // trusted from the client — the fingerprint only has to prove that what Pat
+  // approved is still what is there. A second admin uploading in between is
+  // unlikely; silently sweeping a different set because of it is not a risk
+  // worth carrying for the three lines this costs.
+  if (sweep && sweepConfirmed && sentFingerprint !== sweep.fingerprint) {
+    return NextResponse.json(
+      {
+        needsConfirmation: true,
+        sweep,
+        error:
+          "The menu changed while you were reading that list, so nothing was " +
+          "imported. Here is what would go now.",
+      },
+      { status: 409 }
+    )
+  }
+
+  // What actually gets deleted. Wagered rows are in ONLY when Pat asked for
+  // them on their own control — the default keeps them and reports them.
+  const sweepTargets =
+    sweep && sweepConfirmed
+      ? {
+          betIds: [
+            ...sweep.bets.clean.map((t) => t.id),
+            ...(clearWagered ? sweep.bets.wagered.map((t) => t.id) : []),
+          ],
+          pickIds: [
+            ...sweep.picks.clean.map((t) => t.id),
+            ...(clearWagered ? sweep.picks.wagered.map((t) => t.id) : []),
+          ],
+        }
+      : { betIds: [], pickIds: [] }
+
   // Save state, before a single row moves (Sprint 11). The upload is the
   // riskiest moment in the tournament: it is the one operation that rewrites
   // the whole menu, it happens four times over a weekend, often on a phone at a
@@ -307,6 +410,40 @@ export async function POST(request: Request) {
     )
   }
 
+  // The sweep runs LAST, after every upsert has landed. If it fails, the menu
+  // the sheet describes is already in place and only the removal is missing —
+  // the recoverable half of a bad outcome. Reversed, a successful sweep on top
+  // of a failed upsert would leave a menu with holes in it.
+  let swept: { bets: number; picks: number; placements: number } | null = null
+  let sweepFailed: string | null = null
+  if (sweepTargets.betIds.length > 0 || sweepTargets.pickIds.length > 0) {
+    const { data: sweepResult, error: sweepError } = await supabase.rpc(
+      "sweep_bets",
+      {
+        p_bet_ids: sweepTargets.betIds,
+        p_pick_ids: sweepTargets.pickIds,
+        p_clear_wagers: clearWagered,
+      }
+    )
+    if (sweepError) {
+      sweepFailed = sweepError.message
+    } else {
+      swept = sweepResult as { bets: number; picks: number; placements: number }
+    }
+  }
+  if (sweepFailed) {
+    return NextResponse.json(
+      {
+        error:
+          `The sheet was imported, but the rows it no longer lists could NOT be ` +
+          `deleted: ${sweepFailed}. The menu now matches the sheet except that ` +
+          `those rows are still on it. Restore save state ${snapshot.id} to undo ` +
+          `the whole upload, or re-upload to try again.`,
+      },
+      { status: 500 }
+    )
+  }
+
   // Odds-changed-with-live-placements warning. Harmless for payouts —
   // placements snapshot odds at write time (PRD §7.1) — but the admin should
   // know. Warning only; the upload has already been applied above. A lookup
@@ -358,6 +495,17 @@ export async function POST(request: Request) {
           `${change.from.fractionalOdds} → ${change.to.fractionalOdds}. Existing placements keep ` +
           `their snapshotted odds; only future placements get the new price.`
       ),
+    // The sweep was skipped entirely, so the menu may still carry rows the
+    // sheet has dropped. Saying so is the point: "we didn't check" and
+    // "there was nothing to remove" look identical in a report that stays
+    // quiet (#132).
+    ...(sweepLookupFailed
+      ? [
+          `Couldn't check which bets and picks this sheet no longer lists: ` +
+            `${sweepLookupFailed}. The upload applied fine, but nothing was ` +
+            `deleted — re-upload to try the sweep again.`,
+        ]
+      : []),
     ...(placementLookupFailed
       ? [
           `Couldn't check whether the odds-changed picks already have wagers on them: ` +
@@ -426,6 +574,15 @@ export async function POST(request: Request) {
         unchanged: plan.picks.unchanged,
       },
       unmatchedPickNames: plan.unmatchedPickNames,
+      // Sprint 29. `swept` is what went; `keptWagered` is what the sheet
+      // dropped but this upload deliberately left alone because it carries
+      // wagers — the more important half of the two, because it is the part
+      // Pat has to decide about rather than read past.
+      swept,
+      keptWagered:
+        sweep && !clearWagered
+          ? [...sweep.bets.wagered, ...sweep.picks.wagered]
+          : [],
       warnings,
       // The undo button for the upload just applied. Surfaced in the report
       // because this is the one moment an admin knows they might want it.

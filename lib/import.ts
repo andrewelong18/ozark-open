@@ -914,7 +914,7 @@ export function planSweep(
   existingPicks: ExistingPick[],
   placements: PlacementRef[]
 ): SweepPlan {
-  const phases = [...new Set(rows.map((r) => r.phase))].sort()
+  const phases: number[] = [...new Set<number>(rows.map((r) => r.phase))].sort()
   const sheetBetIds = new Set(rows.map((r) => r.sheetBetId))
   const sheetPickIds = new Set(rows.map((r) => r.sheetPickId))
 
