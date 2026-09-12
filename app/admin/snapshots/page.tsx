@@ -60,9 +60,10 @@ export default async function AdminSnapshotsPage() {
 
       <p className="text-center text-xs text-text-muted">
         Save states are taken automatically before every import, every six hours
-        on a schedule, and whenever you press Snapshot now. They cover the bets,
-        picks, wagers, participants and tournament row — not accounts, invites
-        or avatars.
+        on a schedule, and whenever you press Snapshot now. They cover the bet
+        menu, every wager, the participants and the tournament row — not
+        accounts, invites or avatars. Removed wagers are kept too, so a restore
+        puts back exactly what was there.
       </p>
     </div>
   )

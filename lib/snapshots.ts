@@ -29,6 +29,20 @@ export const SNAPSHOT_TABLES = [
 
 export type SnapshotTable = (typeof SNAPSHOT_TABLES)[number]
 
+/** The two counts that are DERIVED from the payload rather than being tables:
+ *  wagers the bettor hasn't removed, and participants who haven't been revoked.
+ *
+ *  They exist because the five row counts above answer "what will a restore put
+ *  back", which is not the question an admin is asking when they look at this
+ *  page. Removing a wager is a soft delete (deleted_at) and revoking a member
+ *  is a soft stamp (revoked_at), so both rows survive in the payload on purpose
+ *  — and counting them made the headline number one that could only ever go up.
+ *  That was the Sept 12 bug: remove five wagers, take a save state, watch
+ *  nothing move. See 20260912000000_snapshot_live_counts.sql. */
+export const DERIVED_COUNTS = ["live_placements", "active_participants"] as const
+
+export type DerivedCount = (typeof DERIVED_COUNTS)[number]
+
 /** One row of public.snapshot_index(). A count is null when the payload has no
  *  such key — an older take_snapshot() wrote it, and restore_snapshot() will
  *  refuse it, so the console must be able to say so rather than render a 0. */
@@ -37,10 +51,12 @@ export type SnapshotRow = {
   created_at: string
   trigger: string
   bytes: number
-} & Record<SnapshotTable, number | null>
+} & Record<SnapshotTable, number | null> &
+  Record<DerivedCount, number | null>
 
-/** Live row counts for the same five tables, for the confirm panel's deltas. */
-export type LiveCounts = Record<SnapshotTable, number>
+/** Live counts for the same five tables plus the two derived ones, for the
+ *  confirm panel's deltas. */
+export type LiveCounts = Record<SnapshotTable, number> & Record<DerivedCount, number>
 
 /** What restore_snapshot() hands back — the manifest the console prints. */
 export type RestoreManifest = {
@@ -147,22 +163,32 @@ export async function listSnapshots(
 export async function liveCounts(
   supabase: SupabaseClient
 ): Promise<{ ok: true; counts: LiveCounts } | { ok: false; message: string }> {
+  // The five whole-table counts, then the two derived ones. The derived pair
+  // must be filtered the same way snapshot_index() filters the payload, or the
+  // confirm panel compares a live number against a saved number that counted
+  // something else — a wrong delta in front of a destructive button, which is
+  // the one thing this function's own comment above argues against.
+  const reads: { key: keyof LiveCounts; table: SnapshotTable; live?: string }[] = [
+    ...SNAPSHOT_TABLES.map((table) => ({ key: table as keyof LiveCounts, table })),
+    { key: "live_placements", table: "bet_placements", live: "deleted_at" },
+    { key: "active_participants", table: "tournament_participants", live: "revoked_at" },
+  ]
+
   const results = await Promise.all(
-    SNAPSHOT_TABLES.map(async (table) => {
-      const { count, error } = await supabase
-        .from(table)
-        .select("*", { count: "exact", head: true })
-      return { table, count, error }
+    reads.map(async ({ key, table, live }) => {
+      const query = supabase.from(table).select("*", { count: "exact", head: true })
+      const { count, error } = await (live ? query.is(live, null) : query)
+      return { key, count, error }
     })
   )
 
   const counts = {} as LiveCounts
-  for (const { table, count, error } of results) {
-    if (error) return { ok: false, message: `${table}: ${error.message}` }
+  for (const { key, count, error } of results) {
+    if (error) return { ok: false, message: `${key}: ${error.message}` }
     if (typeof count !== "number") {
-      return { ok: false, message: `${table}: the database returned no count.` }
+      return { ok: false, message: `${key}: the database returned no count.` }
     }
-    counts[table] = count
+    counts[key] = count
   }
   return { ok: true, counts }
 }

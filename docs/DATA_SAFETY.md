@@ -175,6 +175,27 @@ row of `tournaments`, `tournament_participants`, `bets`, `bet_picks` and `bet_pl
 **including soft-deleted wagers**, because a removed bet is part of the state being saved.
 Admin-only at the database, since a payload contains wagers on bets that are still open.
 
+### Rows are not wagers, and the menu is not anybody's picks
+
+Two distinctions the console now makes out loud, both of which confused a real reader on
+Sept 12, 2026 — five wagers removed, a save state taken, and not one number on the page moved:
+
+- **`bets` and `bet_picks` are the MENU** — the headings Pat uploaded and the options under
+  them. Nothing a member does can move those counts, so the console labels them **Menu bets**
+  and **Menu picks**. `bet_placements` is the only table holding what members submitted.
+- **A removed wager keeps its row.** Removal stamps `deleted_at`; there is no `DELETE` policy
+  on `bet_placements` for anyone. Revoking a member is the same — `revoked_at`, because the
+  row carries the entry fee. Both are captured deliberately, and a count of rows therefore
+  only ever goes up.
+
+So `snapshot_index()` reports each payload **twice**: the five row counts, which are what a
+restore literally puts back and what its manifest is verified against, and two derived counts
+— `live_placements` (`deleted_at IS NULL`) and `active_participants` (`revoked_at IS NULL`) —
+which are what an admin is actually asking. The console leads with live wagers and keeps the
+row count beside it. **`take_snapshot()` and the payload did not change for this**, and must
+not: restoring without the removed rows would resurrect money the bettor had taken off the
+table.
+
 They accrue three ways, and you don't have to do anything for any of them:
 
 - **Before every import.** `/admin/import` takes one before a single row moves. If the snapshot
@@ -188,7 +209,8 @@ They accrue three ways, and you don't have to do anything for any of them:
 ### Rolling one back — from the app (Sprint 27)
 
 **Go to `/admin/snapshots`** (Profile → Admin → *Save States & Undo*). Every save state is
-listed newest-first with its age, why it was taken, and how many wagers it holds. Press
+listed newest-first with its age, why it was taken, and how many **live** wagers it holds
+(with the row count, removed wagers included, underneath). Press
 **Restore this** on one and a panel opens showing what it holds against what the database holds
 right now — the same `(3 will be discarded)` / `(2 will come back)` deltas the script prints —
 then type `RESTORE` to arm the button.
@@ -282,6 +304,12 @@ through the script (`scripts/snapshot-roundtrip.ts`) and once through the RPC th
 gate by SQLSTATE, that the listing never returns `payload`, that the `pre-restore` save state
 holds the state from *before* the restore, and that `tournament_invites` survives.
 
+Since Sept 11, 2026 it also asserts something about the **installed** function that no amount of
+restoring can reveal, because both harnesses reach Postgres over `psql` as the database owner while
+the app reaches it through PostgREST as `authenticated`: that no function in `public` holds a
+`WHERE`-less `DELETE` or `UPDATE`, which is exactly what broke the button. That property is not
+provable by exercising the restore locally — which is the whole point of asserting it.
+
 ### The schedule
 
 Scheduled snapshots run on **Supabase pg_cron**, inside the database, so the app holds no cron
@@ -374,6 +402,24 @@ original.
 ---
 
 ## Troubleshooting
+
+**A restore says `The restore did not happen: DELETE requires a WHERE clause`** — **nothing was
+changed.** This was a real defect, found in production on Sept 11, 2026 and fixed by migration
+`20260911000000_restore_snapshot_where_clause.sql`: `restore_snapshot()` cleared the five money
+tables with `DELETE` statements that carried no `WHERE`, and Supabase preloads `pg-safeupdate` on
+the role PostgREST connects as, which refuses exactly that. The restore is one transaction, so it
+rolled back whole — including its own `pre-restore` save state, which is why none is left behind.
+If you still see this sentence, that migration is **not applied to production**; apply it and press
+the button again. Nothing else about the save state is wrong, and none of them were damaged.
+
+**`Couldn't reach the server.` after pressing Restore this** — this one is ambiguous and the
+ambiguity matters: the restore may well have **committed**. The database commits before the browser
+gets its answer, so a connection that dies in that window shows you a failure over a success.
+**Reload `/admin/snapshots` and look at the top of the list.** A new `pre-restore` save state, dated
+seconds ago, means the restore went through; the row counts on the page will agree with the save
+state you picked. No `pre-restore` row means it didn't, and nothing changed. Do not press Restore
+again before looking — a second restore is safe (it would just replay the same state) but it makes
+the list harder to read.
 
 **`pg_dump: aborting because of server version mismatch`** — your `pg_dump` is older than the
 server. The script says so, drops `full.dump`, and **carries on**, because the CSVs still hold every
