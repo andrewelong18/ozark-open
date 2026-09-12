@@ -432,7 +432,7 @@ actual(user) = theoretical(user) / sum(theoretical(all)) × pool_total
 
 ### 4.2 `sweep_bets()` — the import's delete half
 
-*Added Sprint 29 (`20260912000000_import_sweep.sql`; PRD §12 A24).*
+*Added Sprint 29 (`20260912000001_import_sweep.sql`; PRD §12 A24).*
 
 ```
 public.sweep_bets(p_bet_ids uuid[], p_pick_ids uuid[], p_clear_wagers boolean)
@@ -524,7 +524,12 @@ Summary:
 - `20260831000000_activity_feed.sql` — `bets.opened_at` + the `activity_placements()` definer read behind the dashboard feed (A16)
 - `20260902000000_entry_collection.sql` — `tournament_participants.paid_amount` / `paid_at` / `paid_note` (A17)
 - `20260902000001_placement_total_guard.sql` — `enforce_placement_total()`: PRD §7 rule 6 as a locked, re-summing trigger (A18)
-- `20260912000000_import_sweep.sql` — Sprint 29: `sweep_bets()`, the import's delete half (§4.2, A24)
+- `20260908000000_snapshot_console.sql` — Sprint 27: `snapshot_index()` + `restore_snapshot()`, the reachable rollback (A21)
+- `20260908000001_avatars_bucket_limits.sql` — Sprint 21 follow-up: size/MIME limits on the `avatars` bucket (#144)
+- `20260909000000_player_profile_seed.sql` — the roster copy + `apply_player_profile_seed()`, which applies itself as players register (#74)
+- `20260911000000_restore_snapshot_where_clause.sql` — Sprint 27 defect fix: `WHERE true` on the restore's six deletes, because pg-safeupdate is preloaded on `authenticator` and rejects WHERE-less DML at parse time
+- `20260912000000_snapshot_live_counts.sql` — `snapshot_index()` reports live wagers and active participants beside the raw row counts
+- `20260912000001_import_sweep.sql` — Sprint 29: `sweep_bets()`, the import's delete half (§4.2, A24)
 
 **Still to come** (see `ROADMAP.md`): nothing scheduled.
 

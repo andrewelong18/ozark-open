@@ -28,7 +28,7 @@ Recorded in full in PRD §12 **A24**; in short:
 ### Tasks
 
 - [x] `planSweep()` in `lib/import.ts` — phase-scoped, bets and picks, clean/wagered split, fingerprint. 11 unit tests; the phase guard and the wagered split each verified by sabotage.
-- [x] `supabase/migrations/20260912000000_import_sweep.sql` — `sweep_bets()`, one transaction, `is_admin()` gate, finalized-tournament refusal, a by-name refusal when wagers are in the way. Both manifests regenerated.
+- [x] `supabase/migrations/20260912000001_import_sweep.sql` — `sweep_bets()`, one transaction, `is_admin()` gate, finalized-tournament refusal, a by-name refusal when wagers are in the way. Both manifests regenerated.
 - [x] Two-pass `POST /api/admin/import` — 409 `needsConfirmation` before the snapshot, fingerprint check on the confirm, sweep after the upserts, `swept` / `keptWagered` in the report.
 - [x] The confirm panel in `components/admin/import-form.tsx` — two tiers that never share a control, the bettor chase list, and "Import without deleting" as the escape.
 - [x] `scripts/import-roundtrip.ts` — the sweep, the FK refusal, the explicit clear, and the snapshot restore bringing bet and wager back.
