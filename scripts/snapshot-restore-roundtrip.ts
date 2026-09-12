@@ -187,11 +187,12 @@ function main() {
     `SELECT pg_get_function_result('public.snapshot_index(int)'::regprocedure)`
   ).replace(/\s+/g, " ")
   check(
-    "returns exactly (id, created_at, trigger, bytes, + the five counts)",
+    "returns exactly (id, created_at, trigger, bytes, the five counts, the two live counts)",
     signature ===
       "TABLE(id uuid, created_at timestamp with time zone, trigger text, bytes bigint, " +
         "tournaments integer, tournament_participants integer, bets integer, " +
-        "bet_picks integer, bet_placements integer)",
+        "bet_picks integer, bet_placements integer, live_placements integer, " +
+        "active_participants integer)",
     signature
   )
   // The reason the function exists. payload is hundreds of KB a row, and a
@@ -303,6 +304,98 @@ function main() {
     indexed === `${expectedPlacements}/1/true`,
     `${indexed} (live placements: ${expectedPlacements})`
   )
+
+  // --- 3b. The counts tell a row from a wager -------------------------------
+  //
+  // THE SEPT 12 BUG, encoded. Remove a wager, take a save state, and every
+  // number on /admin/snapshots sat still: removal is a soft delete, so the row
+  // survives in the payload (deliberately — restoring without it would
+  // resurrect money the bettor had taken off the table) and
+  // jsonb_array_length() counted it. The headline could only ever go up.
+  //
+  // Both numbers are asserted together on purpose. Filtering the row count
+  // would "fix" the headline and quietly break the restore; the point is that
+  // the payload keeps everything and the LISTING learns to read it two ways.
+  console.log("\n  live counts vs row counts")
+
+  const rowsBefore = Number(count("bet_placements"))
+  const liveBefore = Number(
+    runSql(`SELECT count(*) FROM public.bet_placements WHERE deleted_at IS NULL;`)
+  )
+  // Not vacuous in either direction: the seed already carries soft-deleted
+  // wagers, which is exactly why the two numbers have to be measured rather
+  // than derived from each other.
+  check(
+    "the seed already holds removed wagers, so the two counts start apart",
+    liveBefore < rowsBefore,
+    `${liveBefore} live of ${rowsBefore} rows`
+  )
+
+  const doomed = runSql(
+    `SELECT id FROM public.bet_placements WHERE deleted_at IS NULL ORDER BY id LIMIT 1;`
+  )
+  runSql(`UPDATE public.bet_placements SET deleted_at = now() WHERE id = '${doomed}';`)
+
+  const softId = asUser(adminId, `SELECT public.take_snapshot('manual', NULL);`)
+  const softCounts = asUser(
+    adminId,
+    `SELECT bet_placements || '/' || live_placements
+       FROM public.snapshot_index(50) WHERE id = '${softId}';`
+  )
+  check(
+    "removing a wager drops live_placements but not the row count",
+    softCounts === `${rowsBefore}/${liveBefore - 1}`,
+    `${softCounts} (expected ${rowsBefore}/${liveBefore - 1})`
+  )
+
+  // Same shape for the roster: revoking is a soft stamp, and eligibility
+  // everywhere else in the app is "a row exists AND revoked_at IS NULL".
+  const participantRows = Number(count("tournament_participants"))
+  const revoked = runSql(
+    `SELECT id FROM public.tournament_participants
+      WHERE revoked_at IS NULL ORDER BY id LIMIT 1;`
+  )
+  runSql(
+    `UPDATE public.tournament_participants SET revoked_at = now() WHERE id = '${revoked}';`
+  )
+  const revokedId = asUser(adminId, `SELECT public.take_snapshot('manual', NULL);`)
+  const revokedCounts = asUser(
+    adminId,
+    `SELECT tournament_participants || '/' || active_participants
+       FROM public.snapshot_index(50) WHERE id = '${revokedId}';`
+  )
+  check(
+    "revoking a participant drops active_participants but not the row count",
+    revokedCounts === `${participantRows}/${participantRows - 1}`,
+    `${revokedCounts} (expected ${participantRows}/${participantRows - 1})`
+  )
+
+  // A payload from before a table was captured reports NULL for the row count;
+  // the live count must agree rather than reporting a confident 0, or the
+  // console's "predates this" em dash becomes "this save state holds none".
+  const legacyId = runSql(`
+    WITH ins AS (
+      INSERT INTO public.snapshots (trigger, payload)
+      VALUES ('manual', '{"tournaments": []}'::jsonb) RETURNING id
+    ) SELECT id FROM ins;`)
+  const legacy = asUser(
+    adminId,
+    `SELECT coalesce(bet_placements::text, 'null') || '/' ||
+            coalesce(live_placements::text, 'null')
+       FROM public.snapshot_index(50) WHERE id = '${legacyId}';`
+  )
+  check(
+    "a payload predating wagers reports NULL for both, never 0",
+    legacy === "null/null",
+    legacy
+  )
+  runSql(`DELETE FROM public.snapshots WHERE id = '${legacyId}';`)
+
+  // Put the two soft stamps back: everything below checksums the whole state,
+  // and a restore to `before` has to be comparable to what was captured there.
+  runSql(`
+    UPDATE public.bet_placements SET deleted_at = NULL WHERE id = '${doomed}';
+    UPDATE public.tournament_participants SET revoked_at = NULL WHERE id = '${revoked}';`)
 
   // A bad edit, the shape of the disaster this whole system exists for:
   // last week's sheet, or a fat-fingered cell at 10pm.
