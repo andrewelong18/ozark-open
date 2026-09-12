@@ -564,7 +564,16 @@ function main() {
       JOIN pg_language l ON l.oid = p.prolang
       JOIN pg_namespace n ON n.oid = p.pronamespace,
       LATERAL regexp_split_to_table(
-        regexp_replace(p.prosrc, '--[^\n]*', '', 'g'), ';'
+        regexp_replace(p.prosrc, '--[^\n]*', '', 'g'),
+        -- Split on statement ends AND on the two things that can sit in front
+        -- of DML inside one fragment: a CTE head (\`WITH gone AS (\`) and a
+        -- branch (\`IF ... THEN\`). Without them the rule below — which requires
+        -- a fragment to BEGIN with the DML — skips both shapes silently, and
+        -- CTE-wrapped deletes are now house style (sweep_bets() has three, and
+        -- every one of them was invisible here until Sept 12). Splitting stays
+        -- cruder than parsing on purpose: it can only over-report, and an
+        -- over-report makes somebody look at a delete.
+        ';|\\mTHEN\\M|\\mAS\\s*\\('
       ) AS frag
       WHERE n.nspname = 'public'
         AND l.lanname IN ('plpgsql', 'sql')
