@@ -87,10 +87,15 @@ test("the menu opens on the phase the tournament is in (#193)", async ({ page })
 
   await expect(p1).toHaveAttribute("aria-pressed", "true")
   await expect(p2).toHaveAttribute("aria-pressed", "false")
-  await expect(page.getByRole("button", { name: "All Bets" })).toHaveAttribute(
+  // Both secondary rows open unfiltered — three radio groups, each with an
+  // explicit "all" member (Pat, Sept 10).
+  await expect(page.getByRole("button", { name: "All Rounds" })).toHaveAttribute(
     "aria-pressed",
     "true"
   )
+  await expect(
+    page.getByRole("button", { name: "All Categories" })
+  ).toHaveAttribute("aria-pressed", "true")
 
   // Phase 1 holds BOTH kinds at once — the state the old status toggle split
   // across two views and the reason this sprint had to badge every card.
@@ -101,6 +106,101 @@ test("the menu opens on the phase the tournament is in (#193)", async ({ page })
   await p2.click()
   await expect(p2).toHaveAttribute("aria-pressed", "true")
   await expect(p1).toHaveAttribute("aria-pressed", "false")
+})
+
+// ---------------------------------------------------------------------------
+// The three filter levels (Pat, Sept 10 2026 — PRD §12 A23)
+//
+// The Phase 1 fixture is what makes these assertable, so it is worth spelling
+// out: Tournament holds bet 1 (Top Finisher) and bet 2 (Top X Finisher);
+// Round 1 holds bet 3 (Top Finisher), bets 4/6/8 (Match), bets 5/7 (Group
+// Match) and bets 9-13 (Prop Bet). So "Tournament + Match" is empty and
+// "Round 1 + Match" is exactly three bets — which is the pair this needs.
+// ---------------------------------------------------------------------------
+
+test("round and category filter independently, and compose (A23)", async ({
+  page,
+}) => {
+  const round = page.getByRole("button", { name: "Round 1", exact: true })
+  const category = page.getByRole("button", { name: "Match", exact: true })
+
+  // Round alone: everything filed under Round 1, across every category.
+  await round.click()
+  await expect(round).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByTestId("bet-3")).toBeVisible() // Top Finisher
+  await expect(page.getByTestId("bet-4")).toBeVisible() // Match
+  await expect(page.getByTestId("bet-9")).toBeVisible() // Prop Bet
+  await expect(page.getByTestId("bet-1")).toHaveCount(0) // Tournament
+
+  // Now the category ON TOP of it — the round stays selected. Before Sept 10
+  // this second click REPLACED the round, because only one facet could be
+  // active at a time; that is the behaviour Pat rejected.
+  await category.click()
+  await expect(round).toHaveAttribute("aria-pressed", "true")
+  await expect(category).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByTestId("bet-4")).toBeVisible()
+  await expect(page.getByTestId("bet-6")).toBeVisible()
+  await expect(page.getByTestId("bet-8")).toBeVisible()
+  await expect(page.getByTestId("bet-3")).toHaveCount(0) // Round 1, wrong category
+  await expect(page.getByTestId("bet-5")).toHaveCount(0) // Group Match ≠ Match
+
+  // Each row is a radio group: picking another round leaves the category alone.
+  await page.getByRole("button", { name: "Tournament", exact: true }).click()
+  await expect(round).toHaveAttribute("aria-pressed", "false")
+  await expect(category).toHaveAttribute("aria-pressed", "true")
+})
+
+test("an empty combination says which two chips emptied it (A23)", async ({
+  page,
+}) => {
+  // The invariant #104 bought — no selectable option can empty the page — is
+  // gone, knowingly, and this is the screen that pays for it. There is no
+  // Tournament Match bet in Phase 1, both chips are legal, and the page has to
+  // name BOTH of them: naming one would leave the reader to work out which row
+  // did it, which is worse than naming neither.
+  await page.getByRole("button", { name: "Tournament", exact: true }).click()
+  await page.getByRole("button", { name: "Match", exact: true }).click()
+
+  await expect(page.getByText("No bets match this filter")).toBeVisible()
+  await expect(page.getByText(/Tournament.+\+.+Match/)).toBeVisible()
+  await expect(page.getByTestId("bet-1")).toHaveCount(0)
+
+  // ...and the one tap that undoes both.
+  await page.getByRole("button", { name: "Show all Phase 1 bets" }).click()
+  await expect(
+    page.getByRole("button", { name: "All Rounds" })
+  ).toHaveAttribute("aria-pressed", "true")
+  await expect(
+    page.getByRole("button", { name: "All Categories" })
+  ).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByTestId("bet-1")).toBeVisible()
+})
+
+test("the category survives a phase flip; the round does not (A23)", async ({
+  page,
+}) => {
+  // Round 1 is a Phase 1 round and Round 3 a Phase 2 one, so a round selection
+  // essentially never survives the tab change — it resets rather than leaving a
+  // selection that matches nothing. All five categories exist in both phases,
+  // so a member who has drilled into Match stays in Match.
+  await page.getByRole("button", { name: "Round 1", exact: true }).click()
+  await page.getByRole("button", { name: "Match", exact: true }).click()
+
+  await page.getByRole("button", { name: "Phase 2", exact: true }).click()
+  await expect(
+    page.getByRole("button", { name: "All Rounds" })
+  ).toHaveAttribute("aria-pressed", "true")
+  await expect(
+    page.getByRole("button", { name: "Match", exact: true })
+  ).toHaveAttribute("aria-pressed", "true")
+
+  // Phase 2 offers Round 3 and never Round 1 — the row is scoped to the phase.
+  await expect(
+    page.getByRole("button", { name: "Round 3", exact: true })
+  ).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Round 1", exact: true })
+  ).toHaveCount(0)
 })
 
 test("an unpublished Phase 2 says so instead of vanishing (#193)", async ({ page }) => {

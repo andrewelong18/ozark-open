@@ -9,8 +9,10 @@ import { Input } from "@/components/ui/input"
 import { SnapshotButton } from "@/components/admin/snapshot-button"
 import { formatRelativeTime, formatTimestamp } from "@/lib/format"
 import {
+  DERIVED_COUNTS,
   SNAPSHOT_TABLES,
   describeDelta,
+  type DerivedCount,
   type LiveCounts,
   type RestoreManifest,
   type SnapshotRow,
@@ -42,12 +44,28 @@ const TOUCH = "h-11 sm:h-9"
 
 const CONFIRM_WORD = "RESTORE"
 
+// "Menu" is doing real work in two of these. public.bets and public.bet_picks
+// are what Pat UPLOADED — the headings and the options under them — and this
+// page used to call them "Bets" and "Picks", which reads as "what people bet"
+// and "my picks" to everyone who isn't holding the schema in their head. The
+// Sept 12 report was exactly that misreading, arrived at honestly: five wagers
+// removed, and "bets"/"picks" sat still, because no member action can move the
+// menu. The word that fixes it is one word long.
+//
+// "rows" is doing the same work in the other two. These count soft-deleted
+// wagers and revoked participants, deliberately — they are what a restore puts
+// back. The live counts below are the other question.
 const TABLE_LABELS: Record<SnapshotTable, string> = {
   tournaments: "Tournament row",
-  tournament_participants: "Participants",
-  bets: "Bets",
-  bet_picks: "Picks",
-  bet_placements: "Wagers",
+  tournament_participants: "Participant rows",
+  bets: "Menu bets",
+  bet_picks: "Menu picks",
+  bet_placements: "Wager rows",
+}
+
+const DERIVED_LABELS: Record<DerivedCount, string> = {
+  live_placements: "Live wagers",
+  active_participants: "Active participants",
 }
 
 function triggerTone(trigger: string) {
@@ -201,15 +219,25 @@ function SnapshotRowView({
           </div>
         </div>
         {/* Pat asked for the bet-placement count by name, so it carries the
-            visual weight and everything else is quieter. */}
-        <div className="text-right text-lg font-semibold text-text-strong tabular">
-          {row.bet_placements ?? "—"}
+            visual weight and everything else is quieter.
+            LIVE wagers, not wager rows — a removed wager keeps its row
+            (deleted_at) and this number used to count it, so it could only ever
+            go up and never reflected the thing an admin had just done. The row
+            count stays underneath because that, not this, is what a restore
+            puts back and what the manifest afterwards is checked against. */}
+        <div className="text-right">
+          <div className="text-lg leading-tight font-semibold text-text-strong tabular">
+            {row.live_placements ?? "—"}
+          </div>
+          <div className="text-[10px] text-text-muted tabular">
+            of {row.bet_placements ?? "—"} rows
+          </div>
         </div>
       </div>
 
       <div className="mt-1 text-xs text-text-muted tabular">
-        {row.bets ?? "—"} bets · {row.bet_picks ?? "—"} picks ·{" "}
-        {row.tournament_participants ?? "—"} participants ·{" "}
+        {row.bets ?? "—"} menu bets · {row.bet_picks ?? "—"} menu picks ·{" "}
+        {row.active_participants ?? "—"} participants ·{" "}
         {formatBytes(row.bytes)}
       </div>
 
@@ -283,27 +311,31 @@ function ConfirmPanel({
           <span className="text-right">Now</span>
           <span className="text-right">After</span>
         </div>
-        {SNAPSHOT_TABLES.map((table) => {
-          const saved = row[table] ?? 0
-          const note = describeDelta(live[table], saved)
-          return (
-            <div
-              key={table}
-              className="grid grid-cols-[1fr_auto_auto] items-baseline gap-x-3 border-t border-border pt-1.5 pb-0.5 text-xs first:border-t-0"
-            >
-              <span className="text-text-body">
-                {TABLE_LABELS[table]}
-                {note && (
-                  <span className="ml-1.5 font-medium text-loss-strong">{note}</span>
-                )}
-              </span>
-              <span className="text-right text-text-muted tabular">{live[table]}</span>
-              <span className="text-right font-semibold text-text-strong tabular">
-                {saved}
-              </span>
-            </div>
-          )
-        })}
+        {SNAPSHOT_TABLES.map((table) => (
+          <CountRow
+            key={table}
+            label={TABLE_LABELS[table]}
+            now={live[table]}
+            saved={row[table] ?? 0}
+          />
+        ))}
+        {/* The same payload, read the other way. The five rows above are what a
+            restore literally puts back — soft-deleted wagers and revoked
+            participants included, which is correct and is also why those
+            numbers barely move. These two are what an admin is actually asking:
+            how much live money, how many people still in. Exhaustive beats
+            terse on the panel in front of the destructive button. */}
+        <div className="mt-1.5 border-t border-border pt-1.5 text-[10px] font-bold tracking-wider text-text-muted uppercase">
+          Of those
+        </div>
+        {DERIVED_COUNTS.map((key) => (
+          <CountRow
+            key={key}
+            label={DERIVED_LABELS[key]}
+            now={live[key]}
+            saved={row[key] ?? 0}
+          />
+        ))}
       </div>
 
       <ul className="flex list-disc flex-col gap-1 pl-4 text-xs text-loss-strong">
@@ -372,6 +404,31 @@ function ConfirmPanel({
   )
 }
 
+/** One "Now / After" line of the confirm panel, with its delta note. Shared by
+ *  the five table rows and the two derived ones so a future change to how a
+ *  delta reads can't land on one group and miss the other. */
+function CountRow({
+  label,
+  now,
+  saved,
+}: {
+  label: string
+  now: number
+  saved: number
+}) {
+  const note = describeDelta(now, saved)
+  return (
+    <div className="grid grid-cols-[1fr_auto_auto] items-baseline gap-x-3 border-t border-border pt-1.5 pb-0.5 text-xs first:border-t-0">
+      <span className="text-text-body">
+        {label}
+        {note && <span className="ml-1.5 font-medium text-loss-strong">{note}</span>}
+      </span>
+      <span className="text-right text-text-muted tabular">{now}</span>
+      <span className="text-right font-semibold text-text-strong tabular">{saved}</span>
+    </div>
+  )
+}
+
 function RestoreDone({ manifest }: { manifest: RestoreManifest }) {
   return (
     <Card className="border-win-border bg-win-surface p-4">
@@ -381,8 +438,15 @@ function RestoreDone({ manifest }: { manifest: RestoreManifest }) {
       {/* The manifest, the same discipline db-export.sh's carries: the
           operation reports numbers that prove it did what it said. A restore
           that silently restored nothing is exactly as dangerous as an export
-          that silently captured nothing. */}
-      <div className="mt-2 flex flex-col gap-0.5 text-xs text-text-body tabular">
+          that silently captured nothing.
+          These are restore_snapshot()'s own count(*) — ROWS, soft-deleted
+          wagers and revoked participants included. TABLE_LABELS says "rows" out
+          loud so this can't be read against the live-wager headline in the list
+          below and look like a discrepancy. */}
+      <div className="mt-2 text-[10px] font-bold tracking-wider text-text-muted uppercase">
+        Rows restored
+      </div>
+      <div className="mt-1 flex flex-col gap-0.5 text-xs text-text-body tabular">
         {SNAPSHOT_TABLES.map((table) => (
           <div key={table} className="flex justify-between gap-3">
             <span>{TABLE_LABELS[table]}</span>

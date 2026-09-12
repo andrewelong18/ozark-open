@@ -7,5 +7,6 @@ public.handle_new_user() | PUBLIC (default)
 public.is_admin() | PUBLIC (default)
 public.restore_snapshot(p_id uuid) | authenticated
 public.snapshot_index(p_limit integer) | authenticated
+public.sweep_bets(p_bet_ids uuid[], p_pick_ids uuid[], p_clear_wagers boolean) | authenticated
 public.take_snapshot(p_trigger text, p_keep integer) | authenticated
 public.touch_updated_at() | PUBLIC (default)

@@ -6,10 +6,35 @@ import { SnapshotButton } from "@/components/admin/snapshot-button"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
+type SweepTarget = {
+  id: string
+  sheetId: number
+  label: string
+  phase: number
+  status?: string
+  betTitle?: string
+  pickCount?: number
+  wagerCount: number
+  wagerTotal: number
+  bettors: { name: string; amount: number }[]
+}
+
+type SweepPlan = {
+  phases: number[]
+  bets: { clean: SweepTarget[]; wagered: SweepTarget[] }
+  picks: { clean: SweepTarget[]; wagered: SweepTarget[] }
+  fingerprint: string
+}
+
 type ImportReport = {
   bets: { created: number; updated: number; unchanged: number }
   picks: { created: number; updated: number; unchanged: number }
   unmatchedPickNames: string[]
+  /** Sprint 29: what the sweep actually removed, and what it left behind
+   * because the rows carried wagers. Optional for the same defensiveness as
+   * the two fields below. */
+  swept?: { bets: number; picks: number; placements: number } | null
+  keptWagered?: SweepTarget[] | null
   warnings: string[]
   /** Sprint 11: the save state taken automatically just before this upload
    * applied. Optional only for defensiveness — the route always sends it. */
@@ -20,6 +45,10 @@ type ImportReport = {
   readyToFinalize?: { ok: boolean; blockers: string[] } | null
 }
 
+/** How an upload answers the sweep question. `null` is the first pass, which
+ *  asks it; the two booleans are the three answers Pat can give. */
+type SweepChoice = null | { sweep: boolean; clearWagered: boolean }
+
 export function ImportForm() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [fileName, setFileName] = useState<string | null>(null)
@@ -27,9 +56,16 @@ export function ImportForm() {
   const [error, setError] = useState<string | null>(null)
   const [contractErrors, setContractErrors] = useState<string[]>([])
   const [report, setReport] = useState<ImportReport | null>(null)
+  const [pendingSweep, setPendingSweep] = useState<SweepPlan | null>(null)
 
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
+  function reset() {
+    setError(null)
+    setContractErrors([])
+    setReport(null)
+    setPendingSweep(null)
+  }
+
+  async function upload(choice: SweepChoice) {
     const file = inputRef.current?.files?.[0]
     if (!file) return
 
@@ -41,10 +77,30 @@ export function ImportForm() {
     try {
       const body = new FormData()
       body.append("file", file)
+      if (choice) {
+        body.append("confirm_sweep", String(choice.sweep))
+        body.append("clear_wagered", String(choice.clearWagered))
+        // Proves the menu hasn't moved since this list was drawn. The server
+        // recomputes everything else; this is the only thing it takes our word
+        // for, and it refuses if it disagrees.
+        if (pendingSweep) {
+          body.append("sweep_fingerprint", pendingSweep.fingerprint)
+        }
+      }
       const res = await fetch("/api/admin/import", { method: "POST", body })
       const json = await res.json().catch(() => null)
 
       if (!res.ok) {
+        // 409: the upload wrote nothing and took no snapshot — it is asking
+        // about the rows this sheet no longer lists (Sprint 29). The same
+        // shape comes back when the menu moved under a confirmation, with an
+        // error headline attached.
+        if (json?.needsConfirmation && json?.sweep) {
+          setPendingSweep(json.sweep as SweepPlan)
+          if (json?.error) setError(json.error)
+          return
+        }
+        setPendingSweep(null)
         if (Array.isArray(json?.errors)) {
           setContractErrors(json.errors)
           // The headline is the server's when it sends one. A contract failure
@@ -58,12 +114,18 @@ export function ImportForm() {
         }
         return
       }
+      setPendingSweep(null)
       setReport(json?.report ?? null)
     } catch {
       setError("Upload failed — check your connection and try again.")
     } finally {
       setBusy(false)
     }
+  }
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    await upload(null)
   }
 
   return (
@@ -87,9 +149,7 @@ export function ImportForm() {
               required
               onChange={(e) => {
                 setFileName(e.target.files?.[0]?.name ?? null)
-                setError(null)
-                setContractErrors([])
-                setReport(null)
+                reset()
               }}
               className="block w-full cursor-pointer rounded-lg border border-border bg-surface-sunken text-sm text-text-muted file:mr-3 file:h-11 file:cursor-pointer file:border-0 file:bg-primary file:px-4 file:font-semibold file:text-primary-foreground"
             />
@@ -110,8 +170,194 @@ export function ImportForm() {
         </CardContent>
       </Card>
 
+      {pendingSweep && (
+        <SweepPanel
+          sweep={pendingSweep}
+          busy={busy}
+          onChoose={upload}
+          onCancel={reset}
+        />
+      )}
+
       {report && <ImportReportCard report={report} />}
     </div>
+  )
+}
+
+const money = (n: number) =>
+  `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+
+function TargetLine({ target }: { target: SweepTarget }) {
+  const meta = target.betTitle
+    ? `in "${target.betTitle}"`
+    : [
+        `phase ${target.phase}`,
+        target.status,
+        target.pickCount === 1 ? "1 pick" : `${target.pickCount} picks`,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+  return (
+    <li>
+      <span className="tabular font-semibold">{target.sheetId}</span> —{" "}
+      {target.label}{" "}
+      <span className="text-xs opacity-80">({meta})</span>
+      {target.wagerCount > 0 && (
+        <div className="mt-0.5 text-xs">
+          {target.wagerCount === 1 ? "1 wager" : `${target.wagerCount} wagers`} ·{" "}
+          {money(target.wagerTotal)} —{" "}
+          {target.bettors
+            .map((b) => `${b.name} ${money(b.amount)}`)
+            .join(" · ")}
+        </div>
+      )}
+    </li>
+  )
+}
+
+/**
+ * The warning Pat asked for.
+ *
+ * "It might be helpful that anytime I upload a sheet it should delete all bets
+ * that aren't in the sheet being uploaded. It can warn me that I am about to
+ * delete some bets." — Sept 11, 2026, after a Phase 1 refresh left 19 stale
+ * bets live on the menu.
+ *
+ * Two tiers, and they never share a control. Rows with no wagers are a
+ * housekeeping delete and sit behind one tap. Rows that carry wagers are kept
+ * by default and need their own, separate tap — because mid-tournament a bet
+ * with real wagers falling out of the sheet is almost always a mistake in the
+ * sheet, not an intent to cancel, and one gesture must never be able to do
+ * both.
+ */
+function SweepPanel({
+  sweep,
+  busy,
+  onChoose,
+  onCancel,
+}: {
+  sweep: SweepPlan
+  busy: boolean
+  onChoose: (choice: { sweep: boolean; clearWagered: boolean }) => void
+  onCancel: () => void
+}) {
+  const clean = [...sweep.bets.clean, ...sweep.picks.clean]
+  const wagered = [...sweep.bets.wagered, ...sweep.picks.wagered]
+  const wagerTotal = wagered.reduce((sum, t) => sum + t.wagerTotal, 0)
+  const wagerCount = wagered.reduce((sum, t) => sum + t.wagerCount, 0)
+  const bettorNames = [
+    ...new Set(wagered.flatMap((t) => t.bettors.map((b) => b.name))),
+  ]
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3.5">
+        <div className="font-heading text-lg text-text-strong">
+          This sheet drops some bets
+        </div>
+        <p className="text-sm text-text-muted">
+          Nothing has been imported yet and no save state was taken. Comparing
+          the file against{" "}
+          {sweep.phases.length === 1
+            ? `phase ${sweep.phases[0]}`
+            : `phases ${sweep.phases.join(" and ")}`}{" "}
+          — the {sweep.phases.length === 1 ? "one it covers" : "ones it covers"}{" "}
+          — these are on the menu and not in the sheet. Anything in another
+          phase is out of scope and untouched.
+        </p>
+
+        {clean.length > 0 && (
+          <div className="rounded-lg border border-caution-border bg-caution-surface p-3">
+            <div className="text-sm font-semibold text-caution-strong">
+              {clean.length === 1
+                ? "1 row would be deleted"
+                : `${clean.length} rows would be deleted`}
+            </div>
+            <ul className="mt-1 flex list-disc flex-col gap-1 pl-5 text-sm text-caution-strong">
+              {clean.map((t) => (
+                <TargetLine key={t.id} target={t} />
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {wagered.length > 0 && (
+          <div className="rounded-lg border border-loss-border bg-loss-surface p-3">
+            <div className="text-sm font-semibold text-loss-strong">
+              {wagered.length === 1
+                ? "1 row carries wagers — kept unless you say otherwise"
+                : `${wagered.length} rows carry wagers — kept unless you say otherwise`}
+            </div>
+            <ul className="mt-1 flex list-disc flex-col gap-1 pl-5 text-sm text-loss-strong">
+              {wagered.map((t) => (
+                <TargetLine key={t.id} target={t} />
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-loss-strong">
+              Clearing these deletes{" "}
+              <span className="font-semibold">
+                {wagerCount === 1 ? "1 wager" : `${wagerCount} wagers`}{" "}
+                totalling {money(wagerTotal)}
+              </span>
+              .{" "}
+              <span className="font-semibold">The pool doesn&rsquo;t change</span>{" "}
+              — it&rsquo;s the sum of entry fees, not of wagers. What changes is
+              that {bettorNames.join(", ")}{" "}
+              {bettorNames.length === 1 ? "drops" : "drop"} below the entry fee
+              and stops meeting the exact-total rule, and{" "}
+              <span className="font-semibold">nothing tells them</span> —
+              you&rsquo;ll need to text them.
+            </p>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="mt-2.5 h-11 sm:h-9"
+              disabled={busy}
+              onClick={() => onChoose({ sweep: true, clearWagered: true })}
+            >
+              {busy ? "Importing…" : "Clear those wagers and delete everything"}
+            </Button>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {clean.length > 0 && (
+            <Button
+              disabled={busy}
+              onClick={() => onChoose({ sweep: true, clearWagered: false })}
+            >
+              {busy
+                ? "Importing…"
+                : wagered.length > 0
+                  ? "Delete the rest and import"
+                  : "Delete them and import"}
+            </Button>
+          )}
+          <Button
+            variant="secondary"
+            disabled={busy}
+            onClick={() => onChoose({ sweep: false, clearWagered: false })}
+          >
+            Import without deleting
+          </Button>
+          <Button variant="ghost" disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+
+        <p className="text-xs text-text-muted">
+          Whichever you pick, a save state is taken first — this is undoable
+          from{" "}
+          <Link
+            href="/admin/snapshots"
+            className="font-semibold text-indigo-700 underline"
+          >
+            Save States &amp; Undo
+          </Link>
+          .
+        </p>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -156,6 +402,38 @@ function ImportReportCard({ report }: { report: ImportReport }) {
           <div className="flex flex-col gap-2">
             <CountRow label="Bets" counts={report.bets} />
             <CountRow label="Picks" counts={report.picks} />
+          </div>
+        )}
+
+        {report.swept &&
+          (report.swept.bets > 0 ||
+            report.swept.picks > 0 ||
+            report.swept.placements > 0) && (
+            <div className="rounded-lg border border-border bg-surface-sunken p-3 text-sm text-text-strong">
+              <span className="font-semibold">Deleted</span> — rows this sheet
+              no longer lists:{" "}
+              <span className="tabular">
+                {report.swept.bets} bet{report.swept.bets === 1 ? "" : "s"} ·{" "}
+                {report.swept.picks} loose pick
+                {report.swept.picks === 1 ? "" : "s"}
+                {report.swept.placements > 0 &&
+                  ` · ${report.swept.placements} wager${
+                    report.swept.placements === 1 ? "" : "s"
+                  } cleared`}
+              </span>
+            </div>
+          )}
+
+        {report.keptWagered && report.keptWagered.length > 0 && (
+          <div className="rounded-lg border border-caution-border bg-caution-surface p-3">
+            <div className="text-sm font-semibold text-caution-strong">
+              Not in this sheet, but kept — they carry wagers
+            </div>
+            <ul className="mt-1 flex list-disc flex-col gap-1 pl-5 text-sm text-caution-strong">
+              {report.keptWagered.map((t) => (
+                <TargetLine key={t.id} target={t} />
+              ))}
+            </ul>
           </div>
         )}
 

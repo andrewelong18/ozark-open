@@ -27,7 +27,30 @@ Every one of them is the same spreadsheet, re-uploaded to `/admin/import`. Upser
 | 3 | **Friday night** | Phase 2 bets flipped `hidden` → `open`, Tournament odds updated |
 | 4 | **Saturday night** | Final `result` per pick; every bet `closed` |
 
-Uploads never touch anybody's wagers. Only participants write those, through the app.
+### What to expect if the upload pauses to ask (Sprint 29)
+
+Since Sprint 29 an upload also **deletes** the bets and picks its sheet no longer lists, so
+whenever there is anything to delete the upload stops and shows you a panel first. **Nothing has
+been imported at that point and no save state has been taken** — the page is asking, not
+reporting.
+
+- It only compares against **the phases your sheet actually contains.** Uploading a Phase 2-only
+  file cannot delete Phase 1. The panel says which phases it looked at.
+- **Rows nobody has bet on** are listed for deletion behind one button. Read the list. On uploads
+  2–4 it should normally be empty — if it names bets you expect to still be live, the sheet is
+  wrong, not the app. Take **Cancel** or **Import without deleting** and go fix the sheet.
+- **Rows that carry wagers are kept unless you say otherwise**, on a separate button, with the
+  bettors named. Clearing them deletes those wagers for good. Two things to know before you tap
+  it: **the pool doesn't change** (it's the sum of entry fees, not of wagers), and the people named
+  **drop below their entry fee and are told nothing** — you have to text them.
+- Whatever you choose, a save state is taken before anything is written, so
+  `/admin/snapshots` undoes the whole upload.
+
+Mid-tournament, a bet with real wagers falling out of the sheet is almost always a mistake in the
+sheet. The safe answer at a tee box is **Import without deleting**, then sort the sheet out later.
+
+Other than that one path, uploads never touch anybody's wagers. Only participants write those,
+through the app.
 
 ---
 
@@ -111,6 +134,19 @@ so the project can pause and the automatic save states can stop.
       free-tier project sleeps after a week of inactivity and the first request after a sleep can
       take a minute or fail outright. Wake it, and expect no automatic snapshots to have been taken
       while it slept.)*
+
+- [ ] **Press the restore button once, on purpose.** `/admin/snapshots` → **Snapshot now**, then
+      **Restore this** on *that* save state — the newest one, seconds old, so every delta on the
+      confirmation panel reads `0` and the worst case is a no-op. Type `RESTORE`. You should get a
+      manifest whose restored counts match the save state's. Expect one extra `pre-restore` row
+      afterwards; that's correct, and it prunes nothing.
+      **Do this even though it feels pointless, and do not rehearse on an old save state.** Restore
+      is the only admin control with no other way to exercise it, and on Sept 11, 2026 that cost us:
+      the button had never been pressed in production, and when Pat finally tried it he got
+      `DELETE requires a WHERE clause` — dead since it shipped, while every check in the repo was
+      green. If the sentence you get back is not a manifest, read
+      `docs/DATA_SAFETY.md` § Troubleshooting and **stop** — an undo button you find out is broken
+      at 10pm on tournament Friday is worse than no undo button, because you were counting on it.
 
 - [ ] **Send people `https://ozark-open.com` — not a `.vercel.app` link.** Since Aug 23, 2026
       the app forces this itself: every other production alias 308s to `ozark-open.com`, and the

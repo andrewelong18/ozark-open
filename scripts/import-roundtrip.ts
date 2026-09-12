@@ -28,11 +28,15 @@ import path from "node:path"
 import {
   buildImportPlan,
   parseSheet,
+  planSweep,
+  sweepIsEmpty,
   validateSheet,
   type CategoryRow,
   type ExistingBet,
   type ExistingPick,
   type ImportPlan,
+  type PlacementRef,
+  type SheetRow,
   type UserRow,
 } from "../lib/import.ts"
 
@@ -142,10 +146,7 @@ async function main() {
 
   const parsed = await parseSheet(fs.readFileSync(SHEET), SHEET)
   const state0 = fetchState(tournamentId)
-  const validation = validateSheet(
-    parsed,
-    state0.categories.map((c) => c.name)
-  )
+  const validation = validateSheet(parsed)
   if (!validation.ok) {
     console.error("Sheet failed contract validation:\n" + validation.errors.join("\n"))
     process.exit(1)
@@ -220,11 +221,196 @@ async function main() {
   check("all 19 bets unchanged", plan2.bets.unchanged === 19, `got ${plan2.bets.unchanged}`)
   check("all 87 picks unchanged", plan2.picks.unchanged === 87, `got ${plan2.picks.unchanged}`)
 
+  // --- The sweep: rows the sheet no longer lists (Sprint 29) ---------------
+  //
+  // Pat, Sept 11 2026: a Phase 1 refresh left 19 stale bets live on the menu,
+  // because the importer only ever added. These checks drive planSweep() and
+  // public.sweep_bets() against the real database, including the two things a
+  // unit test cannot prove: that the foreign key actually refuses a delete that
+  // would orphan money, and that restore_snapshot() puts a swept bet back.
+  console.log("\nSweep (Sprint 29):")
+
+  const state2 = fetchState(tournamentId)
+  const placementsFor = (picks: typeof state2.picks): PlacementRef[] =>
+    picks.length === 0
+      ? []
+      : queryJson<{ pick_id: string; amount: number; bettorName: string }[]>(
+          `SELECT pl.pick_id, pl.amount, u.display_name AS "bettorName"
+             FROM public.bet_placements pl
+             JOIN public.users u ON u.id = pl.user_id
+            WHERE pl.pick_id IN (${picks.map((p) => lit(p.id)).join(", ")})`
+        )
+
+  // The rule the four weekend uploads depend on: a sheet that still lists
+  // everything must sweep nothing at all.
+  const noSweep = planSweep(rows, state2.bets, state2.picks, [])
+  check("the reference sheet sweeps nothing", sweepIsEmpty(noSweep))
+
+  // Drop a whole bet, and one pick out of a bet that survives.
+  const DROPPED_BET = 19
+  const DROPPED_PICK = 1
+  const reduced: SheetRow[] = rows.filter(
+    (r) => r.sheetBetId !== DROPPED_BET && r.sheetPickId !== DROPPED_PICK
+  )
+
+  // A bettor, and a wager on a pick of one more bet — the row the FK protects.
+  const BETTOR = "0b9b1c2d-3e4f-4a5b-8c7d-9e0f1a2b3c4d"
+  const WAGERED_BET = 18
+  runSql(`
+    INSERT INTO auth.users (id, email) VALUES (${lit(BETTOR)}, 'sweep@test.local')
+      ON CONFLICT (id) DO NOTHING;
+    INSERT INTO public.tournament_participants (user_id, tournament_id, entry_fee, is_player)
+      VALUES (${lit(BETTOR)}, ${lit(tournamentId)}, 40, true)
+      ON CONFLICT (user_id, tournament_id) DO NOTHING;
+    INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement)
+    SELECT ${lit(BETTOR)}, p.id, 7, p.american_odds
+      FROM public.bet_picks p JOIN public.bets b ON b.id = p.bet_id
+     WHERE b.tournament_id = ${lit(tournamentId)} AND b.sheet_bet_id = ${WAGERED_BET}
+     ORDER BY p.sheet_pick_id LIMIT 1
+    ON CONFLICT (user_id, pick_id) DO NOTHING;`)
+
+  const snapshotId = runSql(
+    "SELECT public.take_snapshot('pre-import', NULL)"
+  )
+  check("a save state was taken before the sweep", snapshotId.length === 36)
+
+  const withWagered: SheetRow[] = reduced.filter(
+    (r) => r.sheetBetId !== WAGERED_BET
+  )
+  const sweep = planSweep(
+    withWagered,
+    state2.bets,
+    state2.picks,
+    placementsFor(state2.picks)
+  )
+  check(
+    `bet ${DROPPED_BET} is swept clean`,
+    sweep.bets.clean.some((t) => t.sheetId === DROPPED_BET),
+    JSON.stringify(sweep.bets.clean.map((t) => t.sheetId))
+  )
+  check(
+    `pick ${DROPPED_PICK} is swept on its own, its bet surviving`,
+    sweep.picks.clean.some((t) => t.sheetId === DROPPED_PICK),
+    JSON.stringify(sweep.picks.clean.map((t) => t.sheetId))
+  )
+  check(
+    `bet ${WAGERED_BET} is \`wagered\`, never \`clean\``,
+    sweep.bets.wagered.some((t) => t.sheetId === WAGERED_BET) &&
+      !sweep.bets.clean.some((t) => t.sheetId === WAGERED_BET),
+    JSON.stringify(sweep.bets.wagered.map((t) => t.sheetId))
+  )
+  check(
+    "the wagered bet names its bettor and amount",
+    sweep.bets.wagered.find((t) => t.sheetId === WAGERED_BET)?.wagerTotal === 7,
+    JSON.stringify(sweep.bets.wagered.find((t) => t.sheetId === WAGERED_BET))
+  )
+
+  // The refusal. Not the FK's raw 23503 — sweep_bets() names the bet first,
+  // because this message reaches an admin on a phone.
+  const allBetIds = [...sweep.bets.clean, ...sweep.bets.wagered].map((t) => t.id)
+  const allPickIds = sweep.picks.clean.map((t) => t.id)
+  let refused = ""
+  try {
+    runSql(
+      `SELECT public.sweep_bets(ARRAY[${allBetIds.map(lit).join(", ")}]::uuid[],
+                                ARRAY[${allPickIds.map(lit).join(", ")}]::uuid[],
+                                false)`
+    )
+  } catch (err) {
+    refused = String((err as { stderr?: string }).stderr ?? err)
+  }
+  check(
+    "sweeping a wagered bet without clearing it is refused, by bet_id",
+    refused.includes("still carries wagers") &&
+      refused.includes(String(WAGERED_BET)),
+    refused.split("\n")[0]
+  )
+  const survivedRefusal = Number(
+    runSql(
+      `SELECT count(*) FROM public.bets WHERE tournament_id = ${lit(tournamentId)}`
+    )
+  )
+  check(
+    "...and the refusal deleted nothing at all",
+    survivedRefusal === 19,
+    `got ${survivedRefusal}`
+  )
+
+  // The clean half alone goes through.
+  const cleanResult = JSON.parse(
+    runSql(
+      `SELECT public.sweep_bets(ARRAY[${sweep.bets.clean.map((t) => lit(t.id)).join(", ")}]::uuid[],
+                                ARRAY[${allPickIds.map(lit).join(", ")}]::uuid[],
+                                false)`
+    )
+  ) as { bets: number; picks: number; placements: number }
+  check(
+    "the clean rows sweep: 1 bet, 1 loose pick, 0 placements",
+    cleanResult.bets === 1 &&
+      cleanResult.picks === 1 &&
+      cleanResult.placements === 0,
+    JSON.stringify(cleanResult)
+  )
+  check(
+    `bet ${DROPPED_BET} is gone, and its picks with it`,
+    Number(
+      runSql(
+        `SELECT count(*) FROM public.bet_picks p JOIN public.bets b ON b.id = p.bet_id
+          WHERE b.tournament_id = ${lit(tournamentId)} AND b.sheet_bet_id = ${DROPPED_BET}`
+      )
+    ) === 0
+  )
+
+  // And with clearing asked for explicitly, the wagered bet goes too — the
+  // hard delete PRD §12 A24 authorises.
+  const clearedResult = JSON.parse(
+    runSql(
+      `SELECT public.sweep_bets(ARRAY[${sweep.bets.wagered.map((t) => lit(t.id)).join(", ")}]::uuid[],
+                                ARRAY[]::uuid[], true)`
+    )
+  ) as { bets: number; picks: number; placements: number }
+  check(
+    "clearing wagers deletes the bet and the placement",
+    clearedResult.bets === 1 && clearedResult.placements === 1,
+    JSON.stringify(clearedResult)
+  )
+  check(
+    "the bettor has no placement left",
+    Number(
+      runSql(
+        `SELECT count(*) FROM public.bet_placements WHERE user_id = ${lit(BETTOR)}`
+      )
+    ) === 0
+  )
+
+  // The whole defence of the hard delete: the save state is the audit trail,
+  // and it really does put the money back. Asserted, not asserted-about.
+  runSql(`SELECT public.restore_snapshot(${lit(snapshotId)})`)
+  check(
+    "restoring the save state brings all 19 bets back",
+    Number(
+      runSql(
+        `SELECT count(*) FROM public.bets WHERE tournament_id = ${lit(tournamentId)}`
+      )
+    ) === 19
+  )
+  check(
+    "...and the cleared wager with them",
+    Number(
+      runSql(
+        `SELECT count(*) FROM public.bet_placements WHERE user_id = ${lit(BETTOR)}`
+      )
+    ) === 1
+  )
+
   if (failures > 0) {
     console.error(`\n${failures} check(s) failed.`)
     process.exit(1)
   }
-  console.log("\nRound trip passed: DB matches the sheet; re-import is a no-op.")
+  console.log(
+    "\nRound trip passed: DB matches the sheet; re-import is a no-op; the sweep " +
+      "removes what the sheet dropped and refuses to orphan money."
+  )
 }
 
 main().catch((err) => {

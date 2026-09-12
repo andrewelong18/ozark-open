@@ -29,6 +29,8 @@ import fs from "node:fs"
 import path from "node:path"
 import {
   buildImportPlan,
+  planSweep,
+  sweepIsEmpty,
   clockStaleOpenWarnings,
   parseSheet,
   validateSheet,
@@ -168,7 +170,7 @@ function fetchPhaseClock(tid: string): PhaseClock {
 async function upload(file: string, tid: string, opts: { expectIdempotent?: boolean } = {}) {
   const parsed = await parseSheet(fs.readFileSync(path.join(SHEETS, file)), file)
   const state = fetchState(tid)
-  const validation = validateSheet(parsed, state.categories.map((c) => c.name))
+  const validation = validateSheet(parsed)
   if (!validation.ok) throw new Error(`${file} failed the column contract:\n${validation.errors.join("\n")}`)
 
   const plan = buildImportPlan(validation.rows, state.bets, state.picks, state.categories, state.users)
@@ -202,6 +204,18 @@ async function upload(file: string, tid: string, opts: { expectIdempotent?: bool
           `${c.from.fractionalOdds} → ${c.to.fractionalOdds}.`
       ),
   ]
+
+  // Sprint 29: the four weekend uploads must sweep NOTHING. If a checked-in
+  // lifecycle sheet ever starts offering to delete rows, the phase-scoping
+  // rule is wrong and the real weekend is about to lose a menu — so this is
+  // asserted on every upload rather than once at the end.
+  const sweep = planSweep(validation.rows, state.bets, state.picks, [])
+  check(
+    `${file} sweeps nothing — the menu it drops is empty`,
+    sweepIsEmpty(sweep),
+    `bets ${JSON.stringify([...sweep.bets.clean, ...sweep.bets.wagered].map((t) => t.sheetId))}, ` +
+      `picks ${JSON.stringify([...sweep.picks.clean, ...sweep.picks.wagered].map((t) => t.sheetId))}`
+  )
 
   applyPlan(plan, tid)
   console.log(
@@ -348,7 +362,7 @@ async function main() {
     "bets-sample.xlsx"
   )
   const sampleState = fetchState(tid)
-  const sampleValidation = validateSheet(sampleParsed, sampleState.categories.map((c) => c.name))
+  const sampleValidation = validateSheet(sampleParsed)
   if (!sampleValidation.ok) throw new Error(sampleValidation.errors.join("\n"))
   applyPlan(
     buildImportPlan(sampleValidation.rows, sampleState.bets, sampleState.picks, sampleState.categories, sampleState.users),
@@ -726,8 +740,7 @@ async function main() {
   section("Act 3 · the broken file must write nothing")
   const before = runSql("SELECT count(*) || '/' || (SELECT count(*) FROM public.bet_picks) FROM public.bets")
   const parsedBroken = await parseSheet(fs.readFileSync(path.join(SHEETS, "X-broken.xlsx")), "X-broken.xlsx")
-  const brokenState = fetchState(tid)
-  const brokenValidation = validateSheet(parsedBroken, brokenState.categories.map((c) => c.name))
+  const brokenValidation = validateSheet(parsedBroken)
   check("the file is rejected outright", !brokenValidation.ok)
   if (!brokenValidation.ok) {
     for (const e of brokenValidation.errors.slice(0, 4)) console.log(`      ${e}`)
@@ -747,8 +760,7 @@ async function main() {
     fs.readFileSync(path.join(SHEETS, "X-results-on-open.xlsx")),
     "X-results-on-open.xlsx"
   )
-  const liveState = fetchState(tid)
-  const liveValidation = validateSheet(parsedLive, liveState.categories.map((c) => c.name))
+  const liveValidation = validateSheet(parsedLive)
   check("the file is rejected outright", !liveValidation.ok)
   if (!liveValidation.ok) {
     for (const e of liveValidation.errors.slice(0, 3)) console.log(`      ${e}`)
