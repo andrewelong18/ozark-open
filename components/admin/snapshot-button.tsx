@@ -53,9 +53,9 @@ export function SnapshotButton({
         <div>
           <div className="font-heading text-lg text-text-strong">Save state</div>
           <p className="mt-0.5 text-sm text-text-muted">
-            Snapshots the bets, picks, wagers, participants and tournament row
-            as they are right now. Take one before editing anything by hand.
-            Imports snapshot themselves.
+            Snapshots the bet menu, every wager, the participants and the
+            tournament row as they are right now. Take one before editing
+            anything by hand. Imports snapshot themselves.
           </p>
         </div>
         <Button type="button" variant="outline" onClick={snapshot} disabled={busy}>
