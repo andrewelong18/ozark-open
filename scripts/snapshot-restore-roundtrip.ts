@@ -256,7 +256,7 @@ function main() {
   runSql(`
     SET ozark.restoring = 'on';
     INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement)
-    SELECT '${capUser}', '${capPick}', tp.entry_fee + 500, -110
+    SELECT '${capUser}', '${capPick}', coalesce(tp.phase1_entry_fee, 0) + 500, -110
       FROM public.tournament_participants tp
      WHERE tp.user_id = '${capUser}' LIMIT 1;`)
   const overCapId = runSql(
@@ -411,7 +411,7 @@ function main() {
      WHERE id = (SELECT id FROM public.bet_placements WHERE deleted_at IS NULL ORDER BY id LIMIT 1);
     INSERT INTO public.bet_picks (bet_id, sheet_pick_id, label, american_odds, fractional_odds, probability)
     VALUES ('${betId}', 999999, 'PHANTOM PICK', -110, '10/11', 0.5238);
-    UPDATE public.tournament_participants SET entry_fee = entry_fee + 100
+    UPDATE public.tournament_participants SET phase1_entry_fee = coalesce(phase1_entry_fee, 0) + 100
      WHERE id = (SELECT id FROM public.tournament_participants ORDER BY id LIMIT 1);`)
   const mangled = stateChecksum()
   check("the mangled state differs from the save state", mangled !== before)
