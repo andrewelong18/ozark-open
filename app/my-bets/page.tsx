@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import Link from "next/link"
+import { TriangleAlert } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { StatCard } from "@/components/modules/stat-card"
@@ -9,8 +10,16 @@ import { LoadError } from "@/components/modules/load-error"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import { OddsChip } from "@/components/betting/odds-chip"
 import { ROUND_LABEL } from "@/lib/bet-taxonomy"
-import { checkPickMinimum, checkTournamentTotal } from "@/lib/validation"
-import { toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
+import { phaseStandings } from "@/lib/validation"
+import {
+  PARTICIPANT_ENTRY_COLUMNS,
+  toPhaseClock,
+  toTournamentRules,
+  TOURNAMENT_CLOCK_COLUMNS,
+  TOURNAMENT_RULE_COLUMNS,
+} from "@/lib/placements"
+import { phaseClosedByClock } from "@/lib/phases"
+import { entryStatus } from "@/lib/entry-request"
 import { RulesCard } from "@/components/modules/rules-card"
 import { ComplianceBanner } from "@/components/modules/compliance-banner"
 import { OutcomeBadge } from "@/components/betting/outcome-badge"
@@ -23,17 +32,16 @@ import {
   groupByPhase,
   normalizeMyBets,
   payoutSummary,
-  picksLine,
+  toBettor,
   type MyBetsQueryRow,
+  type ParticipantEntries,
 } from "@/lib/my-bets"
 
 // My Bets (Sprint 5): the participant's live placements grouped by phase,
-// with running total and remaining budget. The page is glue — grouping and
-// join normalization live in lib/my-bets.ts. Each row shows the wager's
-// odds_at_placement snapshot, never the pick's live odds (those are the bet
-// menu's job, sheet-verbatim).
-
-type Participant = { entry_fee: number; is_player: boolean }
+// with one budget bar per phase they are in (Sprint 30 / ADR 0002). The page
+// is glue — grouping and join normalization live in lib/my-bets.ts. Each row
+// shows the wager's odds_at_placement snapshot, never the pick's live odds
+// (those are the bet menu's job, sheet-verbatim).
 
 export default async function MyBetsPage() {
   const supabase = await createClient()
@@ -43,7 +51,7 @@ export default async function MyBetsPage() {
 
   const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
-    .select(`id, name, ${TOURNAMENT_RULE_COLUMNS}`)
+    .select(`id, name, ${TOURNAMENT_RULE_COLUMNS}, ${TOURNAMENT_CLOCK_COLUMNS}`)
     // 'completed' included (Sprint 28 / #197) — people re-read their own card
     // all night once the payouts are up, checking their wagers against it.
     .in("status", ["upcoming", "active", "completed"])
@@ -75,11 +83,14 @@ export default async function MyBetsPage() {
     unknown
   >
   const rules = toTournamentRules(tournament)
+  const clock = toPhaseClock(tournament)
+  const now = new Date()
+  const closed = { 1: phaseClosedByClock(1, clock, now), 2: phaseClosedByClock(2, clock, now) }
 
   const { data: participantData, error: participantError } = user
     ? await supabase
         .from("tournament_participants")
-        .select("entry_fee, is_player")
+        .select(PARTICIPANT_ENTRY_COLUMNS)
         .eq("user_id", user.id)
         .eq("tournament_id", tournament.id)
         .is("revoked_at", null)
@@ -96,7 +107,7 @@ export default async function MyBetsPage() {
       </div>
     )
   }
-  const participant = participantData as Participant | null
+  const participant = participantData as unknown as ParticipantEntries | null
 
   if (!participant) {
     return (
@@ -109,7 +120,21 @@ export default async function MyBetsPage() {
       </div>
     )
   }
-  const entryFee = Number(participant.entry_fee)
+  const bettor = toBettor(user!.id, participant)
+
+  // Their request, if any — decides whether the budget card warns that no
+  // money has been added yet. Own row under RLS; a failure degrades to "no
+  // request", which is the cautious reading (it shows the warning).
+  const { data: requestData, error: requestError } = await supabase
+    .from("entry_requests")
+    .select("id")
+    .eq("user_id", user!.id)
+    .eq("tournament_id", tournament.id)
+    .maybeSingle()
+  if (requestError) {
+    console.error("[my-bets] entry request read failed:", requestError.message)
+  }
+  const status = entryStatus(participant, requestData ?? null)
 
   // Own live placements across the tournament, flattened for display.
   const { data: placementData, error: placementError } = await supabase
@@ -136,19 +161,10 @@ export default async function MyBetsPage() {
     tournament.id
   )
   const phases = groupByPhase(entries)
-  const totals = checkTournamentTotal(entries, entryFee)
-  const myRules = buildRulesModel(participant, rules)
-  // The zero-placement item is skipped HERE and only here: the page renders its
-  // own "No bets placed yet" empty state a few lines down, and the banner would
-  // be that same sentence twice in a row. The empty state carries the
-  // requirement instead.
-  const compliance =
-    entries.length === 0
-      ? []
-      : buildComplianceSummary(entries, entryFee, rules)
-  // §8.1 balanced: the exact total AND the pick minimum, same pair the
-  // dashboard used to compute for this bar.
-  const balanced = totals.exact && checkPickMinimum(entries, rules).meets_minimum
+  const standings = phaseStandings(entries, bettor, rules)
+  const enteredPhases = ([1, 2] as const).filter((p) => standings[p] !== undefined)
+  const myRules = buildRulesModel(bettor, rules)
+  const compliance = buildComplianceSummary(entries, bettor, rules, { closed })
 
   // Theoretical payout rollup — shown once any pick has a result. Pushes
   // count inside the total; voids contribute 0 and surface as refunded.
@@ -172,27 +188,65 @@ export default async function MyBetsPage() {
         <p className="mt-0.5 text-sm text-text-muted">{tournament.name}</p>
       </div>
 
-      {/* The budget bar, moved here from the dashboard. It replaces the Total
-          Wagered and Remaining Budget stat cards, which said the same two
-          numbers with no sense of how close together they were — and said them
-          a page away from the wagers that produced them. One bar carries both,
-          plus the per-phase pick counts and the balanced state. */}
+      {/* One budget bar per phase the member is in (Sprint 30). Each phase is
+          its own pot, so each bar carries its own wagered/entry, its own pick
+          count and its own balanced state. Nothing in yet → the way to fix
+          that, with the warning icon the user asked for. */}
       <Card>
         <CardContent className="flex flex-col gap-3.5">
           <div className="flex items-center justify-between gap-3">
-            <div className="font-heading text-lg text-text-strong">
+            <div className="flex items-center gap-2 font-heading text-lg text-text-strong">
               Your Budget
+              {status === "none" && (
+                <Link
+                  href="/entry"
+                  aria-label="No money added yet — request your entry"
+                  className="inline-flex items-center text-caution-strong"
+                >
+                  <TriangleAlert className="size-5" aria-hidden />
+                </Link>
+              )}
             </div>
             <Button variant="gold" size="sm" render={<Link href="/bets" />}>
               Place Bets →
             </Button>
           </div>
-          <BudgetModule
-            wagered={totals.total}
-            entryFee={entryFee}
-            picksLine={picksLine(entries)}
-            balanced={balanced}
-          />
+          {enteredPhases.length === 0 ? (
+            <p className="text-sm text-text-body">
+              {status === "requested" ? (
+                <>
+                  Your entry is requested and waiting on an admin — pay it on
+                  Venmo if you haven&apos;t, and your budget appears here once
+                  it&apos;s recorded.{" "}
+                  <Link href="/entry" className="font-semibold text-indigo-700 underline-offset-4 hover:underline">
+                    See your request
+                  </Link>
+                </>
+              ) : (
+                <>
+                  No money in yet.{" "}
+                  <Link href="/entry" className="font-semibold text-indigo-700 underline-offset-4 hover:underline">
+                    Request your entry
+                  </Link>{" "}
+                  — you can only do it once, so pick your split with care.
+                </>
+              )}
+            </p>
+          ) : (
+            enteredPhases.map((phase) => {
+              const s = standings[phase]!
+              return (
+                <BudgetModule
+                  key={phase}
+                  label={`Phase ${phase}`}
+                  wagered={s.wagered}
+                  entryFee={s.entry}
+                  picksLine={`${s.pick_count} ${s.pick_count === 1 ? "pick" : "picks"} · ${rules.min_picks_per_phase} min`}
+                  balanced={s.complete}
+                />
+              )
+            })
+          )}
         </CardContent>
       </Card>
 
@@ -207,7 +261,7 @@ export default async function MyBetsPage() {
       )}
 
       {compliance.map((item) => (
-        <ComplianceBanner key={item.title} tone={item.tone} title={item.title}>
+        <ComplianceBanner key={`${item.phase}-${item.title}`} tone={item.tone} title={item.title}>
           {item.message}
         </ComplianceBanner>
       ))}
@@ -215,7 +269,11 @@ export default async function MyBetsPage() {
       {entries.length === 0 ? (
         <EmptyState
           title="No bets placed yet"
-          message={`Your $${entryFee} entry is waiting on the bet menu — at least ${rules.min_picks_per_tournament} picks totalling exactly $${entryFee} by the Phase 2 deadline.`}
+          message={
+            enteredPhases.length === 0
+              ? "Once your entry is recorded the bet menu is yours."
+              : `Each phase you're in needs at least ${rules.min_picks_per_phase} picks totalling your entry for that phase — the first $${rules.entry_fee_min} of an entry stays in the pot whether or not you wager it.`
+          }
           action={
             <Button variant="gold" size="sm" render={<Link href="/bets" />}>
               Place Bets →
@@ -237,15 +295,14 @@ export default async function MyBetsPage() {
                 Phase {group.phase}
               </h2>
               <span className="tabular text-xs text-text-muted">
-                {/* Per-phase header shows the per-phase limit only — the
-                    minimum spans both phases and lives on the banner (#96). */}
-                {group.pick_count} of {rules.max_picks_per_phase} picks ·{" "}
+                {group.pick_count} {group.pick_count === 1 ? "pick" : "picks"} ·{" "}
                 <MoneyDisplay
                   value={group.subtotal}
                   size="xs"
                   weight="semibold"
                   className="text-inherit"
                 />
+                {standings[group.phase] && ` of $${standings[group.phase]!.entry}`}
               </span>
             </div>
             <Card className="gap-0 p-0">
@@ -320,11 +377,13 @@ export default async function MyBetsPage() {
       )}
 
       <RulesCard
-        entryFee={myRules.entry_fee}
         maxSingle={myRules.max_single_bet}
-        maxSelf={myRules.max_self_bet}
-        minBets={myRules.min_picks_per_tournament}
-        maxBets={myRules.max_picks_per_phase}
+        minPicks={myRules.min_picks_per_phase}
+        phases={myRules.phases.map((p) => ({
+          phase: p.phase,
+          entryFee: p.entry_fee,
+          maxSelf: p.max_self_bet,
+        }))}
       />
       </div>
 

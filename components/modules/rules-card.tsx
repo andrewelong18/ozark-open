@@ -2,61 +2,63 @@ import { cn } from "@/lib/utils"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import { AccordionSection } from "@/components/ui/accordion-section"
 
-export type RulesCardProps = {
-  entryFee?: number
-  maxSingle?: number
+export type RulesCardPhase = {
+  phase: 1 | 2
+  entryFee: number
   /** null hides the row — non-playing bettors are exempt from the self-bet
    * cap (PRD §12 Q14). */
-  maxSelf?: number | null
-  /** Fewest picks across BOTH phases combined (#96). */
-  minBets?: number
-  /** Most picks in any one phase. */
-  maxBets?: number
+  maxSelf: number | null
+}
+
+export type RulesCardProps = {
+  /** Flat, the same in every phase (PRD §7 rule 4). */
+  maxSingle?: number
+  /** Fewest picks in each phase you are entered in. */
+  minPicks?: number
+  /** One block per phase the bettor is entered in. */
+  phases?: RulesCardPhase[]
   className?: string
 }
 
 /**
- * Personalized "house rules" reference card — entry fee, max single/self bet,
- * pick counts. Reference-card energy (clean rows), not legal-terms energy.
+ * Personalized "house rules" reference card — the flat single-bet cap, the
+ * per-phase pick minimum, and per phase: the entry and the self-bet cap.
+ * Reference-card energy (clean rows), not legal-terms energy.
  *
  * Collapsed by default. These numbers are the same every time you look and the
  * app enforces them anyway (lib/validation.ts), so on the two pages that carry
- * this card they were six rows of settled fact between you and the thing you
+ * this card they were rows of settled fact between you and the thing you
  * came for. The label stays visible; the table is one tap away.
  */
 export function RulesCard({
-  entryFee = 40,
-  maxSingle = 20,
-  maxSelf = 10,
-  minBets = 5,
-  maxBets = 10,
+  maxSingle = 10,
+  minPicks = 5,
+  phases = [
+    { phase: 1, entryFee: 40, maxSelf: 10 },
+    { phase: 2, entryFee: 20, maxSelf: 5 },
+  ],
   className,
 }: RulesCardProps) {
   const rows: { label: string; node: React.ReactNode }[] = [
     {
-      label: "Entry fee",
-      node: <MoneyDisplay value={entryFee} size="sm" weight="semibold" />,
-    },
-    {
       label: "Max single bet",
       node: <MoneyDisplay value={maxSingle} size="sm" weight="semibold" />,
     },
-    ...(maxSelf !== null
-      ? [
-          {
-            label: "Max bet on yourself",
-            node: <MoneyDisplay value={maxSelf} size="sm" weight="semibold" />,
-          },
-        ]
-      : []),
-    // The minimum spans the tournament, the maximum is per phase (#96) — two
-    // rows, because one "5–10" row is exactly the conflation that misled.
-    { label: "Picks, both phases", node: `${minBets} min` },
-    { label: "Picks per phase", node: `${maxBets} max` },
-    {
-      label: "Total must equal",
-      node: <MoneyDisplay value={entryFee} size="sm" weight="semibold" />,
-    },
+    { label: "Picks per phase", node: `${minPicks} min · no max` },
+    ...phases.flatMap((p) => [
+      {
+        label: `Phase ${p.phase} entry — wager it all`,
+        node: <MoneyDisplay value={p.entryFee} size="sm" weight="semibold" />,
+      },
+      ...(p.maxSelf !== null
+        ? [
+            {
+              label: `Phase ${p.phase} max on yourself`,
+              node: <MoneyDisplay value={p.maxSelf} size="sm" weight="semibold" />,
+            },
+          ]
+        : []),
+    ]),
   ]
 
   return (
@@ -82,6 +84,11 @@ export function RulesCard({
           </span>
         </div>
       ))}
+      <p className="border-t border-border px-4 py-2.5 text-xs text-text-muted">
+        Each phase is its own pot. Wager less than your entry and the first $20
+        stays in the pot; the rest comes back. Self-bets count only up to a
+        quarter of what you actually wager.
+      </p>
     </AccordionSection>
   )
 }

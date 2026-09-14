@@ -72,7 +72,7 @@ export default async function ProfilePage({
   const { data: participantData, error: participantError } = tournament
     ? await supabase
         .from("tournament_participants")
-        .select("entry_fee, is_player")
+        .select("phase1_entry_fee, phase2_entry_fee, is_player")
         .eq("user_id", user.id)
         .eq("tournament_id", tournament.id)
         .is("revoked_at", null)
@@ -82,7 +82,8 @@ export default async function ProfilePage({
     console.error("[profile] participant read failed:", participantError.message)
   }
   const participant = participantData as {
-    entry_fee: number
+    phase1_entry_fee: number | null
+    phase2_entry_fee: number | null
     is_player: boolean
   } | null
 

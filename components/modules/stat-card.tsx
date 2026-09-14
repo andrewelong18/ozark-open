@@ -10,6 +10,9 @@ export type StatCardProps = {
   caption?: string
   /** Give the pool-total tile the indigo clubhouse treatment. */
   feature?: boolean
+  /** Sits beside the label — the dashboard's entry tile puts a warning icon
+   * here until money has been added (Sprint 30). */
+  badge?: React.ReactNode
   className?: string
 }
 
@@ -24,6 +27,7 @@ export function StatCard({
   cents = false,
   caption,
   feature = false,
+  badge,
   className,
 }: StatCardProps) {
   return (
@@ -38,11 +42,12 @@ export function StatCard({
     >
       <span
         className={cn(
-          "text-[11px] font-bold tracking-wider uppercase",
+          "flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase",
           feature ? "text-gold-300" : "text-text-muted"
         )}
       >
         {label}
+        {badge}
       </span>
       <span
         className={cn(

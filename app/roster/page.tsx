@@ -51,7 +51,7 @@ export default async function RosterPage() {
   const [participantResult, userResult] = await Promise.all([
     supabase
       .from("tournament_participants")
-      .select("user_id, entry_fee, is_player, revoked_at")
+      .select("user_id, phase1_entry_fee, phase2_entry_fee, is_player, revoked_at")
       .eq("tournament_id", tournament.id),
     supabase.from("users").select("id, display_name, nickname, avatar_url"),
   ])

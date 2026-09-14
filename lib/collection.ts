@@ -110,7 +110,9 @@ export function collectionStanding(
 
 /** Has this member's entry been collected in full? Nobody with no entry
  *  recorded is "paid in full" — there is nothing to have paid for. */
-export function isPaidInFull(participant: CollectionParticipant): boolean {
+export function isPaidInFull(
+  participant: Pick<CollectionParticipant, "phase1_entry_fee" | "phase2_entry_fee" | "paid_amount">
+): boolean {
   const owed = entryOwed(participant)
   return owed > 0 && paid(participant) >= owed
 }
