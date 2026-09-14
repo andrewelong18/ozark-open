@@ -301,6 +301,49 @@ function titleFor(code: StandingIssue["code"], phase: Phase): string {
   }
 }
 
+/**
+ * The one line the /bets slip bar leads with for a phase — the standing's
+ * first issue, cut to fit a bar that truncates. Same priorities as the
+ * issues themselves; `No picks placed yet` at zero (an E2E journey pins it).
+ */
+export function standingHeadline(s: PhaseStanding): {
+  tone: "warning" | "success" | "info"
+  text: string
+} {
+  if (s.pick_count === 0) return { tone: "warning", text: "No picks placed yet" }
+  if (s.complete) return { tone: "success", text: `Phase ${s.phase} balanced` }
+  const issue = s.issues[0]
+  switch (issue.code) {
+    case "picks":
+      return {
+        tone: "warning",
+        text: `${s.picks_needed} more pick${s.picks_needed === 1 ? "" : "s"} needed`,
+      }
+    case "forfeit":
+      return { tone: "warning", text: `$${s.forfeit} forfeits unless you wager it` }
+    case "self":
+      return {
+        tone: "warning",
+        text: `Only $${s.self_recognized} of $${s.self_total} on yourself counts`,
+      }
+    case "over":
+      return { tone: "warning", text: "Over your entry — see an admin" }
+    case "refund":
+      return { tone: "info", text: `$${s.refund} comes back unless you wager it` }
+  }
+}
+
+/** The compact line for the phase the slip bar is NOT leading with. */
+export function standingAside(s: PhaseStanding, closed: boolean): string {
+  if (closed) {
+    const costs: string[] = []
+    if (s.forfeit > 0) costs.push(`$${s.forfeit} forfeited`)
+    if (s.refund > 0) costs.push(`$${s.refund} back`)
+    return `Phase ${s.phase} closed` + (costs.length > 0 ? ` · ${costs.join(", ")}` : " · locked in")
+  }
+  return `Phase ${s.phase} · $${s.wagered} of $${s.entry}${s.complete ? " ✓" : ""}`
+}
+
 /** The closed-phase sentence: what happened, in the past tense. */
 function finalSentence(s: PhaseStanding): string {
   const costs: string[] = []

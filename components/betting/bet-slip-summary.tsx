@@ -2,28 +2,30 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { MoneyDisplay } from "@/components/betting/money-display"
 import { BET_FOOTER_TOAST_SLOT } from "@/components/betting/bet-footer"
-import type { ComplianceItem } from "@/lib/my-bets"
 
 // Bet-slip review summary (Sprint 17 · Competitive Analysis §1.3). A fixed
 // footer bar on /bets, pinned to the viewport bottom so "am I balanced?" stays
 // answered the whole time — not just at the end of the page. The
-// review-at-the-moment-of-placing surface,
-// not a draft bet slip. Every number is handed in precomputed by the page
-// from the same lib/validation.ts + lib/my-bets.ts helpers /my-bets uses, so
-// the two views can never disagree. Server component: it re-renders on the
-// router.refresh() each placement already fires.
+// review-at-the-moment-of-placing surface, not a draft bet slip.
+//
+// Since Sprint 30 (ADR 0002) the bar is about ONE phase at a time — the one
+// that is open, which the server picks (standingHeadline / standingAside in
+// lib/my-bets.ts compute every string here from the same phaseStanding the
+// rules enforce with, so the bar can never disagree with the API). The other
+// phase, if the member is in it, gets one compact line underneath.
+//
+// Server component: it re-renders on the router.refresh() each placement
+// already fires.
 
 export type BetSlipSummaryProps = {
+  /** The phase the bar leads with. */
+  phase: 1 | 2
   entryFee: number
   totalWagered: number
-  /** Entry fee minus total wagered; never negative (the running-total rule
-   * caps it at the entry — PRD §7 rule 6). */
-  remaining: number
   pickCount: number
-  /** From buildComplianceSummary. Empty only once wagering is over with
-   *  nothing placed; at zero placements before the deadline it carries one
-   *  `info` item, and the headline below still leads with pickCount. */
-  items: ComplianceItem[]
+  headline: { tone: "warning" | "success" | "info"; text: string }
+  /** One compact line about the other phase, or nothing. */
+  aside: string | null
 }
 
 type Tone = "warning" | "success" | "info"
@@ -40,26 +42,13 @@ const TEXT: Record<Tone, string> = {
 }
 
 export function BetSlipSummary({
+  phase,
   entryFee,
   totalWagered,
-  remaining,
   pickCount,
-  items,
+  headline,
+  aside,
 }: BetSlipSummaryProps) {
-  // Headline = the highest-priority standing. buildComplianceSummary always
-  // returns at least one item now — a warning, the "you're balanced" success,
-  // or the zero-placement info line — so items[0] leads. pickCount still
-  // overrides at zero: this bar is one truncated line and "No picks placed yet"
-  // is the shorter true thing to say on it.
-  const lead = items[0]
-  const tone: Tone = pickCount === 0 ? "info" : (lead?.tone ?? "info")
-  const headline =
-    pickCount === 0
-      ? "No picks placed yet"
-      : tone === "warning" && remaining > 0
-        ? `${lead.title} · $${remaining} to go`
-        : lead.title
-
   return (
     // The whole bottom-of-screen furniture, in one column: the menu's error
     // toast portals into the slot, the bar sits under it. The toast used to be
@@ -78,6 +67,9 @@ export function BetSlipSummary({
           {/* One line, always. Wrapping this pushed the bar taller and ate the
               bet card behind it — on the screen where the next tap lives. */}
           <div className="flex items-baseline gap-1.5 truncate">
+            <span className="text-xs font-bold tracking-wider uppercase text-text-muted">
+              Phase {phase}
+            </span>
             <MoneyDisplay value={totalWagered} size="md" weight="bold" />
             <span className="truncate text-sm whitespace-nowrap text-text-muted">
               of ${entryFee}
@@ -92,12 +84,15 @@ export function BetSlipSummary({
           <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs">
             <span
               aria-hidden
-              className={cn("size-2 shrink-0 rounded-full", DOT[tone])}
+              className={cn("size-2 shrink-0 rounded-full", DOT[headline.tone])}
             />
-            <span className={cn("truncate font-semibold", TEXT[tone])}>
-              {headline}
+            <span className={cn("truncate font-semibold", TEXT[headline.tone])}>
+              {headline.text}
             </span>
           </div>
+          {aside && (
+            <div className="mt-0.5 truncate text-xs text-text-muted">{aside}</div>
+          )}
         </div>
         <Link
           href="/my-bets"

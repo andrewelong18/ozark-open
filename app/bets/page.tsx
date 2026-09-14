@@ -20,8 +20,9 @@ import {
   type ClosedPlacementQueryRow,
   type PickPlacements,
 } from "@/lib/closed-bets"
-import { checkTournamentTotal } from "@/lib/validation"
+import { phaseEntry, phaseStandings, type PhaseStanding } from "@/lib/validation"
 import {
+  PARTICIPANT_ENTRY_COLUMNS,
   toPhaseClock,
   toTournamentRules,
   TOURNAMENT_CLOCK_COLUMNS,
@@ -31,10 +32,12 @@ import { phaseClosedByClock, phaseState, wageringOpen, type Phase, type PhaseSta
 import { sortPicks } from "@/lib/pick-order"
 import { categoryRank, roundRank } from "@/lib/bet-taxonomy"
 import {
-  buildComplianceSummary,
   normalizeMyBets,
-  type ComplianceItem,
+  standingAside,
+  standingHeadline,
+  toBettor,
   type MyBetsQueryRow,
+  type ParticipantEntries,
 } from "@/lib/my-bets"
 
 // Raw pick shape from the bets query: the display Pick plus the embedded
@@ -185,24 +188,20 @@ export default async function BetsPage({
     return loadErrorState("the betting menu")
   }
 
-  // Wagering context: only participants get the inline stake inputs, and
-  // their live placements pre-fill them (amount + the locked-odds receipt).
-  // Everything below is UX — the placements API re-validates every write
-  // server-side, against the bettor.
+  // Wagering context: only participants get the inline stake inputs — and
+  // only in the phases they have an entry for (Sprint 30) — and their live
+  // placements pre-fill them (amount + the locked-odds receipt). Everything
+  // below is UX — the placements API re-validates every write server-side,
+  // against the bettor.
   let isParticipant = false
+  let enteredPhases: Record<Phase, boolean> = { 1: false, 2: false }
   let placements: Record<string, number> = {}
   let lockedOdds: Record<string, number> = {}
-  let slip: {
-    entryFee: number
-    totalWagered: number
-    remaining: number
-    pickCount: number
-    items: ComplianceItem[]
-  } | null = null
+  let standings: Partial<Record<Phase, PhaseStanding>> = {}
   if (bettorId) {
     const { data: participant, error: participantError } = await supabase
       .from("tournament_participants")
-      .select("entry_fee, is_player")
+      .select(PARTICIPANT_ENTRY_COLUMNS)
       .eq("user_id", bettorId)
       .eq("tournament_id", tournamentId)
       .is("revoked_at", null)
@@ -216,12 +215,16 @@ export default async function BetsPage({
     }
     isParticipant = participant !== null
     if (participant) {
-      const entryFee = Number((participant as { entry_fee: number }).entry_fee)
+      const bettor = toBettor(bettorId, participant as unknown as ParticipantEntries)
+      enteredPhases = {
+        1: phaseEntry(bettor, 1) !== null,
+        2: phaseEntry(bettor, 2) !== null,
+      }
       const rules = toTournamentRules(
         tournament as unknown as Record<string, unknown>
       )
-      // Same query shape as /my-bets, so normalizeMyBets → the §8.1 checks run
-      // verbatim and the summary numbers can't drift from that page.
+      // Same query shape as /my-bets, so normalizeMyBets → the §8.1 standing
+      // runs verbatim and the bar's numbers can't drift from that page.
       const { data: placementRows, error: placementRowsError } = await supabase
         .from("bet_placements")
         .select(
@@ -243,16 +246,7 @@ export default async function BetsPage({
       lockedOdds = Object.fromEntries(
         entries.map((e) => [e.pick_id, e.odds_at_placement])
       )
-      const totals = checkTournamentTotal(entries, entryFee)
-      slip = {
-        entryFee,
-        totalWagered: totals.total,
-        remaining: totals.remaining,
-        pickCount: entries.length,
-        items: buildComplianceSummary(entries, entryFee, rules, {
-          wageringOver: phaseClosedByClock(2, clock, now),
-        }),
-      }
+      standings = phaseStandings(entries, bettor, rules)
     }
   }
 
@@ -337,6 +331,23 @@ export default async function BetsPage({
   }
   const defaultPhase = closingPhase(bets)
 
+  // The slip bar leads with ONE phase (Sprint 30 / ADR 0002): the open phase
+  // the bettor is in — Phase 1 if both are open — else the phase the
+  // tournament is closing. The other entered phase gets a compact line.
+  const enteredList = ([1, 2] as const).filter((p) => standings[p] !== undefined)
+  const leadPhase: Phase | null =
+    enteredList.find((p) => phaseStates[p] === "open") ??
+    (enteredList.includes(defaultPhase) ? defaultPhase : (enteredList[0] ?? null))
+  const lead = leadPhase !== null ? standings[leadPhase] : undefined
+  let aside: string | null = null
+  if (lead && isParticipant) {
+    const other: Phase = lead.phase === 1 ? 2 : 1
+    const otherStanding = standings[other]
+    aside = otherStanding
+      ? standingAside(otherStanding, phaseClosedByClock(other, clock, now))
+      : `Phase ${other} · not entered`
+  }
+
   return (
     <div
       className={cn(
@@ -345,7 +356,7 @@ export default async function BetsPage({
         // 7rem is the old pb-28; the inset is what a phone's home indicator
         // adds to the bar's own bottom padding now that it resolves to a real
         // number (app/layout.tsx sets viewportFit: "cover").
-        slip && "pb-[calc(7rem+env(safe-area-inset-bottom))]"
+        lead && "pb-[calc(7rem+env(safe-area-inset-bottom))]"
       )}
     >
       {/* data-enter-stagger goes on the INNER column, never the outer grid:
@@ -365,7 +376,7 @@ export default async function BetsPage({
             Placing wagers as {onBehalfOf.name}.
           </span>
           <span>
-            Their entry fee and their limits apply, and the wager is recorded as
+            Their entries and their limits apply, and the wager is recorded as
             entered by you.
           </span>
           <Link href="/bets" className="underline underline-offset-2">
@@ -385,6 +396,17 @@ export default async function BetsPage({
         </p>
       )}
 
+      {onBehalfOf && isParticipant && !enteredPhases[1] && !enteredPhases[2] && (
+        <p className="mb-4 rounded-lg border border-loss-border bg-loss-surface px-4 py-3 text-sm text-loss-strong">
+          {onBehalfOf.name} has no entry in either phase yet, so there&apos;s
+          nothing to place. Record their entries on{" "}
+          <Link href="/admin/people" className="underline underline-offset-2">
+            the people console
+          </Link>{" "}
+          first.
+        </p>
+      )}
+
       {!onBehalfOf && viewer && !isParticipant && (
         <p className="mb-4 rounded-lg border border-border bg-surface-sunken px-4 py-3 text-sm text-text-muted">
           You&apos;re registered — an admin just needs to approve you before you
@@ -392,10 +414,22 @@ export default async function BetsPage({
         </p>
       )}
 
+      {!onBehalfOf && viewer && isParticipant && !enteredPhases[1] && !enteredPhases[2] && (
+        <p className="mb-4 rounded-lg border border-caution-border bg-caution-surface px-4 py-3 text-sm text-caution-strong">
+          No money in yet — nothing on this menu can be wagered on until your
+          entry is recorded.{" "}
+          <Link href="/entry" className="underline underline-offset-2">
+            Request your entry
+          </Link>
+          .
+        </p>
+      )}
+
       <div className="mt-3">
         <BetsMenu
           phases={phases}
           isParticipant={isParticipant}
+          enteredPhases={enteredPhases}
           placements={placements}
           lockedOdds={lockedOdds}
           placementsByPick={placementsByPick}
@@ -412,13 +446,14 @@ export default async function BetsPage({
 
       {/* Fixed review bar — pinned to the viewport bottom, outside the grid flow
           so it doesn't reserve a row. */}
-      {slip && (
+      {lead && (
         <BetSlipSummary
-          entryFee={slip.entryFee}
-          totalWagered={slip.totalWagered}
-          remaining={slip.remaining}
-          pickCount={slip.pickCount}
-          items={slip.items}
+          phase={lead.phase}
+          entryFee={lead.entry}
+          totalWagered={lead.wagered}
+          pickCount={lead.pick_count}
+          headline={standingHeadline(lead)}
+          aside={aside}
         />
       )}
     </div>

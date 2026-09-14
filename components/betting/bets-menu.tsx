@@ -333,6 +333,10 @@ function ChevronGlyph({ open }: { open: boolean }) {
 export type BetsMenuProps = {
   phases: PhaseGroup[]
   isParticipant: boolean
+  /** Which phases the bettor has an entry in (Sprint 30 / ADR 0002). A bet in
+   * a phase they aren't in renders read-only with a note, not a stake box the
+   * API would refuse. */
+  enteredPhases: Record<Phase, boolean>
   placements: Record<string, number>
   lockedOdds: Record<string, number>
   placementsByPick: Record<string, PickPlacements>
@@ -360,6 +364,7 @@ export type BetsMenuProps = {
 export function BetsMenu({
   phases,
   isParticipant,
+  enteredPhases,
   placements,
   lockedOdds,
   placementsByPick,
@@ -674,7 +679,17 @@ export function BetsMenu({
                         // 1" three times) and nothing else here is a heading.
                         // The E2E journeys anchor on it; see e2e/bets-menu.spec.ts.
                         <div key={bet.id} data-testid={`bet-${bet.sheet_bet_id}`}>
-                        {bet.wagering_open && isParticipant ? (
+                        {bet.wagering_open &&
+                          isParticipant &&
+                          !enteredPhases[bet.phase as Phase] && (
+                            <p className="mb-2 rounded-lg border border-border bg-surface-sunken px-3 py-2 text-xs text-text-muted">
+                              You&apos;re not entered in Phase {bet.phase} — ask an
+                              admin if you&apos;d like to be.
+                            </p>
+                          )}
+                        {bet.wagering_open &&
+                        isParticipant &&
+                        enteredPhases[bet.phase as Phase] ? (
                           <BetPlacementCard
                             title={bet.title}
                             badge={betBadge(bet)}

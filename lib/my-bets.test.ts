@@ -15,6 +15,8 @@ import {
   normalizeMyBets,
   payoutSummary,
   picksLine,
+  standingAside,
+  standingHeadline,
   toBettor,
   type MyBetEntry,
   type MyBetsQueryRow,
@@ -394,6 +396,76 @@ test("compliance: a closed complete phase is locked in", () => {
 // ---------------------------------------------------------------------------
 // Payouts on My Bets — theoretical per resolved entry, voids as refunds
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// standingHeadline / standingAside — the /bets slip bar's two lines
+// ---------------------------------------------------------------------------
+
+function standingOf(
+  existing: ReturnType<typeof placement>[],
+  bettor: Bettor = FORTY,
+  phase: 1 | 2 = 1
+) {
+  const entry = phase === 1 ? bettor.phase1_entry_fee : bettor.phase2_entry_fee
+  return phaseStanding(existing, entry ?? 0, phase, RULES, {
+    is_player: bettor.is_player,
+    bettor_user_id: bettor.user_id,
+  })
+}
+
+test("standingHeadline: nothing placed keeps the sentence an E2E journey pins", () => {
+  assert.deepEqual(standingHeadline(standingOf([])), {
+    tone: "warning",
+    text: "No picks placed yet",
+  })
+})
+
+test("standingHeadline: leads with the pick shortfall, counted from the rules", () => {
+  const two = standingOf([placement(1, 20, 1), placement(1, 20, 2)])
+  assert.deepEqual(standingHeadline(two), { tone: "warning", text: "3 more picks needed" })
+  const four = standingOf([1, 2, 3, 4].map((n) => placement(1, 10, n)))
+  assert.deepEqual(standingHeadline(four), { tone: "warning", text: "1 more pick needed" })
+})
+
+test("standingHeadline: the forfeit, then the refund, then balanced", () => {
+  // $15 on five picks of a $40 entry: under the $20 floor, so $5 forfeits —
+  // and that outranks the $20 that comes back.
+  const under = standingOf([1, 2, 3, 4, 5].map((n) => placement(1, 3, n)))
+  assert.deepEqual(standingHeadline(under), {
+    tone: "warning",
+    text: "$5 forfeits unless you wager it",
+  })
+  // $25 on five picks: nothing forfeits, $15 comes back — info, not a warning.
+  const refund = standingOf([1, 2, 3, 4, 5].map((n) => placement(1, 5, n)))
+  assert.deepEqual(standingHeadline(refund), {
+    tone: "info",
+    text: "$15 comes back unless you wager it",
+  })
+  const done = standingOf([1, 2, 3, 4, 5].map((n) => placement(1, 8, n)))
+  assert.deepEqual(standingHeadline(done), { tone: "success", text: "Phase 1 balanced" })
+})
+
+test("standingHeadline: Pat's example leads with the self-bet line", () => {
+  const fifty: Bettor = { ...FORTY, phase1_entry_fee: 50 }
+  const s = standingOf(
+    [placement(1, 12, 0, "me"), ...[1, 2, 3, 4].map((n) => placement(1, 2, n))],
+    fifty
+  )
+  assert.deepEqual(standingHeadline(s), {
+    tone: "warning",
+    text: "Only $5 of $12 on yourself counts",
+  })
+})
+
+test("standingAside: the other phase in one line, open or closed", () => {
+  const open = standingOf([placement(1, 20, 1)])
+  assert.equal(standingAside(open, false), "Phase 1 · $20 of $40")
+  const done = standingOf([1, 2, 3, 4, 5].map((n) => placement(1, 8, n)))
+  assert.equal(standingAside(done, false), "Phase 1 · $40 of $40 ✓")
+  assert.equal(standingAside(done, true), "Phase 1 closed · locked in")
+  const short = standingOf([1, 2, 3, 4, 5].map((n) => placement(1, 3, n)))
+  assert.equal(standingAside(short, true), "Phase 1 closed · $5 forfeited, $20 back")
+})
 
 test("normalizeMyBets carries the pick's result (unknown strings → pending)", () => {
   const [hit] = normalizeMyBets([row({ pick_id: "p-1", amount: 5, result: "hit" })], T)

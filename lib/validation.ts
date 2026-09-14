@@ -312,6 +312,8 @@ export type PhaseStanding = {
   wagered: number
   pick_count: number
   meets_pick_minimum: boolean
+  /** How many more picks the minimum needs; 0 once met. */
+  picks_needed: number
   /** S — Σ live self-pick placements in the phase (0 for a non-player). */
   self_total: number
   /** The placement-time cap: floor(pct × E). */
@@ -425,6 +427,7 @@ export function phaseStanding(
     wagered,
     pick_count: pickCount,
     meets_pick_minimum: meetsMin,
+    picks_needed: Math.max(0, minPicks - pickCount),
     self_total: selfTotal,
     self_cap: selfCap,
     self_cap_effective: selfCapEffective,
