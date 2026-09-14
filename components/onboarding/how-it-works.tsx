@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
 // "How this pool works" — the Sprint 16 first-run explainer (Competitive
-// Analysis §1.2), reused two ways: inline as the last onboarding step, and as
-// a re-openable panel from the dashboard. Content mirrors the enforced rules
-// (PRD §7 / lib/validation.ts) so nobody's taught a rule the app doesn't keep.
-// The pick-count range is passed in from the tournaments row — never hardcoded.
+// Analysis §1.2), reused two ways: inline as an onboarding step, and as a
+// re-openable panel from the dashboard. Content mirrors the enforced rules
+// (PRD §7 / lib/validation.ts, per phase since Sprint 30) so nobody's taught
+// a rule the app doesn't keep. The numbers are passed in from the
+// tournaments row — never hardcoded.
 
 export type HowItWorksCard = {
   icon: typeof Coins
@@ -27,25 +28,25 @@ export type HowItWorksCard = {
 // "How it works" tab (which renders these statically).
 export function howItWorksCards(
   minPicks: number,
-  maxPicks: number
+  entryFeeMin: number
 ): HowItWorksCard[] {
   return [
     {
       icon: Coins,
-      title: "One shared pot, no house",
-      body: "The Ozark Open is pari-mutuel. Everyone's entry fees make the pot — there's no house and no rake. At the end it pays itself back out in proportion to each bettor's theoretical winnings.",
+      title: "Two pots, no house",
+      body: "The Ozark Open is pari-mutuel. Each phase's entries make that phase's pot — there's no house and no rake. At the end each pot pays itself back out in proportion to everyone's theoretical winnings in it.",
       photo: "/onboarding/jake-step-1.jpg",
     },
     {
       icon: Layers,
-      title: "Betting comes in phases",
-      body: `The menu opens in phases across the weekend. Place at least ${minPicks} picks across the two phases combined — up to ${maxPicks} in any one phase — and spread your entry across the bets you like.`,
+      title: "Each phase is its own entry",
+      body: `You enter Phase 1 and Phase 2 separately — $${entryFeeMin} to $50 each, either one or both. Place at least ${minPicks} picks in every phase you're in, and spread that phase's entry across the bets you like.`,
       photo: "/onboarding/jake-step-2.png",
     },
     {
       icon: Scale,
-      title: "Hit your entry exactly",
-      body: "Your total wagered has to equal your entry fee exactly by the time Phase 2 closes. Being under while betting's still open is fine — just don't leave money on the table.",
+      title: "Wager the whole entry",
+      body: `Your wagers in a phase should add up to your entry for it. The first $${entryFeeMin} stays in the pot whether or not you wager it; anything above that you don't wager comes back to you. Self-bets count only up to a quarter of what you actually wager.`,
       photo: "/onboarding/jake-step-3.jpg",
     },
     {
@@ -59,19 +60,19 @@ export function howItWorksCards(
 
 export function HowItWorks({
   minPicks,
-  maxPicks,
+  entryFeeMin,
   onDone,
   doneLabel = "Got it",
   bare = false,
 }: {
   minPicks: number
-  maxPicks: number
+  entryFeeMin: number
   onDone: () => void
   doneLabel?: string
   /** Drop the card chrome — for when something else already supplies a frame. */
   bare?: boolean
 }) {
-  const specs = howItWorksCards(minPicks, maxPicks)
+  const specs = howItWorksCards(minPicks, entryFeeMin)
   const [index, setIndex] = useState(0)
   const spec = specs[index]
   const isLast = index === specs.length - 1

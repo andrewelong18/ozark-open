@@ -2,10 +2,31 @@ import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 import { OnboardingForm } from "@/components/onboarding/onboarding-form"
+import { entryStatus, requestWindow, type RequestWindow } from "@/lib/entry-request"
+import {
+  PARTICIPANT_ENTRY_COLUMNS,
+  toPhaseClock,
+  toTournamentRules,
+  TOURNAMENT_CLOCK_COLUMNS,
+  TOURNAMENT_RULE_COLUMNS,
+} from "@/lib/placements"
+import type { TournamentRules } from "@/lib/validation"
 
 // The required first-run step (Sprint 16). Middleware routes any authenticated
 // member with onboarded_at IS NULL here; once they finish, the same middleware
 // keeps them out. Belt-and-suspenders: we re-check here too.
+
+// Copy-only fallbacks for a database with no tournament row yet; the entry
+// step never renders in that case (the window below is closed).
+const FALLBACK_RULES: TournamentRules = {
+  entry_fee_min: 20,
+  entry_fee_max: 50,
+  min_picks_per_phase: 5,
+  max_single_bet: 10,
+  max_self_bet_pct: 0.25,
+}
+const CLOSED: RequestWindow = { phases: [], state: "closed" }
+
 export default async function OnboardingPage() {
   const supabase = await createClient()
   const {
@@ -30,23 +51,60 @@ export default async function OnboardingPage() {
     redirect("/dashboard")
   }
 
-  // The pick-count range is a tournament rule — read it, never hardcode it.
+  // The rules are tournament data — read them, never hardcode them. They feed
+  // the walkthrough's copy and the entry step's bounds.
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournaments")
-    .select("min_picks_per_tournament, max_picks_per_phase")
+    .select(`id, status, ${TOURNAMENT_RULE_COLUMNS}, ${TOURNAMENT_CLOCK_COLUMNS}`)
+    .in("status", ["upcoming", "active", "completed"])
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
-  // Copy-only (the "pick 5 to 10" line), and the fallbacks below already cover
-  // a missing row — so this logs and carries on rather than blocking the one
-  // step every member must complete.
+  // Copy and an optional step — the fallbacks cover a missing row, so this
+  // logs and carries on rather than blocking the one step every member must
+  // complete.
   if (tournamentError) {
-    console.error("[onboarding] pick-count rules read failed:", tournamentError.message)
+    console.error("[onboarding] rules read failed:", tournamentError.message)
   }
-  const rules = tournament as {
-    min_picks_per_tournament: number
-    max_picks_per_phase: number
-  } | null
+  const row = (tournament as Record<string, unknown> | null) ?? null
+  const rules = row ? toTournamentRules(row) : FALLBACK_RULES
+  const window = row
+    ? requestWindow(toPhaseClock(row), new Date(), { completed: row.status === "completed" })
+    : CLOSED
+
+  // The entry step is offered only while there's nothing on record — a member
+  // an admin already approved (or who requested on a previous visit) goes
+  // straight from the walkthrough to the menu.
+  let showEntryStep = window.state !== "closed"
+  if (row && showEntryStep) {
+    const [{ data: participant, error: participantError }, { data: request, error: requestError }] =
+      await Promise.all([
+        supabase
+          .from("tournament_participants")
+          .select(PARTICIPANT_ENTRY_COLUMNS)
+          .eq("user_id", user.id)
+          .eq("tournament_id", String(row.id))
+          .is("revoked_at", null)
+          .maybeSingle(),
+        supabase
+          .from("entry_requests")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("tournament_id", String(row.id))
+          .maybeSingle(),
+      ])
+    if (participantError) {
+      console.error("[onboarding] participant read failed:", participantError.message)
+    }
+    if (requestError) {
+      console.error("[onboarding] entry request read failed:", requestError.message)
+    }
+    showEntryStep =
+      entryStatus(
+        (participant as { phase1_entry_fee?: unknown; phase2_entry_fee?: unknown } | null) ?? null,
+        request ?? null
+      ) === "none"
+  }
 
   return (
     // dvh, not vh — see the note on app/login/page.tsx; same panel, same
@@ -58,8 +116,9 @@ export default async function OnboardingPage() {
         <OnboardingForm
           userId={user.id}
           email={user.email ?? ""}
-          minPicks={rules?.min_picks_per_tournament ?? 5}
-          maxPicks={rules?.max_picks_per_phase ?? 10}
+          rules={rules}
+          window={window}
+          showEntryStep={showEntryStep}
         />
       </div>
     </div>
