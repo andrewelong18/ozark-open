@@ -16,14 +16,15 @@ import {
 } from "@/lib/rules"
 import type { TournamentRules } from "@/lib/validation"
 
-// The house-rules form (Sprint 23 / #100) — the client half of /admin/rules.
+// The house-rules form (Sprint 23 / #100; five parameters since Sprint 30 /
+// ADR 0002) — the client half of /admin/rules.
 //
-// The derived-limits table is the point. "50% of entry, capped at $20" doesn't
-// tell you that a $25 entry allows $12 (the code floors) or that everything
-// from $40 up allows exactly $20 (the cap binds). That table is what Pat
+// The derived-limits table is the point. "A quarter of the phase entry"
+// doesn't tell you that a $30 entry allows $7 on yourself (the code floors) or
+// that $50 allows $12 (there is no hard cap any more). That table is what Pat
 // reasons about, so it recomputes as he types, using lib/rules.ts's
-// ruleLimitsPreview — which calls the SAME maxSingleBet/maxSelfBet the
-// placement path enforces with, so it can't drift from reality.
+// ruleLimitsPreview — which calls the SAME maxSelfBet the placement path
+// enforces with, so it can't drift from reality.
 //
 // Client validation here is UX; /api/admin/rules re-runs the identical
 // validateTournamentRules server-side.
@@ -125,9 +126,14 @@ export function RulesForm({ rules }: { rules: TournamentRules }) {
     <div className="flex flex-col gap-4">
       <Card>
         <CardContent className="flex flex-col gap-4">
-          <div className="font-heading text-lg text-text-strong">Entry</div>
+          <div className="font-heading text-lg text-text-strong">Entry, per phase</div>
           <div className="flex flex-wrap gap-4">
-            <RuleField field="entry_fee_min" draft={draft} setField={setField} />
+            <RuleField
+              field="entry_fee_min"
+              draft={draft}
+              setField={setField}
+              hint="Also the forfeit floor: this much of an entry funds the pot whether or not it was wagered."
+            />
             <RuleField field="entry_fee_max" draft={draft} setField={setField} />
           </div>
 
@@ -136,16 +142,10 @@ export function RulesForm({ rules }: { rules: TournamentRules }) {
           </div>
           <div className="flex flex-wrap gap-4">
             <RuleField
-              field="min_picks_per_tournament"
+              field="min_picks_per_phase"
               draft={draft}
               setField={setField}
-              hint="Across both phases combined, due by Phase 2 close."
-            />
-            <RuleField
-              field="max_picks_per_phase"
-              draft={draft}
-              setField={setField}
-              hint="In any one phase. The maximum is per phase; the minimum isn't."
+              hint="In each phase a member is entered in. There is no maximum."
             />
           </div>
 
@@ -154,75 +154,54 @@ export function RulesForm({ rules }: { rules: TournamentRules }) {
           </div>
           <div className="flex flex-wrap gap-4">
             <RuleField
-              field="max_single_bet_pct"
+              field="max_single_bet"
               draft={draft}
               setField={setField}
-              step="0.01"
-              hint="0.5 = half the entry fee."
+              hint="Flat — the same at every entry."
             />
-            <RuleField
-              field="max_single_bet_cap"
-              draft={draft}
-              setField={setField}
-              hint="Hard ceiling, whatever the entry."
-            />
-          </div>
-          <div className="flex flex-wrap gap-4">
             <RuleField
               field="max_self_bet_pct"
               draft={draft}
               setField={setField}
               step="0.01"
-              hint="Applies only to playing golfers."
-            />
-            <RuleField
-              field="max_self_bet_cap"
-              draft={draft}
-              setField={setField}
-              hint="Across the whole tournament, not per bet."
+              hint="0.25 = a quarter of the phase entry, floored, no cap. Playing golfers only."
             />
           </div>
         </CardContent>
       </Card>
 
-      {/* The derived limits — the numbers the raw parameters don't show. */}
+      {/* The derived limit — the number the raw percentage doesn't show. */}
       <Card className="gap-0 p-0">
         <div className="px-4 py-3">
           <div className="text-sm font-semibold text-text-strong">
-            What that means per entry fee
+            What that means per phase entry
           </div>
           <p className="mt-0.5 text-xs text-text-muted">
-            Updates as you type. Amounts floor rather than round, and the hard
-            caps bind once the percentage passes them.
+            Updates as you type. Amounts floor rather than round.
+            {preview && ` The max single bet is $${preview.max_single_bet} at every entry.`}
           </p>
         </div>
 
         {preview ? (
           <>
-            <div className="grid grid-cols-3 gap-x-3 border-t border-border px-4 py-2 text-[10px] font-bold tracking-wider uppercase text-text-muted">
-              <span>Entry</span>
-              <span className="text-right">Max single bet</span>
+            <div className="grid grid-cols-2 gap-x-3 border-t border-border px-4 py-2 text-[10px] font-bold tracking-wider uppercase text-text-muted">
+              <span>Phase entry</span>
               <span className="text-right">Max on yourself</span>
             </div>
             {preview.rows.map((row) => (
               <div
                 key={row.entry_fee}
-                className="grid grid-cols-3 gap-x-3 border-t border-border px-4 py-2 text-sm text-text-body"
+                className="grid grid-cols-2 gap-x-3 border-t border-border px-4 py-2 text-sm text-text-body"
               >
                 <span className="font-semibold text-text-strong">
                   ${row.entry_fee}
                 </span>
-                <span className="text-right">${row.max_single_bet}</span>
                 <span className="text-right">${row.max_self_bet}</span>
               </div>
             ))}
             <p className="border-t border-border px-4 py-2 text-xs text-text-muted">
-              {preview.single_cap_binds_at !== null
-                ? `The single-bet cap starts binding at a $${preview.single_cap_binds_at} entry.`
-                : "The single-bet cap never binds in this entry range — the percentage always wins."}{" "}
-              {preview.self_cap_binds_at !== null
-                ? `The self-bet cap starts binding at $${preview.self_cap_binds_at}.`
-                : "The self-bet cap never binds in this range."}
+              At close only this share of what was actually wagered counts —
+              the rest of a self-bet stays in the pot.
             </p>
           </>
         ) : (

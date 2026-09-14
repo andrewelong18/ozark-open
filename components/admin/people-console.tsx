@@ -14,8 +14,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { EmptyState } from "@/components/modules/empty-state"
 import { formatRelativeTime, formatTimestamp } from "@/lib/format"
-import { funnelStage, type RosterPerson } from "@/lib/roster"
-import { collectionStanding, isPaidInFull } from "@/lib/collection"
+import { funnelStage, type RosterPerson, type RosterRequest } from "@/lib/roster"
+import { collectionStanding, entryOwed, isPaidInFull } from "@/lib/collection"
+import { describeRequest, VENMO_MEMO } from "@/lib/entry-request"
 import type { SkippedLine } from "@/lib/invites"
 
 // The admin people console (Sprint 20) — the client half of /admin/people.
@@ -25,14 +26,17 @@ import type { SkippedLine } from "@/lib/invites"
 //   No account                 — nothing to click; the email is there to copy
 //   Signed in, not onboarded   — nothing to click either; that absence IS the
 //                                information (go text them)
-//   Awaiting approval          — Approve (name + entry fee + player flag)
-//   Approved                   — Edit (fee / flag), with Revoke inside
+//   Awaiting approval          — Approve (name + one entry per phase + player
+//                                flag), prefilled from what they asked for
+//   Approved                   — Edit (entries / flag / collection), with
+//                                Revoke inside
 //
-// Writes go to /api/admin/participants (unchanged since Sprint 16 — same
-// POST/PATCH/DELETE contract) and /api/admin/invites; on success we
-// router.refresh() so the server re-derives the funnel. No optimistic state,
-// no client-side rules — the routes re-validate the fee against the
-// tournaments row.
+// Writes go to /api/admin/participants (phase1EntryFee / phase2EntryFee since
+// Sprint 30 — same POST/PATCH/DELETE shape otherwise) and /api/admin/invites;
+// on success we router.refresh() so the server re-derives the funnel. No
+// optimistic state, no client-side rules — the routes re-validate the
+// entries against the tournaments row, and the database refuses an entry
+// lowered under its wagers (OZ002).
 //
 // Revoke deliberately does NOT sit inline next to a name: on a glance-and-
 // scroll page a mis-tap must not be able to cost someone their access, so it
@@ -43,6 +47,8 @@ import type { SkippedLine } from "@/lib/invites"
 // `sm:contents` on the stack. Long email addresses make a horizontally
 // scrolling table hostile on the phone the admin is holding while texting.
 const GRID = "grid grid-cols-[1fr_auto] gap-x-3 px-4 sm:grid-cols-[1fr_112px_120px_92px]"
+
+type ClosedPhases = { 1: boolean; 2: boolean }
 
 type InviteResult = {
   added: number
@@ -84,13 +90,14 @@ function StatusPill({ person }: { person: RosterPerson }) {
   if (stage === "approved") return <Badge variant="green">Approved</Badge>
   if (stage === "no_account") return <Badge variant="red">No account</Badge>
   if (stage === "not_onboarded") return <Badge variant="amber">Not onboarded</Badge>
-  // Revoked is its own state: the row and the entry fee are still there, the
-  // access isn't (#91). fee_unset is a hand-edited participant row with a
-  // non-positive fee — still awaiting a valid approval, so it says so plainly.
+  // Revoked is its own state: the row and the entries are still there, the
+  // access isn't (#91). fee_unset is a participant row with no entry in either
+  // phase — the ordinary state after the Sprint 30 reset — still awaiting a
+  // valid approval, so it says so plainly.
   if (person.reason === "revoked") return <Badge variant="red">Revoked</Badge>
   return (
     <Badge variant="amber">
-      {person.reason === "fee_unset" ? "Fee unset" : "Needs approval"}
+      {person.reason === "fee_unset" ? "No entry" : "Needs approval"}
     </Badge>
   )
 }
@@ -106,50 +113,103 @@ function LastLogin({ person }: { person: RosterPerson }) {
   )
 }
 
-/** Entry fee + playing-golfer — the two fields both panels share. */
+/** A blank box is "not in this phase"; the API reads "" as NULL. */
+function entryDraft(value: number | null | undefined): string {
+  return value != null && value > 0 ? String(value) : ""
+}
+
+/** What the member asked for, in one line beside the form that prefills it. */
+function RequestLine({ request }: { request: RosterRequest | null }) {
+  if (!request) return null
+  return (
+    <p className="rounded-lg border border-border bg-surface-card px-3 py-2 text-xs text-text-body">
+      <span className="font-semibold text-text-strong">Asked for:</span>{" "}
+      {describeRequest(request)} · {request.is_player ? "playing" : "not playing"}
+      {request.created_at && ` · ${formatRelativeTime(request.created_at)}`}
+      <span className="block text-text-muted">
+        Check Venmo for it (memo &ldquo;{VENMO_MEMO}&rdquo;) before approving —
+        the boxes below are prefilled from the request.
+      </span>
+    </p>
+  )
+}
+
+/** One entry per phase + playing-golfer — the fields all three panels share. */
 function ParticipantFields({
   idPrefix,
-  entryFee,
-  setEntryFee,
+  phase1,
+  setPhase1,
+  phase2,
+  setPhase2,
   isPlayer,
   setIsPlayer,
   entryFeeMin,
   entryFeeMax,
+  closedPhases,
 }: {
   idPrefix: string
-  entryFee: string
-  setEntryFee: (value: string) => void
+  phase1: string
+  setPhase1: (value: string) => void
+  phase2: string
+  setPhase2: (value: string) => void
   isPlayer: boolean
   setIsPlayer: (value: boolean) => void
   entryFeeMin: number
   entryFeeMax: number
+  closedPhases: ClosedPhases
 }) {
+  const entryBox = (
+    phase: 1 | 2,
+    value: string,
+    setValue: (value: string) => void
+  ) => (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={`${idPrefix}-fee${phase}`}>
+        Phase {phase} entry (${entryFeeMin}–${entryFeeMax})
+      </Label>
+      <Input
+        id={`${idPrefix}-fee${phase}`}
+        type="number"
+        inputMode="numeric"
+        min={entryFeeMin}
+        max={entryFeeMax}
+        value={value}
+        placeholder="not in"
+        onChange={(e) => setValue(e.target.value)}
+        className="w-28"
+      />
+    </div>
+  )
   return (
-    <div className="flex flex-wrap items-end gap-3">
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`${idPrefix}-fee`}>
-          Entry fee (${entryFeeMin}–${entryFeeMax})
-        </Label>
-        <Input
-          id={`${idPrefix}-fee`}
-          type="number"
-          inputMode="numeric"
-          min={entryFeeMin}
-          max={entryFeeMax}
-          value={entryFee}
-          onChange={(e) => setEntryFee(e.target.value)}
-          className="w-28"
-        />
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-end gap-3">
+        {entryBox(1, phase1, setPhase1)}
+        {entryBox(2, phase2, setPhase2)}
+        <label className="flex h-11 items-center gap-2 text-sm text-text-strong">
+          <input
+            type="checkbox"
+            checked={isPlayer}
+            onChange={(e) => setIsPlayer(e.target.checked)}
+            className="size-4"
+          />
+          Playing golfer
+        </label>
       </div>
-      <label className="flex h-11 items-center gap-2 text-sm text-text-strong">
-        <input
-          type="checkbox"
-          checked={isPlayer}
-          onChange={(e) => setIsPlayer(e.target.checked)}
-          className="size-4"
-        />
-        Playing golfer
-      </label>
+      <p className="text-xs text-text-muted">
+        Leave a phase blank to sit them out of it. Each phase is its own pot.
+      </p>
+      {closedPhases[1] && phase1.trim() !== "" && (
+        <p className="text-xs text-caution-strong">
+          Phase 1 has closed. An entry recorded now has nothing to wager on —
+          the first ${entryFeeMin} of it forfeits to the Phase 1 pot at
+          settlement.
+        </p>
+      )}
+      {closedPhases[2] && phase2.trim() !== "" && (
+        <p className="text-xs text-caution-strong">
+          Phase 2 has closed. An entry recorded now has nothing to wager on.
+        </p>
+      )}
     </div>
   )
 }
@@ -159,11 +219,13 @@ function ApprovePanel({
   person,
   entryFeeMin,
   entryFeeMax,
+  closedPhases,
   onClose,
 }: {
   person: RosterPerson
   entryFeeMin: number
   entryFeeMax: number
+  closedPhases: ClosedPhases
   onClose: () => void
 }) {
   const router = useRouter()
@@ -171,10 +233,19 @@ function ApprovePanel({
   // admin confirms/corrects it here so it matches the field (and so the bet
   // importer's name matching lands).
   const [name, setName] = useState(person.name)
-  // Re-approving someone who was revoked pre-fills their preserved entry fee
-  // and player flag, so the round trip restores them exactly (#91).
-  const [entryFee, setEntryFee] = useState(String(person.entry_fee ?? entryFeeMin))
-  const [isPlayer, setIsPlayer] = useState(person.is_player ?? true)
+  // Prefill from what they asked for (Sprint 30); failing that, from the
+  // preserved entries of a revoked row, so re-approval restores them exactly
+  // (#91); failing that, nothing — the admin types what landed.
+  const request = person.request
+  const [phase1, setPhase1] = useState(
+    request ? entryDraft(request.phase1_amount) : entryDraft(person.phase1_entry_fee)
+  )
+  const [phase2, setPhase2] = useState(
+    request ? entryDraft(request.phase2_amount) : entryDraft(person.phase2_entry_fee)
+  )
+  const [isPlayer, setIsPlayer] = useState(
+    request ? request.is_player : (person.is_player ?? true)
+  )
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
 
@@ -184,7 +255,8 @@ function ApprovePanel({
     const errs = await callParticipants("POST", {
       userId: person.user_id,
       displayName: name,
-      entryFee: Number(entryFee),
+      phase1EntryFee: phase1.trim(),
+      phase2EntryFee: phase2.trim(),
       isPlayer,
     })
     setBusy(false)
@@ -198,6 +270,8 @@ function ApprovePanel({
 
   return (
     <div className="flex flex-col gap-3 border-t border-border bg-surface-sunken px-4 py-3">
+      <RequestLine request={request} />
+
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`approve-${person.key}-name`}>
           Display name (matches the field)
@@ -211,12 +285,15 @@ function ApprovePanel({
 
       <ParticipantFields
         idPrefix={`approve-${person.key}`}
-        entryFee={entryFee}
-        setEntryFee={setEntryFee}
+        phase1={phase1}
+        setPhase1={setPhase1}
+        phase2={phase2}
+        setPhase2={setPhase2}
         isPlayer={isPlayer}
         setIsPlayer={setIsPlayer}
         entryFeeMin={entryFeeMin}
         entryFeeMax={entryFeeMax}
+        closedPhases={closedPhases}
       />
 
       <div className="flex items-center gap-2">
@@ -233,16 +310,18 @@ function ApprovePanel({
   )
 }
 
-/** Approved → edit the fee / player flag, or revoke access entirely. */
+/** Approved → edit the entries / player flag, or revoke access entirely. */
 function EditPanel({
   person,
   entryFeeMin,
   entryFeeMax,
+  closedPhases,
   onClose,
 }: {
   person: RosterPerson
   entryFeeMin: number
   entryFeeMax: number
+  closedPhases: ClosedPhases
   onClose: () => void
 }) {
   const router = useRouter()
@@ -251,21 +330,23 @@ function EditPanel({
   // person's self-bet cap, self-pick flag and opponent block (#99). Until
   // Sprint 23 the only way to fix one was a Studio edit.
   const [name, setName] = useState(person.name)
-  const [entryFee, setEntryFee] = useState(String(person.entry_fee ?? entryFeeMin))
+  const [phase1, setPhase1] = useState(entryDraft(person.phase1_entry_fee))
+  const [phase2, setPhase2] = useState(entryDraft(person.phase2_entry_fee))
   const [isPlayer, setIsPlayer] = useState(person.is_player !== false)
-  // Entry collection. Recorded here, decided nowhere: whether the money comes
-  // out of the house deposit or by Venmo is still Pat's call
-  // (OUTSTANDING_DECISIONS.md §3), and the note is where that goes in whatever
-  // words the admin used that day.
+  // Entry collection. Recorded here, decided nowhere else: the pots are built
+  // from the entries whether or not the money landed, and the note is where
+  // "Venmo 9/15, both phases" goes in whatever words the admin used that day.
   const [paidAmount, setPaidAmount] = useState(String(person.paid_amount))
   const [paidNote, setPaidNote] = useState(person.paid_note ?? "")
   const [busy, setBusy] = useState(false)
   const [confirmingRevoke, setConfirmingRevoke] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
 
+  const owed = entryOwed(person)
   const dirty =
     name.trim() !== person.name ||
-    Number(entryFee) !== person.entry_fee ||
+    phase1.trim() !== entryDraft(person.phase1_entry_fee) ||
+    phase2.trim() !== entryDraft(person.phase2_entry_fee) ||
     isPlayer !== (person.is_player !== false) ||
     Number(paidAmount) !== person.paid_amount ||
     paidNote.trim() !== (person.paid_note ?? "")
@@ -276,7 +357,8 @@ function EditPanel({
     const errs = await callParticipants("PATCH", {
       userId: person.user_id,
       displayName: name,
-      entryFee: Number(entryFee),
+      phase1EntryFee: phase1.trim(),
+      phase2EntryFee: phase2.trim(),
       isPlayer,
       paidAmount,
       paidNote,
@@ -305,6 +387,8 @@ function EditPanel({
 
   return (
     <div className="flex flex-col gap-3 border-t border-border bg-surface-sunken px-4 py-3">
+      <RequestLine request={person.request} />
+
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`edit-${person.key}-name`}>
           Display name (matches the field)
@@ -322,16 +406,23 @@ function EditPanel({
 
       <ParticipantFields
         idPrefix={`edit-${person.key}`}
-        entryFee={entryFee}
-        setEntryFee={setEntryFee}
+        phase1={phase1}
+        setPhase1={setPhase1}
+        phase2={phase2}
+        setPhase2={setPhase2}
         isPlayer={isPlayer}
         setIsPlayer={setIsPlayer}
         entryFeeMin={entryFeeMin}
         entryFeeMax={entryFeeMax}
+        closedPhases={closedPhases}
       />
+      <p className="text-xs text-text-muted">
+        An entry can&rsquo;t drop below what they&rsquo;ve already wagered in
+        that phase — remove the wagers first.
+      </p>
 
-      {/* Entry collection. Nothing here moves money: the pool is built from
-          entry fees whether or not they've been handed over (ADR 0001 §9), so
+      {/* Entry collection. Nothing here moves money: the pots are built from
+          the entries whether or not they've been handed over (ADR 0002), so
           this is bookkeeping an admin can act on, not a rule. */}
       <div className="flex flex-col gap-1.5 border-t border-border pt-3">
         <div className="flex flex-wrap items-end gap-3">
@@ -355,14 +446,14 @@ function EditPanel({
               id={`edit-${person.key}-paid-note`}
               value={paidNote}
               onChange={(e) => setPaidNote(e.target.value)}
-              placeholder="Venmo 9/2 · from the deposit"
+              placeholder="Venmo 9/15, both phases"
             />
           </div>
         </div>
         <p className="text-xs text-text-muted">
-          Their ${person.entry_fee ?? 0} entry counts in the pool either way —
-          this only tracks what&rsquo;s actually been handed over. Partial
-          amounts are fine.
+          Their ${owed} in entries counts in the pots either way — this only
+          tracks what&rsquo;s actually been handed over. Partial amounts are
+          fine; anything over what they owe is a refund Pat owes them.
         </p>
       </div>
 
@@ -387,14 +478,14 @@ function EditPanel({
 
       {/* Revoke lives down here, behind its own confirm. It stamps revoked_at
           on the participant row rather than deleting it (Sprint 21 / #91): the
-          entry fee is a pool input, so deleting the row moved money. */}
+          entries are pool inputs, so deleting the row moved money. */}
       <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
         {confirmingRevoke ? (
           <>
             <span className="text-sm text-text-body">
-              Revoke {person.name}&apos;s access? They drop out of the pool —
-              their ${person.entry_fee ?? 0} entry and their wagers both stop
-              counting. Nothing is deleted: re-approving brings all of it back.
+              Revoke {person.name}&apos;s access? They drop out of both pots —
+              their ${owed} in entries and their wagers all stop counting.
+              Nothing is deleted: re-approving brings all of it back.
             </span>
             <Button size="sm" variant="destructive" onClick={revoke} disabled={busy}>
               {busy ? "Revoking…" : "Yes, revoke"}
@@ -532,7 +623,7 @@ function InviteBox() {
  * ~32 people can't get through their email.
  *
  * TWO requests, one button. Creating the account and approving it are separate
- * endpoints on purpose: /api/admin/participants owns the entry fee and creates
+ * endpoints on purpose: /api/admin/participants owns the entries and creates
  * the row whose existence IS betting eligibility (PRD §12 A12/A13). If the
  * approve leg fails, the account still exists and the person drops into the
  * table as "Needs approval" — a normal, visible, recoverable state — so the
@@ -541,15 +632,18 @@ function InviteBox() {
 function AddMemberBox({
   entryFeeMin,
   entryFeeMax,
+  closedPhases,
 }: {
   entryFeeMin: number
   entryFeeMax: number
+  closedPhases: ClosedPhases
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState("")
   const [name, setName] = useState("")
-  const [entryFee, setEntryFee] = useState(String(entryFeeMin))
+  const [phase1, setPhase1] = useState(String(entryFeeMin))
+  const [phase2, setPhase2] = useState("")
   const [isPlayer, setIsPlayer] = useState(true)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<string | null>(null)
@@ -582,7 +676,8 @@ function AddMemberBox({
     const approveErrors = await callParticipants("POST", {
       userId: json.userId,
       displayName: name,
-      entryFee: Number(entryFee),
+      phase1EntryFee: phase1.trim(),
+      phase2EntryFee: phase2.trim(),
       isPlayer,
     })
     setBusy(false)
@@ -599,7 +694,8 @@ function AddMemberBox({
     setDone(`${name} is added and approved — you can place wagers for them now.`)
     setEmail("")
     setName("")
-    setEntryFee(String(entryFeeMin))
+    setPhase1(String(entryFeeMin))
+    setPhase2("")
     setIsPlayer(true)
   }
 
@@ -668,12 +764,15 @@ function AddMemberBox({
 
           <ParticipantFields
             idPrefix="add-member"
-            entryFee={entryFee}
-            setEntryFee={setEntryFee}
+            phase1={phase1}
+            setPhase1={setPhase1}
+            phase2={phase2}
+            setPhase2={setPhase2}
             isPlayer={isPlayer}
             setIsPlayer={setIsPlayer}
             entryFeeMin={entryFeeMin}
             entryFeeMax={entryFeeMax}
+            closedPhases={closedPhases}
           />
 
           <div className="flex items-center gap-2">
@@ -685,7 +784,7 @@ function AddMemberBox({
               {busy ? "Adding…" : "Add and approve"}
             </Button>
             <span className="text-xs text-text-muted">
-              Their entry fee counts in the pool from the moment they&rsquo;re
+              Their entries count in the pots from the moment they&rsquo;re
               approved.
             </span>
           </div>
@@ -707,11 +806,11 @@ function AddMemberBox({
  * admin is already reading.
  *
  * Counted over APPROVED bettors only (`status === "ready"`), which is the same
- * set /results builds the pool from: a live participant row with a fee and no
+ * set the pots are built from: a live participant row with an entry and no
  * revoke. Someone still awaiting approval owes nothing yet.
  *
  * The number is deliberately not a rule anywhere. An unpaid member still funds
- * the pool on paper (ADR 0001 §9) — which is exactly why an admin needs to see
+ * the pots on paper (ADR 0002) — which is exactly why an admin needs to see
  * the gap, and exactly why nothing downstream reads it.
  */
 function CollectionStrip({ people }: { people: RosterPerson[] }) {
@@ -721,11 +820,13 @@ function CollectionStrip({ people }: { people: RosterPerson[] }) {
   const standing = collectionStanding(
     approved.map((p) => ({
       display_name: p.name,
-      entry_fee: p.entry_fee ?? 0,
+      phase1_entry_fee: p.phase1_entry_fee,
+      phase2_entry_fee: p.phase2_entry_fee,
       paid_amount: p.paid_amount,
     }))
   )
   const short = standing.expected - standing.collected
+  const refunds = standing.overpaid.reduce((sum, o) => sum + o.amount, 0)
 
   return (
     <Card className="flex-row items-center justify-between gap-3 px-4 py-3">
@@ -735,8 +836,9 @@ function CollectionStrip({ people }: { people: RosterPerson[] }) {
         </span>
         <span className="mt-0.5 block text-xs text-text-muted">
           {short > 0
-            ? `${standing.outstanding.length} ${standing.outstanding.length === 1 ? "entry" : "entries"} still out — $${short}. The pool counts all ${approved.length} either way.`
+            ? `${standing.outstanding.length} ${standing.outstanding.length === 1 ? "entry" : "entries"} still out — $${short}. The pots count all ${approved.length} either way.`
             : `All ${approved.length} ${approved.length === 1 ? "entry" : "entries"} are in.`}
+          {refunds > 0 && ` $${refunds} paid over the entries — refund it.`}
         </span>
       </div>
       <Badge variant={short > 0 ? "amber" : "green"} uppercase>
@@ -746,16 +848,26 @@ function CollectionStrip({ people }: { people: RosterPerson[] }) {
   )
 }
 
+/** "P1 $20 · P2 $30", or "P1 $20" — the row's entry summary. */
+function entrySummary(person: RosterPerson): string {
+  const parts: string[] = []
+  if (person.phase1_entry_fee) parts.push(`P1 $${person.phase1_entry_fee}`)
+  if (person.phase2_entry_fee) parts.push(`P2 $${person.phase2_entry_fee}`)
+  return parts.join(" · ")
+}
+
 export function PeopleConsole({
   people,
   hasInvites,
   entryFeeMin,
   entryFeeMax,
+  closedPhases,
 }: {
   people: RosterPerson[]
   hasInvites: boolean
   entryFeeMin: number
   entryFeeMax: number
+  closedPhases: ClosedPhases
 }) {
   // One panel at a time — a table you scroll should stay scannable.
   const [openKey, setOpenKey] = useState<string | null>(null)
@@ -763,7 +875,11 @@ export function PeopleConsole({
   return (
     <div className="flex flex-col gap-4">
       <InviteBox />
-      <AddMemberBox entryFeeMin={entryFeeMin} entryFeeMax={entryFeeMax} />
+      <AddMemberBox
+        entryFeeMin={entryFeeMin}
+        entryFeeMax={entryFeeMax}
+        closedPhases={closedPhases}
+      />
       <CollectionStrip people={people} />
 
       {people.length === 0 ? (
@@ -786,9 +902,9 @@ export function PeopleConsole({
 
         {people.map((person) => {
           const stage = funnelStage(person)
-          // A fee_unset row counts as awaiting approval but already HAS a live
-          // participant row, so its lever is Edit — the fee just needs
-          // correcting. A revoked row keeps Approve: that's the way back in.
+          // A no-entry row counts as awaiting approval but already HAS a live
+          // participant row, so its lever is Edit — the entries just need
+          // recording. A revoked row keeps Approve: that's the way back in.
           const action =
             stage === "approved" || person.reason === "fee_unset"
               ? "edit"
@@ -797,6 +913,7 @@ export function PeopleConsole({
                 : null
           const open = openKey === person.key
           const close = () => setOpenKey(null)
+          const owed = entryOwed(person)
 
           return (
             <div
@@ -840,20 +957,27 @@ export function PeopleConsole({
                         <span className="ml-1.5">· not on the invite list</span>
                       )}
                     </div>
-                    {/* Only for approved bettors, and only when they're
-                        short: a row that says nothing has nothing owing. */}
-                    {person.status === "ready" &&
-                      !isPaidInFull({
-                        display_name: person.name,
-                        entry_fee: person.entry_fee ?? 0,
-                        paid_amount: person.paid_amount,
-                      }) && (
-                        <div className="text-xs text-caution-strong">
-                          Owes ${(person.entry_fee ?? 0) - person.paid_amount}
-                          {person.paid_amount > 0 &&
-                            ` · $${person.paid_amount} in`}
-                        </div>
-                      )}
+                    {/* The entries, and what's still owed — only for approved
+                        bettors, and only when they're short: a row that says
+                        nothing has nothing owing. */}
+                    {person.status === "ready" && (
+                      <div className="text-xs text-text-muted">
+                        {entrySummary(person)}
+                        {!isPaidInFull(person) && (
+                          <span className="ml-1.5 text-caution-strong">
+                            · owes ${owed - person.paid_amount}
+                            {person.paid_amount > 0 && ` ($${person.paid_amount} in)`}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* Somebody who asked and is still waiting: the admin's cue
+                        to check Venmo. */}
+                    {person.status !== "ready" && person.request && (
+                      <div className="text-xs text-caution-strong">
+                        Asked for {describeRequest(person.request)}
+                      </div>
+                    )}
                     <div className="text-xs text-text-muted sm:hidden">
                       <LastLogin person={person} />
                     </div>
@@ -898,6 +1022,7 @@ export function PeopleConsole({
                   person={person}
                   entryFeeMin={entryFeeMin}
                   entryFeeMax={entryFeeMax}
+                  closedPhases={closedPhases}
                   onClose={close}
                 />
               </Collapse>
@@ -906,6 +1031,7 @@ export function PeopleConsole({
                   person={person}
                   entryFeeMin={entryFeeMin}
                   entryFeeMax={entryFeeMax}
+                  closedPhases={closedPhases}
                   onClose={close}
                 />
               </Collapse>
