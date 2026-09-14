@@ -1,5 +1,5 @@
 import type { createClient } from "./supabase/server"
-import { validateBetOpen, validatePlacement } from "./validation"
+import { phaseEntry, validateBetOpen, validatePlacement } from "./validation"
 import { phaseClosedByClock } from "./phases"
 import {
   buildPlacementContext,
@@ -8,6 +8,7 @@ import {
   planWrite,
   toPhaseClock,
   toTournamentRules,
+  PARTICIPANT_ENTRY_COLUMNS,
   TOURNAMENT_CLOCK_COLUMNS,
   TOURNAMENT_RULE_COLUMNS,
   type OwnPlacementRow,
@@ -95,7 +96,7 @@ type WriteError = { code?: string | null; message: string }
 function overEntry(error: WriteError): boolean {
   return (
     error.code === OVER_ENTRY_SQLSTATE ||
-    /Over your \$\d+ entry/.test(error.message)
+    /Over your \$\d+ (?:Phase [12] )?entry/.test(error.message)
   )
 }
 
@@ -166,7 +167,7 @@ export async function placeOrEditPlacement(
   // refused here, exactly as the member would be (Sprint 21 / #91).
   const { data: participantData, error: participantError } = await supabase
     .from("tournament_participants")
-    .select("user_id, entry_fee, is_player")
+    .select(PARTICIPANT_ENTRY_COLUMNS)
     .eq("user_id", identity.bettor_id)
     .eq("tournament_id", target.tournament_id)
     .is("revoked_at", null)
@@ -191,9 +192,10 @@ export async function placeOrEditPlacement(
     }
   }
 
-  // The BETTOR's live placements across the whole tournament — the running
-  // total and self-bet rules span both phases. deleted_at IS NULL here; the
-  // no-filter read happens only for the revive lookup below.
+  // The BETTOR's live placements across the whole tournament — every rule
+  // filters to the target bet's phase itself (Sprint 30), and one read is
+  // cheaper than two. deleted_at IS NULL here; the no-filter read happens only
+  // for the revive lookup below.
   const { data: placementsData, error: placementsError } = await supabase
     .from("bet_placements")
     .select(
@@ -222,6 +224,25 @@ export async function placeOrEditPlacement(
     clock,
     now
   )
+
+  // Eligibility is PER PHASE since Sprint 30 (ADR 0002): a live row is
+  // necessary, not sufficient — the bettor needs an entry for the phase this
+  // bet is in. validatePlacement would refuse this too, but with the member's
+  // wording; here it gets the same identity-aware split as "not registered",
+  // because an admin acting for someone is sent to /admin/people, not told
+  // to ask themselves.
+  if (phaseEntry(ctx.bettor, ctx.bet.phase) === null) {
+    const phase = ctx.bet.phase
+    return {
+      status: 403,
+      body: {
+        error: onBehalf(identity)
+          ? `They're not entered in Phase ${phase} — set their Phase ${phase} entry on /admin/people first.`
+          : `You're not entered in Phase ${phase} — ask an admin if you'd like to be.`,
+      },
+    }
+  }
+
   const verdict = validatePlacement(ctx, input.amount, rules)
   if (!verdict.ok) {
     return { status: 400, body: { errors: verdict.errors } }

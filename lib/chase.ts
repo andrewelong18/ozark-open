@@ -4,19 +4,31 @@
 //
 // Pure module by design — no Supabase, no "@/" alias imports.
 //
-// This adds NO compliance logic. Every verdict comes from the same two §8.1
-// functions /my-bets renders (checkPickMinimum, checkTournamentTotal), and the
-// shape mirrors docs/admin/phase-compliance.sql, which stays as the fallback
-// for when the app itself is the thing that's broken. If the two ever
-// disagree, the SQL file is the one to fix — these are the functions the app
-// enforces with.
+// This adds NO compliance logic. Every verdict comes from phaseStanding()
+// (lib/validation.ts) — the same function the slip bar, /my-bets and the
+// payout math read — and the shape mirrors docs/admin/phase-compliance.sql,
+// which stays as the fallback for when the app itself is the thing that's
+// broken. If the two ever disagree, the SQL file is the one to fix.
+//
+// SINCE SPRINT 30 (ADR 0002) EACH CLOSE IS ITS OWN RECKONING. Every phase is
+// its own entry and its own pot, so at Phase 1 close everyone entered in
+// Phase 1 who isn't complete gets a text — including the member who paid and
+// never wagered, because the first $entry_fee_min of their entry forfeits at
+// that moment. Phase 2 is not mentioned at all on Thursday, and at Phase 2
+// close Phase 1's stragglers are not chased: that phase is closed, and
+// whatever stood, stands (Q3). Members with no entry for the closing phase are
+// not on the list — they chose to sit it out — but their count is reported,
+// because "somebody paid for both phases and only Phase 1 got typed in" is
+// the data-entry gap an admin actually hits on Friday night.
 
 import {
-  checkPickMinimum,
-  checkTournamentTotal,
+  phaseEntry,
+  phaseStanding,
   type ExistingPlacement,
+  type PhaseStanding,
   type TournamentRules,
 } from "./validation.ts"
+import type { Phase } from "./phases.ts"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,33 +37,41 @@ import {
 export type ChaseParticipant = {
   user_id: string
   display_name: string
-  entry_fee: number
+  is_player: boolean
+  phase1_entry_fee: number | null
+  phase2_entry_fee: number | null
 }
 
 export type ChasePerson = {
   user_id: string
   display_name: string
-  entry_fee: number
-  phase1_picks: number
-  phase2_picks: number
-  total_picks: number
-  total_wagered: number
-  remaining: number
-  under_minimum: boolean
-  off_exact_total: boolean
+  /** Their entry for the closing phase. */
+  entry: number
+  wagered: number
+  pick_count: number
+  /** What the pot keeps with no wager behind it if nothing changes. */
+  forfeit: number
+  /** What comes back to them if nothing changes. */
+  refund: number
+  /** Self-bet money that would not count if nothing changes. */
+  self_forfeit: number
+  complete: boolean
   /** Whether this person needs a text *at this close*. */
   needs_a_text: boolean
   /** Why, in the fewest words that fit on a phone. Null when they're fine. */
   reason: string | null
+  standing: PhaseStanding
 }
 
 export type ChaseList = {
   /** Which close this is — 1 or 2. */
-  closing_phase: 1 | 2
-  /** Everyone, chased first, then by name. */
+  closing_phase: Phase
+  /** Everyone entered in the closing phase, chased first, then by name. */
   people: ChasePerson[]
   /** Just the ones needing a text, same order. */
   chase: ChasePerson[]
+  /** Approved members with no entry recorded for the closing phase. */
+  not_entered: number
   /** The one-line answer, ready to read aloud or paste into a group text. */
   line: string
 }
@@ -66,7 +86,7 @@ export type ChaseList = {
  * Phase 1 has closed, so any non-hidden Phase 2 bet means we're at or past
  * that point. Mirrors the CASE in phase-compliance.sql.
  */
-export function closingPhase(bets: { phase: number; status: string }[]): 1 | 2 {
+export function closingPhase(bets: { phase: number; status: string }[]): Phase {
   return bets.some((b) => b.phase === 2 && b.status !== "hidden") ? 2 : 1
 }
 
@@ -74,69 +94,77 @@ export function closingPhase(bets: { phase: number; status: string }[]): 1 | 2 {
 // The list
 // ---------------------------------------------------------------------------
 
+/** The phone-sized reason: money first, then picks, then what it costs. */
+function reasonFor(s: PhaseStanding, minPicks: number): string | null {
+  if (s.complete) return null
+  const parts: string[] = []
+  if (s.wagered !== s.entry) parts.push(`$${s.wagered} of $${s.entry}`)
+  if (!s.meets_pick_minimum) parts.push(`${s.pick_count} of ${minPicks} picks`)
+  const costs: string[] = []
+  if (s.forfeit > 0) costs.push(`$${s.forfeit} forfeits`)
+  if (s.refund > 0) costs.push(`$${s.refund} comes back`)
+  if (s.self_forfeit > 0)
+    costs.push(`only $${s.self_recognized} of $${s.self_total} on themselves counts`)
+  if (s.over_entry) costs.push("over their entry")
+  return parts.join(", ") + (costs.length > 0 ? ` → ${costs.join(", ")}` : "")
+}
+
 /**
- * Who to chase before closing `closing_phase`.
+ * Who to chase before closing `closing`.
  *
- * The phase-awareness is the whole point (#98): at Phase 1 close, EVERYONE is
- * legitimately short of their entry fee, so off-exact-total is reported as a
- * column but is never a reason to text. It only becomes one at Phase 2 close,
- * which is the last moment it can be fixed.
- *
- * Somebody with zero placements never flags on the minimum — betting entirely
- * in one phase is explicitly allowed (PRD §12 Q2), and a bettor who never
- * wagers is caught by the exact-total check at Phase 2 close anyway.
+ * Everyone with an entry for that phase is listed; anyone whose standing is
+ * not complete needs a text. There is no zero-placement exemption any more —
+ * under one pot, betting entirely in the other phase was legitimate (Q2);
+ * under two, an entry with nothing on it forfeits its first $20 at this close.
  */
 export function buildChaseList(
   participants: ChaseParticipant[],
   placementsByUser: Map<string, ExistingPlacement[]>,
   rules: TournamentRules,
-  closing: 1 | 2
+  closing: Phase
 ): ChaseList {
-  const people: ChasePerson[] = participants.map((p) => {
-    const mine = placementsByUser.get(p.user_id) ?? []
-    const picks = checkPickMinimum(mine, rules)
-    const total = checkTournamentTotal(mine, p.entry_fee)
+  const people: ChasePerson[] = []
+  let notEntered = 0
 
-    // checkPickMinimum passes an empty slate (Q2); "under" here means they
-    // started and stopped short, matching the SQL's BETWEEN 1 AND min-1.
-    const under = mine.length > 0 && !picks.meets_minimum
-    const offTotal = !total.exact
-    const needs = under || (closing === 2 && offTotal)
-
-    const why: string[] = []
-    if (under) why.push(`${picks.pick_count} of ${rules.min_picks_per_tournament} picks`)
-    if (closing === 2 && offTotal)
-      why.push(`$${total.total} of $${p.entry_fee}`)
-
-    return {
+  for (const p of participants) {
+    const entry = phaseEntry(p, closing)
+    if (entry === null) {
+      notEntered++
+      continue
+    }
+    const standing = phaseStanding(placementsByUser.get(p.user_id) ?? [], entry, closing, rules, {
+      is_player: p.is_player,
+      bettor_user_id: p.user_id,
+    })
+    people.push({
       user_id: p.user_id,
       display_name: p.display_name,
-      entry_fee: p.entry_fee,
-      phase1_picks: mine.filter((m) => m.phase === 1).length,
-      phase2_picks: mine.filter((m) => m.phase === 2).length,
-      total_picks: mine.length,
-      total_wagered: total.total,
-      remaining: total.remaining,
-      under_minimum: under,
-      off_exact_total: offTotal,
-      needs_a_text: needs,
-      reason: why.length > 0 ? why.join(", ") : null,
-    }
-  })
+      entry,
+      wagered: standing.wagered,
+      pick_count: standing.pick_count,
+      forfeit: standing.forfeit,
+      refund: standing.refund,
+      self_forfeit: standing.self_forfeit,
+      complete: standing.complete,
+      needs_a_text: !standing.complete,
+      reason: reasonFor(standing, rules.min_picks_per_phase),
+      standing,
+    })
+  }
 
   people.sort(
     (a, b) =>
       Number(b.needs_a_text) - Number(a.needs_a_text) ||
-      Number(b.under_minimum) - Number(a.under_minimum) ||
+      Number(b.forfeit > 0) - Number(a.forfeit > 0) ||
       a.display_name.localeCompare(b.display_name)
   )
 
   const chase = people.filter((p) => p.needs_a_text)
   const line =
     chase.length === 0
-      ? `Closing Phase ${closing} — nobody to chase, everyone is compliant.`
+      ? `Closing Phase ${closing} — nobody to chase, everyone entered is complete.`
       : `Closing Phase ${closing} — text these people: ` +
         chase.map((p) => `${p.display_name} (${p.reason})`).join(", ")
 
-  return { closing_phase: closing, people, chase, line }
+  return { closing_phase: closing, people, chase, not_entered: notEntered, line }
 }

@@ -5,18 +5,24 @@
 // node:test suite exercises the exact code the page runs.
 //
 // A normalized MyBetEntry is structurally an ExistingPlacement, so the
-// §8.1 phase-close checks in validation.ts (checkPickMinimum /
-// checkTournamentTotal) run directly on the same rows the page renders —
-// the compliance numbers can never drift from the list.
+// §8.1 standing in validation.ts (phaseStanding) runs directly on the same
+// rows the page renders — the compliance numbers can never drift from the
+// list. Since Sprint 30 (ADR 0002) that standing is per phase: one budget,
+// one set of banners, for each phase the bettor is entered in.
 
 import {
-  checkPickMinimum,
-  checkTournamentTotal,
   maxSelfBet,
   maxSingleBet,
+  phaseEntry,
+  phaseStanding,
+  type Bettor,
   type ExistingPlacement,
+  type PhaseStanding,
+  type StandingIssue,
   type TournamentRules,
 } from "./validation.ts"
+import { toPhaseEntry } from "./placements.ts"
+import type { Phase } from "./phases.ts"
 import { toResult, type PickResult } from "./closed-bets.ts"
 import {
   aggregatePayouts,
@@ -63,7 +69,7 @@ export type MyBetsQueryRow = {
 }
 
 /** One live placement, flattened for display. Superset of validation's
- * ExistingPlacement — pass entries straight to the §8.1 checks. */
+ * ExistingPlacement — pass entries straight to the §8.1 standing. */
 export type MyBetEntry = {
   pick_id: string
   bet_id: string
@@ -164,7 +170,7 @@ export type PhaseGroup = {
 }
 
 /**
- * Group placements by phase (skipping phases with none — Q2), each ordered
+ * Group placements by phase (skipping phases with none), each ordered
  * round → sheet_bet_id → sheet_pick_id like the bet menu, with the per-phase
  * pick count and dollar subtotal the phase header shows.
  */
@@ -191,7 +197,7 @@ export function groupByPhase(entries: MyBetEntry[]): PhaseGroup[] {
 }
 
 /** Short pick-count line for the budget module — counts per phase bet in
- * (phases without placements are simply absent, Q2). Counts only: rule spans
+ * (phases without placements are simply absent). Counts only: rule spans
  * live on the rules card, shortfalls on the compliance banner. */
 export function picksLine(entries: { phase: 1 | 2 }[]): string {
   const parts = ([1, 2] as const)
@@ -203,112 +209,166 @@ export function picksLine(entries: { phase: 1 | 2 }[]): string {
 }
 
 // ---------------------------------------------------------------------------
+// The bettor, from a participant row — the one coercion every page shares
+// ---------------------------------------------------------------------------
+
+/** The participant fields the member pages read (PARTICIPANT_ENTRY_COLUMNS). */
+export type ParticipantEntries = {
+  user_id?: string
+  phase1_entry_fee: number | string | null
+  phase2_entry_fee: number | string | null
+  is_player: boolean
+}
+
+/** A Bettor for the rules, from the row as PostgREST hands it back. */
+export function toBettor(userId: string, participant: ParticipantEntries): Bettor {
+  return {
+    user_id: userId,
+    is_player: participant.is_player,
+    phase1_entry_fee: toPhaseEntry(participant.phase1_entry_fee),
+    phase2_entry_fee: toPhaseEntry(participant.phase2_entry_fee),
+  }
+}
+
+/** Every phase the bettor is in, with the entry. Empty = no money added. */
+export function enteredPhases(bettor: Bettor): { phase: Phase; entry: number }[] {
+  return ([1, 2] as const).flatMap((phase) => {
+    const entry = phaseEntry(bettor, phase)
+    return entry === null ? [] : [{ phase, entry }]
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Personalized rules — every number derives from the tournaments row via the
 // validation helpers (floor semantics), never recomputed inline
 // ---------------------------------------------------------------------------
 
-export type RulesModel = {
+export type PhaseRulesModel = {
+  phase: Phase
   entry_fee: number
-  max_single_bet: number
   /** null for non-playing bettors — exempt from the self-bet cap (Q14), so
-   * the rules card shows no "max on yourself" line. */
+   * the rules card shows no "max on yourself" figure. */
   max_self_bet: number | null
-  /** Across both phases combined (#96); the max below is per phase. */
-  min_picks_per_tournament: number
-  max_picks_per_phase: number
 }
 
-export function buildRulesModel(
-  participant: { entry_fee: number; is_player: boolean },
-  rules: TournamentRules
-): RulesModel {
-  const entryFee = Number(participant.entry_fee)
+export type RulesModel = {
+  /** Flat, the same in every phase (PRD §7 rule 4). */
+  max_single_bet: number
+  min_picks_per_phase: number
+  /** One row per phase the bettor is entered in. */
+  phases: PhaseRulesModel[]
+}
+
+export function buildRulesModel(bettor: Bettor, rules: TournamentRules): RulesModel {
   return {
-    entry_fee: entryFee,
-    max_single_bet: maxSingleBet(entryFee, rules),
-    max_self_bet: participant.is_player ? maxSelfBet(entryFee, rules) : null,
-    min_picks_per_tournament: rules.min_picks_per_tournament,
-    max_picks_per_phase: rules.max_picks_per_phase,
+    max_single_bet: maxSingleBet(rules),
+    min_picks_per_phase: rules.min_picks_per_phase,
+    phases: enteredPhases(bettor).map(({ phase, entry }) => ({
+      phase,
+      entry_fee: entry,
+      max_self_bet: bettor.is_player ? maxSelfBet(entry, rules) : null,
+    })),
   }
 }
 
 // ---------------------------------------------------------------------------
-// Compliance banners — assembled from validation's §8.1 phase-close checks,
+// Compliance banners — assembled from validation's per-phase standing,
 // messages verbatim. Informational only, never blocking (Q3: admins chase;
-// whatever stands, stands).
+// whatever stands, stands — with ADR 0002's money consequences named).
 // ---------------------------------------------------------------------------
 
 export type ComplianceItem = {
-  /** `info` is NOT a lesser warning. Per PRD Q2 a member with no wagers is not
-   *  in violation until the Phase 2 close, and the dashboard's "Alerts (n)"
-   *  badge counts warnings only — so telling them what they still owe must not
-   *  put a red number on a page where nothing is wrong yet. */
+  /** `warning` costs money or the minimum; `info` is money coming back, or a
+   * phase that has closed and can't be acted on; `success` is a phase done. */
   tone: "warning" | "success" | "info"
   title: string
   message: string
+  phase: Phase
+}
+
+function titleFor(code: StandingIssue["code"], phase: Phase): string {
+  switch (code) {
+    case "picks":
+      return `Not enough picks in Phase ${phase}`
+    case "forfeit":
+      return `Money on the table in Phase ${phase}`
+    case "self":
+      return `Self-bet over the line in Phase ${phase}`
+    case "over":
+      return `Phase ${phase} needs an admin`
+    case "refund":
+      return `Phase ${phase} refund`
+  }
+}
+
+/** The closed-phase sentence: what happened, in the past tense. */
+function finalSentence(s: PhaseStanding): string {
+  const costs: string[] = []
+  if (s.forfeit > 0) costs.push(`$${s.forfeit} forfeited to the pot`)
+  if (s.refund > 0) costs.push(`$${s.refund} comes back to you`)
+  if (s.self_forfeit > 0)
+    costs.push(`only $${s.self_recognized} of your $${s.self_total} on yourself counts`)
+  const picks = s.meets_pick_minimum ? "" : ` with ${s.pick_count} picks`
+  return (
+    `You wagered $${s.wagered} of your $${s.entry}${picks}` +
+    (costs.length > 0 ? ` — ${costs.join(", ")}.` : ".")
+  )
 }
 
 /**
- * Banner items for the participant's current standing.
+ * Banner items for the participant's standing in each phase they are in.
  *
- * Once they've bet: one warning if they're short of the tournament-wide pick
- * minimum (#96 — the count spans both phases, so a one-phase slate of 5 is
- * complete), one for an off-exact total, or a single success banner when every
- * check passes.
+ * While a phase is open every issue phaseStanding() reports becomes a banner,
+ * warnings first — a member who has done the least (entered, never opened the
+ * menu) reads exactly what it will cost them, which under one pot the app
+ * used to say nothing about (the zero-wager blind spot, Sept 2, 2026). A
+ * complete phase gets one success banner.
  *
- * AT ZERO PLACEMENTS this used to return nothing at all, and that was the
- * blind spot. The member who has done the least — registered, paid, never
- * opened the menu — was the only one the app told nothing. The dry run has two
- * of them on the record (`OUTSTANDING_DECISIONS.md` §2b): Steve paid his entry,
- * never wagered, and finished at −$20.00.
+ * Once a phase is CLOSED there is nothing to act on, so an incomplete
+ * standing becomes one `info` line stating what happened, and a complete one
+ * a success line. Telling someone to go place bets on results night is worse
+ * than saying nothing.
  *
- * So they now get ONE `info` item naming what they still owe. Deliberately
- * `info` and not `warning`, for a rule rather than a taste reason: PRD Q2 says
- * they are not in violation until the Phase 2 close, and the dashboard's
- * "Alerts (n)" badge counts warnings — a red 1 on a dashboard where nothing is
- * yet wrong is the kind of alert people learn to ignore.
- *
- * `wageringOver` suppresses it entirely. After the Phase 2 deadline there is
- * nothing they can do about it, and telling someone to go place bets on
- * results night is worse than saying nothing.
- *
- * checkPickMinimum()'s own zero-pick exemption is NOT touched: it is
- * deliberate, cited to PRD Q2 in lib/chase.ts, mirrored in
- * docs/admin/phase-compliance.sql, and relied on by scripts/dry-run-verify.ts.
- * This is a display gap, and the fix belongs here.
+ * A bettor entered in neither phase gets nothing here: that is the entry
+ * request's job (lib/entry-request.ts), not a compliance matter.
  */
 export function buildComplianceSummary(
   existing: ExistingPlacement[],
-  entryFee: number,
+  bettor: Bettor,
   rules: TournamentRules,
-  options: { wageringOver?: boolean } = {}
+  options: { closed?: Partial<Record<Phase, boolean>> } = {}
 ): ComplianceItem[] {
-  if (existing.length === 0) {
-    if (options.wageringOver) return []
-    return [
-      {
-        tone: "info",
-        title: "No bets placed yet",
-        message: `You'll need at least ${rules.min_picks_per_tournament} picks totalling exactly $${entryFee} by the Phase 2 deadline.`,
-      },
-    ]
-  }
   const items: ComplianceItem[] = []
-  const picks = checkPickMinimum(existing, rules)
-  if (!picks.meets_minimum && picks.message)
-    items.push({
-      tone: "warning",
-      title: "Not enough picks yet",
-      message: picks.message,
+  for (const { phase, entry } of enteredPhases(bettor)) {
+    const s = phaseStanding(existing, entry, phase, rules, {
+      is_player: bettor.is_player,
+      bettor_user_id: bettor.user_id,
     })
-  const total = checkTournamentTotal(existing, entryFee)
-  if (!total.exact && total.message)
-    items.push({ tone: "warning", title: "Not balanced yet", message: total.message })
-  if (items.length === 0)
-    items.push({
-      tone: "success",
-      title: "You're balanced",
-      message: `You've wagered your full $${entryFee} and made the pick minimum. You're locked in.`,
-    })
+    if (options.closed?.[phase]) {
+      items.push(
+        s.complete
+          ? {
+              tone: "success",
+              title: `Phase ${phase} is locked in`,
+              message: `You wagered your full $${entry} with ${s.pick_count} picks.`,
+              phase,
+            }
+          : { tone: "info", title: `Phase ${phase} is closed`, message: finalSentence(s), phase }
+      )
+      continue
+    }
+    if (s.complete) {
+      items.push({
+        tone: "success",
+        title: `Phase ${phase} is balanced`,
+        message: `You've wagered your full $${entry} in Phase ${phase} and made the pick minimum. You're locked in.`,
+        phase,
+      })
+      continue
+    }
+    for (const issue of s.issues) {
+      items.push({ tone: issue.tone, title: titleFor(issue.code, phase), message: issue.message, phase })
+    }
+  }
   return items
 }
