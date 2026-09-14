@@ -91,6 +91,9 @@ TABLES=(
   bets
   bet_picks
   bet_placements
+  # Sprint 30's entry requests. Parent rows are users + tournaments, both
+  # above; not money (never a pool input), so not in take_snapshot() either.
+  entry_requests
   # Sprint 26's profile copy. No foreign keys — the join to users is by
   # display_name, so it restores independently of the parent-first ordering.
   player_profile_seed

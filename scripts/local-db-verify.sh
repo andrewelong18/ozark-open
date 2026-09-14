@@ -76,13 +76,17 @@ echo "    applied seed-sample-phase1.sql"
 echo "==> policy manifest (every RLS policy, against the checked-in expectation)"
 node --experimental-strip-types "$REPO/scripts/policy-manifest.ts" ${POLICY_MANIFEST_WRITE:+--write}
 
-echo "==> round trips (import → placement RLS → users RLS → payout view → onboarding guard → collection → snapshots → snapshot restore)"
+echo "==> round trips (import → placement RLS → users RLS → entry requests → activity → payout view → onboarding guard → profile seed → collection → snapshots → snapshot restore)"
 node --experimental-strip-types "$REPO/scripts/import-roundtrip.ts"
 node --experimental-strip-types "$REPO/scripts/placement-roundtrip.ts"
 # users RLS (#154) runs after placement-roundtrip, which installs the
 # GUC-backed auth.uid() these scripts share. Covers the POLICY layer;
 # onboarding-guard-roundtrip below covers the guard TRIGGER layer.
 node --experimental-strip-types "$REPO/scripts/users-rls-roundtrip.ts"
+# Sprint 30's entry request: one row per member, immutable from their side.
+# Same plumbing as users-rls-roundtrip, and every denial is asserted on the
+# value read back, not on a throw — an absent policy is a silent no-op.
+node --experimental-strip-types "$REPO/scripts/entry-request-roundtrip.ts"
 # The activity feed's SECURITY DEFINER read. Runs after users-rls-roundtrip for
 # the same reason it does: the GUC-backed auth.uid() is installed by then.
 node --experimental-strip-types "$REPO/scripts/activity-rls-roundtrip.ts"
