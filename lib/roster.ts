@@ -1,8 +1,9 @@
 // Admin roster (Sprint 10): the pure half of /admin/people — merging the
 // expected roster (tournament_invites), everyone who has actually signed in
-// (users), who's approved to bet (tournament_participants) and when each
-// last logged in (admin_auth_activity) into one row per person, each with a
-// single derived status.
+// (users), who's approved to bet (tournament_participants), what each asked
+// to put in (entry_requests, Sprint 30) and when each last logged in
+// (admin_auth_activity) into one row per person, each with a single derived
+// status.
 //
 // Sprint 20 made this the ONLY derivation behind the admin people console —
 // the old /admin/participants page derived its own pending/approved split and
@@ -24,8 +25,8 @@ export type RosterReason =
   | "no_account" // invited, never signed in
   | "not_onboarded" // signed in, never finished /onboarding
   | "not_approved" // onboarded, but no tournament_participants row
-  | "fee_unset" // participant row with a non-positive fee (hand-edited)
-  | "revoked" // approved once, access revoked — the row and fee are kept
+  | "fee_unset" // participant row with no entry in either phase
+  | "revoked" // approved once, access revoked — the row and entries are kept
   | "ready"
 
 export type InviteQueryRow = {
@@ -43,21 +44,40 @@ export type UserQueryRow = {
   onboarded_at?: string | null
 }
 
-/** PostgREST may hand ints back as strings — entry_fee is coerced, not trusted. */
+/** PostgREST may hand ints back as strings — entries are coerced, not trusted. */
 export type ParticipantQueryRow = {
   user_id: string
-  entry_fee?: number | string | null
+  /** Sprint 30: one entry per phase; NULL = not in that phase. */
+  phase1_entry_fee?: number | string | null
+  phase2_entry_fee?: number | string | null
   is_player?: boolean | null
-  /** Non-null = access revoked; the row and its fee are kept (Sprint 21 / #91). */
+  /** Non-null = access revoked; the row and its entries are kept (Sprint 21 / #91). */
   revoked_at?: string | null
   /** Entry money collected. Absent on a database that predates the column. */
   paid_amount?: number | string | null
   paid_note?: string | null
 }
 
+/** What a member asked for on the entry request (Sprint 30 / A26). */
+export type EntryRequestQueryRow = {
+  user_id: string
+  phase1_amount?: number | string | null
+  phase2_amount?: number | string | null
+  is_player?: boolean | null
+  created_at?: string | null
+}
+
 export type AuthActivityQueryRow = {
   user_id: string
   last_sign_in_at?: string | null
+}
+
+/** The request as the console shows it, next to the approve form it prefills. */
+export type RosterRequest = {
+  phase1_amount: number
+  phase2_amount: number
+  is_player: boolean
+  created_at: string | null
 }
 
 /** One human on the roster, registered or not. */
@@ -75,6 +95,11 @@ export type RosterPerson = {
   /** On this tournament's invite roster. */
   invited: boolean
   onboarded: boolean
+  /** The phase entries as recorded; null = not in that phase. */
+  phase1_entry_fee: number | null
+  phase2_entry_fee: number | null
+  /** What they owe: the sum of the entries they are in. null when there is
+   *  no participant row or no entry recorded on it. */
   entry_fee: number | null
   /** null when there's no participant row; the edit form pre-fills from it. */
   is_player: boolean | null
@@ -84,6 +109,8 @@ export type RosterPerson = {
   paid_amount: number
   /** How it arrived, in the admin's own words. */
   paid_note: string | null
+  /** Their one-time entry request, if they made one. */
+  request: RosterRequest | null
   last_sign_in_at: string | null
   status: RosterStatus
   reason: RosterReason
@@ -102,8 +129,9 @@ export type FunnelStage =
  *
  * `fee_unset` lands in `awaiting_approval`: it IS still awaiting a valid
  * approval. Its row still gets Edit/Revoke rather than Approve, because the
- * participant row already exists — a hand-edit anomaly that should approximately
- * never fire, surfaced honestly rather than hidden.
+ * participant row already exists — since Sprint 30 that is the ordinary state
+ * of a member whose entries were cleared in the rollout, and of anyone
+ * approved before their money was recorded.
  *
  * `revoked` lands there too, and deliberately gets Approve: re-approving is
  * exactly what an admin wants next, and the POST clears `revoked_at`.
@@ -135,6 +163,8 @@ export type Roster = {
     notReady: number
     ready: number
     admins: number
+    /** Requests waiting on an approval — the admin's Venmo-checking queue. */
+    requested: number
   }
   /** False when no invites are entered yet, so the page can suppress the
    * "not on the invite list" note that would otherwise fire for everyone. */
@@ -150,18 +180,27 @@ function trimmed(value: string | null | undefined): string {
   return (value ?? "").trim()
 }
 
+/** A phase entry, or null for NULL, blank, zero or nonsense. */
+function entry(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 const STATUS_RANK: Record<RosterStatus, number> = {
   not_registered: 0,
   not_ready: 1,
   ready: 2,
 }
 
-/** Merge the four reads into one row per person with a derived status. */
+/** Merge the reads into one row per person with a derived status. */
 export function buildRoster(input: {
   invites: InviteQueryRow[]
   users: UserQueryRow[]
   participants: ParticipantQueryRow[]
   authActivity: AuthActivityQueryRow[]
+  /** Optional so callers that predate Sprint 30 still build. */
+  requests?: EntryRequestQueryRow[]
 }): Roster {
   const usersByEmail = new Map<string, UserQueryRow>()
   for (const u of input.users) {
@@ -171,6 +210,9 @@ export function buildRoster(input: {
 
   const participantByUser = new Map<string, ParticipantQueryRow>()
   for (const p of input.participants) participantByUser.set(p.user_id, p)
+
+  const requestByUser = new Map<string, EntryRequestQueryRow>()
+  for (const r of input.requests ?? []) requestByUser.set(r.user_id, r)
 
   // An empty map (RPC blocked or failed) just means every row reads "Never".
   const lastSignInByUser = new Map<string, string | null>()
@@ -185,21 +227,22 @@ export function buildRoster(input: {
   ): RosterPerson {
     const email = trimmed(user.email)
     const participant = participantByUser.get(user.id)
-    const fee = Number(participant?.entry_fee)
-    const hasFee = participant !== undefined && Number.isFinite(fee) && fee > 0
+    const phase1 = entry(participant?.phase1_entry_fee)
+    const phase2 = entry(participant?.phase2_entry_fee)
+    const hasFee = participant !== undefined && (phase1 !== null || phase2 !== null)
     const revoked =
       participant !== undefined && trimmed(participant.revoked_at) !== ""
 
     let status: RosterStatus
     let reason: RosterReason
     if (revoked) {
-      // The row survives a revoke so the fee comes back on re-approval, but
+      // The row survives a revoke so the entries come back on re-approval, but
       // it no longer means "approved to bet" (Sprint 21 / #91).
       status = "not_ready"
       reason = "revoked"
     } else if (hasFee) {
-      // A live participant row is the betting gate (PRD §12 A11, refined by
-      // #91: row exists AND not revoked) — a member the admin approved is
+      // A live participant row with an entry is the betting gate (PRD §12
+      // A11, refined by #91 and ADR 0002) — a member the admin approved is
       // ready even if they never finished onboarding. This page must not
       // disagree with what the app actually allows.
       status = "ready"
@@ -215,6 +258,16 @@ export function buildRoster(input: {
       reason = "not_approved"
     }
 
+    const req = requestByUser.get(user.id)
+    const request: RosterRequest | null = req
+      ? {
+          phase1_amount: Math.max(0, Number(req.phase1_amount) || 0),
+          phase2_amount: Math.max(0, Number(req.phase2_amount) || 0),
+          is_player: req.is_player !== false,
+          created_at: trimmed(req.created_at) || null,
+        }
+      : null
+
     return {
       key: user.id,
       user_id: user.id,
@@ -225,11 +278,14 @@ export function buildRoster(input: {
       is_admin: Boolean(user.is_admin),
       invited,
       onboarded: trimmed(user.onboarded_at) !== "",
-      entry_fee: hasFee ? fee : null,
+      phase1_entry_fee: phase1,
+      phase2_entry_fee: phase2,
+      entry_fee: hasFee ? (phase1 ?? 0) + (phase2 ?? 0) : null,
       // Undefined on the row means the schema default (true) applied.
       is_player: participant === undefined ? null : participant.is_player !== false,
       paid_amount: Math.max(0, Number(participant?.paid_amount) || 0),
       paid_note: trimmed(participant?.paid_note) || null,
+      request,
       last_sign_in_at: lastSignInByUser.get(user.id) ?? null,
       status,
       reason,
@@ -265,10 +321,13 @@ export function buildRoster(input: {
       is_admin: false,
       invited: true,
       onboarded: false,
+      phase1_entry_fee: null,
+      phase2_entry_fee: null,
       entry_fee: null,
       is_player: null,
       paid_amount: 0,
       paid_note: null,
+      request: null,
       last_sign_in_at: null,
       status: "not_registered",
       reason: "no_account",
@@ -313,6 +372,7 @@ export function buildRoster(input: {
       notReady: notReady.length,
       ready: ready.length,
       admins: people.filter((p) => p.is_admin).length,
+      requested: people.filter((p) => p.request !== null && p.status !== "ready").length,
     },
     hasInvites: input.invites.some((i) => normalizeEmail(i.email) !== ""),
   }

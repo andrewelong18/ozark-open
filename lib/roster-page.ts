@@ -8,9 +8,10 @@
 //
 // Three conditions, and each one is load-bearing:
 //
-//   a live participant row (entry_fee > 0, revoked_at IS NULL) — the app's
-//   existing betting gate (PRD §12 A11, refined by #91), so the roster can't
-//   disagree with who the rest of the app treats as signed up; and
+//   a live participant row with an entry in either phase (revoked_at IS NULL)
+//   — the app's betting gate (PRD §12 A11, refined by #91 and ADR 0002), so
+//   the roster can't disagree with who the rest of the app treats as signed
+//   up; and
 //
 //   is_player — a member approved to BET isn't necessarily swinging a club,
 //   and a page called Roster that lists them is lying about the field.
@@ -26,11 +27,12 @@ export type RosterUserRow = {
   avatar_url?: string | null
 }
 
-/** A tournament_participants row. PostgREST may hand entry_fee back as a
- *  string, so it is coerced, never trusted. */
+/** A tournament_participants row. PostgREST may hand the entries back as
+ *  strings, so they are coerced, never trusted. */
 export type RosterParticipantRow = {
   user_id: string
-  entry_fee?: number | string | null
+  phase1_entry_fee?: number | string | null
+  phase2_entry_fee?: number | string | null
   is_player?: boolean | null
   revoked_at?: string | null
 }
@@ -48,10 +50,16 @@ function trimmed(value: string | null | undefined): string {
   return (value ?? "").trim()
 }
 
-/** Registered, approved, not revoked, and actually golfing. */
+function entered(value: number | string | null | undefined): boolean {
+  if (value === null || value === undefined || value === "") return false
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0
+}
+
+/** Registered, approved into at least one phase, not revoked, and actually
+ *  golfing. */
 export function isFieldParticipant(row: RosterParticipantRow): boolean {
-  const fee = Number(row.entry_fee)
-  if (!Number.isFinite(fee) || fee <= 0) return false
+  if (!entered(row.phase1_entry_fee) && !entered(row.phase2_entry_fee)) return false
   if (trimmed(row.revoked_at) !== "") return false
   // Undefined on the row means the schema default (true) applied.
   return row.is_player !== false
