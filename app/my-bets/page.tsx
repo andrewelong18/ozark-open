@@ -236,14 +236,17 @@ export default async function MyBetsPage() {
             enteredPhases.map((phase) => {
               const s = standings[phase]!
               return (
-                <BudgetModule
-                  key={phase}
-                  label={`Phase ${phase}`}
-                  wagered={s.wagered}
-                  entryFee={s.entry}
-                  picksLine={`${s.pick_count} ${s.pick_count === 1 ? "pick" : "picks"} · ${rules.min_picks_per_phase} min`}
-                  balanced={s.complete}
-                />
+                // The wrapper names the phase for tests: the module's own
+                // testids repeat once per bar.
+                <div key={phase} data-testid={`budget-phase-${phase}`}>
+                  <BudgetModule
+                    label={`Phase ${phase}`}
+                    wagered={s.wagered}
+                    entryFee={s.entry}
+                    picksLine={`${s.pick_count} ${s.pick_count === 1 ? "pick" : "picks"} · ${rules.min_picks_per_phase} min`}
+                    balanced={s.complete}
+                  />
+                </div>
               )
             })
           )}

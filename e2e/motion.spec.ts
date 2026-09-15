@@ -41,7 +41,6 @@
 import { expect, test, type Page } from "@playwright/test"
 
 import { ACCOUNTS, deletePlacementsFor, signInAs } from "./fixtures/auth.ts"
-import { setEntryFee } from "./fixtures/rules.ts"
 
 // Matches the gauntlet's helper: scope past Next's empty route-announcer alert.
 function refusal(page: Page, fragment: string) {
@@ -57,29 +56,23 @@ async function provokeToast(page: Page) {
     .filter({ has: page.getByText("Dan Mercer", { exact: true }) })
     .filter({ has: page.getByRole("button", { name: "Place stake" }) })
     .last()
-  // $13 against a $25 entry trips the max-single-bet floor (0.5 × 25 = 12.5 →
-  // $12). Borrowed from e2e/rules-gauntlet.spec.ts, which proves the rule
-  // itself; here the refusal is only a way to summon the toast.
-  await row.getByRole("textbox").fill("13")
+  // $11 is over the flat $10 max single bet (Sprint 30). Borrowed from
+  // e2e/rules-gauntlet.spec.ts, which proves the rule itself; here the
+  // refusal is only a way to summon the toast.
+  await row.getByRole("textbox").fill("11")
   await row.getByRole("button", { name: "Place stake" }).click()
   await page.getByRole("button", { name: /^Confirm bet$/ }).click()
 }
 
-// The seeded entry fee, which every other spec assumes. This file lowers it to
-// provoke a refusal and MUST put it back: specs share one database and run in
-// filename order, so "motion" lands before "placement", and leaving the fee at
-// $25 fails placement.spec.ts on an assertion about "$30 entry" that has
-// nothing to do with motion. (It did, on the first full run.)
-const SEEDED_ENTRY = 30
-
+// The refusal no longer needs the entry moved: since Sprint 30 the max single
+// bet is a flat $10 at every entry, so this file leaves approved@'s seeded
+// entries alone and only clears its wagers.
 test.beforeEach(async () => {
   await deletePlacementsFor(ACCOUNTS.approved)
-  await setEntryFee(ACCOUNTS.approved, 25)
 })
 
 test.afterAll(async () => {
   await deletePlacementsFor(ACCOUNTS.approved)
-  await setEntryFee(ACCOUNTS.approved, SEEDED_ENTRY)
 })
 
 for (const motion of ["no-preference", "reduce"] as const) {

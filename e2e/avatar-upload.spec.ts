@@ -51,7 +51,9 @@ test("a new member can attach a photo during onboarding", async ({ page }) => {
     await page.getByRole("button", { name: "Next", exact: true }).click()
     await expect(page.getByText(`${step} of 4`)).toBeVisible()
   }
-  await page.getByRole("button", { name: "Start betting" }).click()
+  // The entry request follows (Sprint 30); this spec is about the photo, so skip it.
+  await page.getByRole("button", { name: "Next", exact: true }).click()
+  await page.getByTestId("entry-skip").click()
   await expect(page).toHaveURL(/\/bets/)
 
   // #90's "Done when": the photo is visible afterwards. The header avatar

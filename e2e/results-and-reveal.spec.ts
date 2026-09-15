@@ -144,32 +144,74 @@ test("results publish, and the pari-mutuel split renders", async ({ page }) => {
   // banner suppresses the leader row and is the #108 inflation guard.
   await expect(page.getByText(/Provisional/)).toHaveCount(0)
 
-  // The pool is the sum of every non-revoked entry fee, less voided stakes.
+  // The pool badge. Since Sprint 30 (ADR 0002) each phase is its own pot, and
+  // the board opens on Phase 1 here: its bets are all closed, while this
+  // fixture's Phase 2 was never published, so Phase 2 (and Combined) can't be
+  // shown yet. The Phase 1 pool is every Phase 1 entrant's COMMITTED money —
+  // min(entry, max(wagered, $20)) — less voided stakes, computed below from
+  // the database rather than restated from the page.
   //
-  // `exact` used to be load-bearing: the page said "Pool $N" twice — once in
-  // the gold header badge, once inside the copyable settlement summary, whose
-  // line read "Pool $N · 3 entries" — so a substring match hit both and failed
-  // strict mode. That summary was removed on Sept 8, 2026, leaving the badge as
-  // the only "Pool $N" on the page. `exact` stays: it pins the assertion to the
-  // badge, which is the element this test is actually about.
-  const pool = await sumEntryFees()
-  await expect(page.getByText(`Pool $${pool}`, { exact: true })).toBeVisible()
+  // `exact` pins the assertion to the badge: "Pool $N" appears nowhere else.
+  await expect(page.getByRole("button", { name: "Phase 1", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  )
+  const pool = await phaseOnePool()
+  await expect(page.getByText(`Pool ${pool}`, { exact: true })).toBeVisible()
   await expect(page.getByText("Biggest Winner")).toBeVisible()
   await expect(page.getByText("Avery Approved").first()).toBeVisible()
+
+  // Phase 2 was never published, so its tab shows the pot and says why there
+  // are no standings — it never renders a split of rows it can't see.
+  await page.getByRole("button", { name: "Phase 2", exact: true }).click()
+  await expect(page.getByTestId("standings-unrevealed")).toContainText(
+    "Standings appear once Phase 2's bets have closed."
+  )
 })
 
-/** Entry fees of everyone still in the pool — the pari-mutuel denominator. */
-async function sumEntryFees(): Promise<number> {
+/**
+ * The Phase 1 pool as ADR 0002 defines it, from the rows: for everyone still
+ * in with a Phase 1 entry, min(entry, max(wagered in Phase 1, entry_fee_min)),
+ * summed, less the Phase 1 voided stakes. Formatted the way the badge formats
+ * money — whole dollars stay whole.
+ */
+async function phaseOnePool(): Promise<string> {
   const { createClient } = await import("@supabase/supabase-js")
   const { magicLinkConfigFromEnv } = await import("../scripts/magic-link.ts")
   const { supabaseUrl, serviceRoleKey } = magicLinkConfigFromEnv()
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
-  const { data, error } = await supabase
+
+  const { data: tournament, error: tournamentError } = await supabase
+    .from("tournaments")
+    .select("id, entry_fee_min")
+    .eq("year", 2026)
+    .single()
+  if (tournamentError || !tournament) throw new Error(`No 2026 tournament: ${tournamentError?.message}`)
+
+  const { data: participants, error: participantError } = await supabase
     .from("tournament_participants")
-    .select("entry_fee")
+    .select("user_id, phase1_entry_fee")
+    .eq("tournament_id", tournament.id)
     .is("revoked_at", null)
-  if (error) throw new Error(`Couldn't total the entry fees: ${error.message}`)
-  return (data ?? []).reduce((sum, row) => sum + (row.entry_fee as number), 0)
+    .not("phase1_entry_fee", "is", null)
+  if (participantError) throw new Error(`Couldn't read the entries: ${participantError.message}`)
+
+  const { data: rows, error: rowsError } = await supabase
+    .from("placement_payouts_view")
+    .select("user_id, amount, refunded_stake")
+    .eq("tournament_id", tournament.id)
+    .eq("phase", 1)
+  if (rowsError) throw new Error(`Couldn't read the payout view: ${rowsError.message}`)
+
+  let pool = 0
+  for (const p of participants ?? []) {
+    const mine = (rows ?? []).filter((r) => r.user_id === p.user_id)
+    const wagered = mine.reduce((sum, r) => sum + Number(r.amount), 0)
+    const voided = mine.reduce((sum, r) => sum + Number(r.refunded_stake ?? 0), 0)
+    const entry = Number(p.phase1_entry_fee)
+    pool += Math.min(entry, Math.max(wagered, tournament.entry_fee_min)) - voided
+  }
+  return Number.isInteger(pool) ? `$${pool}` : `$${pool.toFixed(2)}`
 }

@@ -202,7 +202,7 @@ test.describe("placement celebration", () => {
     })
 
     // An edit is still money moving, so it still celebrates.
-    await stage(page, "bet-1", "Dan Mercer", "12")
+    await stage(page, "bet-1", "Dan Mercer", "8")
     await page.getByRole("button", { name: "Confirm change" }).click()
     await expect(card(page)).toHaveAttribute("data-state", "open")
     await expect(card(page)).toHaveAttribute("data-state", "idle", {
@@ -220,10 +220,10 @@ test.describe("placement celebration", () => {
   })
 
   test("a rejected wager does not celebrate", async ({ page }) => {
-    // $16 is over the §7 max single bet ($15 on a $30 entry) — the server
+    // $11 is over the §7 max single bet (a flat $10, Sprint 30) — the server
     // refuses it. onPlaced fires on the API's confirmation, never the click,
     // and this is the assertion that keeps it that way.
-    await stage(page, "bet-1", "Dan Mercer", "16")
+    await stage(page, "bet-1", "Dan Mercer", "11")
     await page.getByRole("button", { name: "Confirm bet" }).click()
 
     await expect(

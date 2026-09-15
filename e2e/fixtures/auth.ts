@@ -110,4 +110,7 @@ export async function resetOnboarding(email: string): Promise<void> {
   if (error) throw new Error(`Couldn't reset onboarding for ${email}: ${error.message}`)
 
   await supabase.from("tournament_participants").delete().eq("user_id", userId)
+  // And their one-time entry request (Sprint 30), or the onboarding journey
+  // would skip its entry step on every run after the first.
+  await supabase.from("entry_requests").delete().eq("user_id", userId)
 }

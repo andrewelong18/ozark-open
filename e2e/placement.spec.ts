@@ -11,7 +11,9 @@ import { test } from "@playwright/test"
 
 import { ACCOUNTS, deletePlacementsFor, signInAs } from "./fixtures/auth.ts"
 
-/** approved@ is seeded at a $30 entry (supabase/seed-dev-accounts.sql). */
+/** approved@ is seeded at $30 in each phase (supabase/seed-dev-accounts.sql);
+ * the sample menu is Phase 1, so this is the budget every wager here counts
+ * against. */
 const ENTRY_FEE = 30
 
 /** The stake box on a given pick row, found via the pick's name — as TEXT: an
@@ -30,7 +32,7 @@ function stakeRow(page: Page, betTestId: string, pickName: string) {
  * until the bar moved here from the dashboard). Testid, not text: a bare $10
  * matches four things on the page, and "$1" is inside "$10 of $40". */
 function totalWagered(page: Page) {
-  return page.getByTestId("budget-wagered")
+  return page.getByTestId("budget-phase-1").getByTestId("budget-wagered")
 }
 
 async function place(page: Page, betTestId: string, pickName: string, amount: string) {
@@ -58,20 +60,20 @@ test("place, edit and remove a wager, with My Bets following each step", async (
   await page.goto("/my-bets")
   // The budget bar carries both numbers the Total Wagered and Remaining
   // Budget stat cards used to: what's wagered, and the entry it has to reach.
-  await expect(page.getByTestId("budget-summary")).toHaveText(
+  await expect(page.getByTestId("budget-phase-1").getByTestId("budget-summary")).toHaveText(
     `$10 of $${ENTRY_FEE}`
   )
   await expect(page.getByText("Dan Mercer")).toBeVisible()
 
   // --- edit ----------------------------------------------------------------
   await page.goto("/bets")
-  await place(page, "bet-1", "Dan Mercer", "12")
+  await place(page, "bet-1", "Dan Mercer", "8")
   await expect(page.getByRole("button", { name: "Confirm change" })).toBeVisible()
   await page.getByRole("button", { name: "Confirm change" }).click()
   await expect(page.getByText("Locked in")).toBeVisible()
 
   await page.goto("/my-bets")
-  await expect(totalWagered(page)).toHaveText("$12")
+  await expect(totalWagered(page)).toHaveText("$8")
 
   // --- remove --------------------------------------------------------------
   await page.goto("/bets")
@@ -83,9 +85,9 @@ test("place, edit and remove a wager, with My Bets following each step", async (
 })
 
 test("a §7 violation is refused by the server and shown verbatim", async ({ page }) => {
-  // Max single bet is 50% of the entry, capped at $20 — $15 on a $30 entry.
-  // $16 is one dollar over, so this tests the rule and not a typo guard.
-  await place(page, "bet-1", "Dan Mercer", "16")
+  // Max single bet is a flat $10 at every entry (Sprint 30). $11 is one
+  // dollar over, so this tests the rule and not a typo guard.
+  await place(page, "bet-1", "Dan Mercer", "11")
   await page.getByRole("button", { name: "Confirm bet" }).click()
 
   // The server's message, rendered verbatim — not a generic "something went
@@ -93,7 +95,7 @@ test("a §7 violation is refused by the server and shown verbatim", async ({ pag
   // Scoped past Next's route announcer, which is also role="alert" and empty.
   const alert = page.getByRole("alert").filter({ hasText: "Max single bet" })
   await expect(alert).toBeVisible()
-  await expect(alert).toContainText(`Max single bet is $15 for your $${ENTRY_FEE} entry.`)
+  await expect(alert).toContainText("Max single bet is $10.")
 
   // Refused means refused: nothing was written.
   await page.goto("/my-bets")
