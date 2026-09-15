@@ -5,6 +5,7 @@ import { LoadError } from "@/components/modules/load-error"
 import { buildChaseList, closingPhase, type ChaseParticipant } from "@/lib/chase"
 import {
   toPhaseClock,
+  toPhaseEntry,
   toTournamentRules,
   TOURNAMENT_CLOCK_COLUMNS,
   TOURNAMENT_RULE_COLUMNS,
@@ -98,7 +99,7 @@ export default async function AdminClosePage() {
   // about who is even in (Sprint 21 / #91).
   const { data: participantData, error: participantError } = await supabase
     .from("tournament_participants")
-    .select("user_id, entry_fee, users ( display_name )")
+    .select("user_id, phase1_entry_fee, phase2_entry_fee, is_player, users ( display_name )")
     .eq("tournament_id", tournament.id)
     .is("revoked_at", null)
   if (participantError) {
@@ -114,7 +115,9 @@ export default async function AdminClosePage() {
   const participants: ChaseParticipant[] = (
     (participantData ?? []) as {
       user_id: string
-      entry_fee: number
+      phase1_entry_fee: unknown
+      phase2_entry_fee: unknown
+      is_player: boolean
       users: UserJoin | UserJoin[] | null
     }[]
   ).map((p) => {
@@ -122,13 +125,20 @@ export default async function AdminClosePage() {
     return {
       user_id: p.user_id,
       display_name: joined?.display_name ?? "Unknown bettor",
-      entry_fee: Number(p.entry_fee),
+      is_player: p.is_player,
+      phase1_entry_fee: toPhaseEntry(p.phase1_entry_fee),
+      phase2_entry_fee: toPhaseEntry(p.phase2_entry_fee),
     }
   })
 
+  // `player_user_id` rides along so the standing can count self-bets: at
+  // close, money on yourself over a quarter of what you wagered stops
+  // counting (ADR 0002), and that is a reason to text someone.
   const { data: placementData, error: placementError } = await supabase
     .from("bet_placements")
-    .select("user_id, pick_id, amount, bet_picks ( bet_id, bets ( phase, tournament_id ) )")
+    .select(
+      "user_id, pick_id, amount, bet_picks ( bet_id, player_user_id, bets ( phase, tournament_id ) )"
+    )
     .is("deleted_at", null)
   // The chase list is built from these. Empty means "nobody owes a pick",
   // which is the single most expensive thing to be wrong about at close.
@@ -142,7 +152,11 @@ export default async function AdminClosePage() {
   }
 
   type BetJoin = { phase: number; tournament_id: string }
-  type PickJoin = { bet_id: string; bets: BetJoin | BetJoin[] | null }
+  type PickJoin = {
+    bet_id: string
+    player_user_id?: string | null
+    bets: BetJoin | BetJoin[] | null
+  }
   const byUser = new Map<string, ExistingPlacement[]>()
   for (const row of (placementData ?? []) as {
     user_id: string
@@ -160,7 +174,7 @@ export default async function AdminClosePage() {
       bet_id: pick!.bet_id,
       phase: bet.phase,
       amount: Number(row.amount),
-      pick_player_user_id: null,
+      pick_player_user_id: pick!.player_user_id ?? null,
     })
     byUser.set(row.user_id, list)
   }

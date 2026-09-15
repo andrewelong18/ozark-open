@@ -95,8 +95,8 @@ run_sql -c "
       ('pleicht17@gmail.com','Pat Leicht')
     ) AS v(email, name)
    WHERE public.users.email = v.email;
-  INSERT INTO public.tournament_participants (user_id, tournament_id, entry_fee, is_player)
-  SELECT u.id, t.id, 20, true FROM public.users u
+  INSERT INTO public.tournament_participants (user_id, tournament_id, phase1_entry_fee, phase2_entry_fee, is_player)
+  SELECT u.id, t.id, 20, 20, true FROM public.users u
     CROSS JOIN (SELECT id FROM public.tournaments WHERE year = 2026) t;"
 
 echo "==> generate the dry-run sheets"

@@ -411,6 +411,25 @@ export function validateSheet(parsed: ParsedSheet): ValidationResult {
     }
   }
 
+  // A Match is two golfers head to head — exactly two picks (Sprint 30). Pat:
+  // "the app should reject imports if there is a Match category bet if there
+  // is anything other than two picks. That's usually a mistake on my end." A
+  // hard block like any other contract error, so the whole file is refused.
+  // Group Match is deliberately NOT checked here; its pick count is an open
+  // question for Pat. Only a bet whose rows all say Match is counted — a
+  // category conflict is already reported above, and one error per mistake
+  // reads better than two.
+  for (const [betId, group] of betRows) {
+    if (!group.every((r) => r.category === "Match")) continue
+    if (group.length === 2) continue
+    errors.push(
+      `bet_id ${betId} ("${group[0].betTitle}") is a Match with ${group.length} ` +
+        `pick${group.length === 1 ? "" : "s"} (rows ${group
+          .map((r) => r.rowNumber)
+          .join(", ")}) — a Match has exactly two.`
+    )
+  }
+
   // Results may only be published on a CLOSED bet (Sprint 22 / #97). This is
   // the one that bit us on Jul 31: Pat uploaded a results-bearing sheet whose
   // bets still read status = open, and the app took it silently — publishing
@@ -806,6 +825,71 @@ export function buildImportPlan(
 
   plan.unmatchedPickNames = [...unmatched].sort((a, b) => a.localeCompare(b))
   return plan
+}
+
+// ---------------------------------------------------------------------------
+// A wager can't change pots (Sprint 30 / ADR 0002)
+//
+// Each phase is its own pot, so a bet (or a single pick) that moves from one
+// phase to the other while carrying wagers moves money between two pools —
+// and no trigger sees it: enforce_placement_total() fires on the placement,
+// not on the bet. The bettor could end up over their Phase 2 entry, or with
+// Phase 1 money earning in the Phase 2 split. So the upload is refused and
+// the admin decides: put it back, or clear the wagers first.
+//
+// `placements` is EVERY placement row, soft-deleted included — the same
+// read the sweep uses. A soft-deleted wager moving pots is harmless on its
+// own, but a restore can bring it back, and the rule is simpler to state
+// (and to trust) as "any wager ever placed on it".
+// ---------------------------------------------------------------------------
+
+export function phaseMoveRefusals(
+  rows: SheetRow[],
+  existingBets: ExistingBet[],
+  existingPicks: ExistingPick[],
+  placements: Pick<PlacementRef, "pick_id">[]
+): string[] {
+  const betById = new Map(existingBets.map((b) => [b.id, b]))
+  const pickBySheetId = new Map(existingPicks.map((p) => [p.sheet_pick_id, p]))
+  const wagersByPick = new Map<string, number>()
+  for (const placement of placements) {
+    wagersByPick.set(placement.pick_id, (wagersByPick.get(placement.pick_id) ?? 0) + 1)
+  }
+
+  // Grouped by the sheet's bet, so a whole bet moving is one sentence rather
+  // than one per pick.
+  const moves = new Map<
+    number,
+    { title: string; from: Set<number>; to: number; wagers: number }
+  >()
+  for (const row of rows) {
+    const pick = pickBySheetId.get(row.sheetPickId)
+    if (!pick) continue
+    const bet = betById.get(pick.bet_id)
+    if (!bet || bet.phase === row.phase) continue
+    const wagers = wagersByPick.get(pick.id) ?? 0
+    if (wagers === 0) continue
+    const move = moves.get(row.sheetBetId) ?? {
+      title: row.betTitle,
+      from: new Set<number>(),
+      to: row.phase,
+      wagers: 0,
+    }
+    move.from.add(bet.phase)
+    move.wagers += wagers
+    moves.set(row.sheetBetId, move)
+  }
+
+  return [...moves.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([betId, move]) => {
+      const from = [...move.from].sort().join(" and ")
+      return (
+        `bet_id ${betId} ("${move.title}") moves to Phase ${move.to} from Phase ${from}, ` +
+        `but ${move.wagers} wager${move.wagers === 1 ? " is" : "s are"} on it — each phase is its own pot, ` +
+        `so a wager can't change phases. Put it back in Phase ${from}, or remove the wagers first.`
+      )
+    })
 }
 
 // ---------------------------------------------------------------------------

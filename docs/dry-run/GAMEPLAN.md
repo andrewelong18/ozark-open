@@ -12,6 +12,9 @@ moving.
 
 ---
 
+
+> **Superseded rules — read this first (Sept 14, 2026).** This script was written for the Jul 31 and Sept 4 sessions under the old single-entry rules: one $20–$50 entry across both phases, a 50%-capped max single bet, a tournament-wide self-bet cap and pick minimum. **Sprint 30 replaced them** — each phase is its own entry ($20–$50), its own 5-pick minimum and its own pot; the max single bet is a flat $10; the self-bet cap is a quarter of the phase entry (ADR 0002, PRD §12 A25). The acts below still walk the lifecycle, but every rejection sentence and dollar figure quoted in them is the old rules'. `supabase/dry-run/` and `scripts/dry-run-verify.sh` **are** current: the SQL slates are per phase, and the verifier asserts the new chase lines and pool identities.
+
 ## How to use this document
 
 Work top to bottom. Tick boxes as you go — `- [x]`. Two roles:

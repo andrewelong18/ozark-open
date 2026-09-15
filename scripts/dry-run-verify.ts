@@ -40,24 +40,27 @@ import {
   type ImportPlan,
   type UserRow,
 } from "../lib/import.ts"
-import type { PhaseClock } from "../lib/phases.ts"
+import type { Phase, PhaseClock } from "../lib/phases.ts"
 import {
   validatePlacement,
-  checkPickMinimum,
-  checkTournamentTotal,
+  phaseStandings,
   maxSingleBet,
   maxSelfBet,
+  type Bettor,
   type ExistingPlacement,
   type TournamentRules,
 } from "../lib/validation.ts"
 import {
-  buildResultsTable,
+  buildResultsTables,
+  cashReturned,
   finalizeReadiness,
   normalizePayoutRows,
   roundCents,
   type PayoutViewQueryRow,
   type ResultsParticipant,
+  type ResultsTable,
 } from "../lib/payouts.ts"
+import { buildChaseList, closingPhase, type ChaseParticipant } from "../lib/chase.ts"
 
 const PGURI = process.env.PGURI ?? "postgresql://localhost:5432/ozark_roundtrip"
 const ROOT = path.join(import.meta.dirname, "..")
@@ -243,7 +246,8 @@ async function upload(file: string, tid: string, opts: { expectIdempotent?: bool
 type SeededPlacement = {
   email: string
   display_name: string
-  entry_fee: number
+  phase1_entry_fee: number | null
+  phase2_entry_fee: number | null
   is_player: boolean
   user_id: string
   pick_id: string
@@ -259,8 +263,8 @@ type SeededPlacement = {
 
 function fetchPlacements(): SeededPlacement[] {
   return queryJson<SeededPlacement[]>(`
-    SELECT u.email, u.display_name, tp.entry_fee, tp.is_player, p.user_id,
-           p.pick_id, pk.bet_id, pk.sheet_pick_id, b.phase, p.amount,
+    SELECT u.email, u.display_name, tp.phase1_entry_fee, tp.phase2_entry_fee, tp.is_player,
+           p.user_id, p.pick_id, pk.bet_id, pk.sheet_pick_id, b.phase, p.amount,
            p.odds_at_placement, pk.player_user_id AS pick_player_user_id,
            c.allows_multiple_picks, b.status AS bet_status
       FROM public.bet_placements p
@@ -268,8 +272,49 @@ function fetchPlacements(): SeededPlacement[] {
       JOIN public.bets b ON b.id = pk.bet_id
       JOIN public.bet_categories c ON c.id = b.category_id
       JOIN public.users u ON u.id = p.user_id
-      JOIN public.tournament_participants tp ON tp.user_id = u.id
-     WHERE p.deleted_at IS NULL`)
+      JOIN public.tournament_participants tp ON tp.user_id = u.id AND tp.tournament_id = b.tournament_id
+     WHERE p.deleted_at IS NULL
+     ORDER BY p.created_at, p.id`)
+}
+
+function bettorOf(row: {
+  user_id: string
+  is_player: boolean
+  phase1_entry_fee: number | null
+  phase2_entry_fee: number | null
+}): Bettor {
+  return {
+    user_id: row.user_id,
+    is_player: row.is_player,
+    phase1_entry_fee: row.phase1_entry_fee,
+    phase2_entry_fee: row.phase2_entry_fee,
+  }
+}
+
+/** Every live participant, as the standings and the chase list read them. */
+function fetchParticipants(tid: string): (ResultsParticipant & ChaseParticipant)[] {
+  return queryJson<(ResultsParticipant & ChaseParticipant)[]>(
+    `SELECT tp.user_id, u.display_name, tp.is_player, tp.phase1_entry_fee, tp.phase2_entry_fee
+       FROM public.tournament_participants tp JOIN public.users u ON u.id = tp.user_id
+      WHERE tp.tournament_id = ${lit(tid)} AND tp.revoked_at IS NULL`
+  )
+}
+
+/** Live placements grouped per bettor, in the shape the rules engine reads. */
+function placementsByUser(): Map<string, ExistingPlacement[]> {
+  const out = new Map<string, ExistingPlacement[]>()
+  for (const r of fetchPlacements()) {
+    const list = out.get(r.user_id) ?? []
+    list.push({
+      pick_id: r.pick_id,
+      bet_id: r.bet_id,
+      phase: r.phase,
+      amount: r.amount,
+      pick_player_user_id: r.pick_player_user_id,
+    })
+    out.set(r.user_id, list)
+  }
+  return out
 }
 
 /**
@@ -303,7 +348,7 @@ function auditPlacements(rules: TournamentRules, label: string) {
     for (const row of slate) {
       const result = validatePlacement(
         {
-          bettor: { user_id: row.user_id, entry_fee: row.entry_fee, is_player: row.is_player },
+          bettor: bettorOf(row),
           pick: { id: row.pick_id, player_user_id: row.pick_player_user_id },
           bet: {
             id: row.bet_id,
@@ -344,9 +389,8 @@ async function main() {
   const tid = runSql("SELECT id FROM public.tournaments WHERE year = 2026")
   if (!tid) throw new Error("No 2026 tournament — apply the migrations first.")
   const rules = queryJson<TournamentRules[]>(
-    `SELECT entry_fee_min, entry_fee_max, min_picks_per_tournament, max_picks_per_phase,
-            max_single_bet_pct::float8 AS max_single_bet_pct, max_single_bet_cap,
-            max_self_bet_pct::float8 AS max_self_bet_pct, max_self_bet_cap
+    `SELECT entry_fee_min, entry_fee_max, min_picks_per_phase, max_single_bet,
+            max_self_bet_pct::float8 AS max_self_bet_pct
        FROM public.tournaments WHERE year = 2026`
   )[0]
 
@@ -398,13 +442,21 @@ async function main() {
              WHERE u.email = 'casey.sideline@dryrun.ozark.test'`) === "f"
   )
 
-  // The derived limits the gameplan quotes at Pat.
-  section("Derived limits per entry fee (lib/validation.ts)")
+  check(
+    "Steve Esswein is entered in Phase 1 only, for $50 — the paid-never-wagered control",
+    runSql(`SELECT tp.phase1_entry_fee || '/' || coalesce(tp.phase2_entry_fee::text, 'none')
+              FROM public.tournament_participants tp JOIN public.users u ON u.id = tp.user_id
+             WHERE u.email = 'esswein93@gmail.com'`) === "50/none"
+  )
+
+  // The derived limits the gameplan quotes at Pat (Sprint 30 / ADR 0002).
+  section("Derived limits per phase entry (lib/validation.ts)")
   for (const fee of [20, 25, 30, 35, 40, 50]) {
-    console.log(`  $${fee} entry → max single $${maxSingleBet(fee, rules)} · max on yourself $${maxSelfBet(fee, rules)}`)
+    console.log(`  $${fee} phase entry → max single $${maxSingleBet(rules)} · max on yourself $${maxSelfBet(fee, rules)}`)
   }
-  check("$25 entry floors to $12, not $13", maxSingleBet(25, rules) === 12, `got $${maxSingleBet(25, rules)}`)
-  check("$50 entry is capped at $20, not $25", maxSingleBet(50, rules) === 20, `got $${maxSingleBet(50, rules)}`)
+  check("the max single bet is a flat $10", maxSingleBet(rules) === 10, `got $${maxSingleBet(rules)}`)
+  check("$25 entry floors the self cap to $6, not $7", maxSelfBet(25, rules) === 6, `got $${maxSelfBet(25, rules)}`)
+  check("$50 entry allows $12 on yourself — no $10 hard cap", maxSelfBet(50, rules) === 12, `got $${maxSelfBet(50, rules)}`)
 
   // ── Act 3 · Phase 1 opens ───────────────────────────────────────────────
   section("Act 3 · Phase 1 opens")
@@ -522,26 +574,51 @@ async function main() {
 
   // ── Act 6 · close Phase 1, Round 1 results ──────────────────────────────
   section("Act 6–7 · Phase 1 closes, Round 1 results land")
-  // #98: this used to flag 13 of 14 people on off_exact_total at Phase 1
-  // close, burying the one real straggler. The bar is no longer "Devin is in
-  // there somewhere" — it is that the phone line names him AND NOBODY ELSE.
+  // Since Sprint 30 (ADR 0002) each close is its own reckoning: everyone
+  // entered in Phase 1 whose Phase 1 standing isn't complete gets a text,
+  // because the shortfall is money at THIS close. The board is built so that
+  // is exactly two people — Devin (the straggler) and Steve (paid $50, never
+  // wagered) — and the line has to say what it costs each of them.
   const compliance = runSqlFile(path.join(ROOT, "docs/admin/phase-compliance.sql"))
-  const chaseLine = compliance
-    .split("\n")
-    .find((l) => l.includes("TEXT THESE PEOPLE"))
-    ?.trim() ?? ""
-  console.log(`      ${chaseLine}`)
-  check("the chase list is scoped to the Phase 1 close", /Closing Phase 1/.test(chaseLine), chaseLine)
-  check("it names Devin Arand's 3 picks", /Devin Arand \(3 of 5 picks\)/.test(chaseLine), chaseLine)
+  const chaseLine = (phase: Phase, text: string) =>
+    text
+      .split("\n")
+      .find((l) => l.includes(`Closing Phase ${phase} —`))
+      ?.trim() ?? ""
+  const phase1Line = chaseLine(1, compliance)
+  console.log(`      ${phase1Line}`)
+  check("the chase list is scoped to the Phase 1 close", /^Closing Phase 1 — text these people: /.test(phase1Line), phase1Line)
   check(
-    "and nobody else — one name on the line",
-    chaseLine.split(" — TEXT THESE PEOPLE: ")[1]?.split("), ").length === 1,
-    chaseLine
+    "it names Devin Arand with what his shortfall costs",
+    phase1Line.includes(
+      "Devin Arand ($8 of $20, 3 of 5 picks → $12 forfeits, only $2 of $5 on themselves counts)"
+    ),
+    phase1Line
   )
   check(
-    "off-exact-total alone doesn't chase anyone at Phase 1 close (#98)",
-    !/of \$/.test(chaseLine),
-    chaseLine
+    "it names Steve Esswein, who paid $50 and never wagered",
+    phase1Line.includes("Steve Esswein ($0 of $50, 0 of 5 picks → $20 forfeits, $30 comes back)"),
+    phase1Line
+  )
+  check(
+    "and nobody else — two names on the line",
+    phase1Line.split(": ").slice(1).join(": ").split("), ").length === 2,
+    phase1Line
+  )
+  // The SQL fallback and /admin/close must say the same sentence, word for
+  // word — lib/chase.ts's header makes that promise.
+  const tsPhase1 = buildChaseList(
+    fetchParticipants(tid),
+    placementsByUser(),
+    rules,
+    closingPhase(queryJson<{ phase: number; status: string }[]>(
+      `SELECT phase, status FROM public.bets WHERE tournament_id = ${lit(tid)}`
+    ))
+  )
+  check(
+    "docs/admin/phase-compliance.sql and /admin/close agree, word for word",
+    tsPhase1.line === phase1Line,
+    `SQL: ${phase1Line}\n        TS:  ${tsPhase1.line}`
   )
 
   await upload("2-phase1-closed-r1-results.xlsx", tid)
@@ -603,35 +680,46 @@ async function main() {
   )
   auditPlacements(rules, "both phases")
 
-  // Rule 6 and rule 2's lower bound, evaluated the way Act 9 will.
-  const finalSlates = fetchPlacements()
-  const byUser = new Map<string, SeededPlacement[]>()
-  for (const r of finalSlates) {
-    const list = byUser.get(r.user_id)
-    if (list) list.push(r)
-    else byUser.set(r.user_id, [r])
+  // Every standing, per phase, evaluated the way Act 9 will (Sprint 30 /
+  // ADR 0002). Phase 1 is closed and stands as it stood; Phase 2 is the one
+  // being chased now.
+  const participantsNow = fetchParticipants(tid)
+  const slates = placementsByUser()
+  const incomplete: Record<Phase, string[]> = { 1: [], 2: [] }
+  for (const p of participantsNow) {
+    const standings = phaseStandings(slates.get(p.user_id) ?? [], bettorOf(p), rules)
+    for (const phase of [1, 2] as const) {
+      if (standings[phase] && !standings[phase]!.complete) incomplete[phase].push(p.display_name)
+    }
   }
-  let offExact = 0
-  let underMin = 0
-  for (const [, slate] of byUser) {
-    const existing: ExistingPlacement[] = slate.map((r) => ({
-      pick_id: r.pick_id, bet_id: r.bet_id, phase: r.phase, amount: r.amount,
-      pick_player_user_id: r.pick_player_user_id,
-    }))
-    if (!checkTournamentTotal(existing, slate[0].entry_fee).exact) offExact++
-    if (!checkPickMinimum(existing, rules).meets_minimum) underMin++
-  }
-  check("exactly one bettor is off the exact total (Devin)", offExact === 1, `${offExact} off`)
-  // Deliberately changed by #96, not relaxed. Devin's 3 Phase 1 + 5 Phase 2 = 8
-  // picks used to flag on the per-phase minimum; against a tournament-wide
-  // minimum of 5 his split is legal, which is the whole point of the rule
-  // change. He is STILL the one bettor who needs a text — on the exact total,
-  // asserted above. If this ever reads 1 again, a per-phase minimum is back.
   check(
-    "no bettor is under the tournament-wide minimum — Devin's 3+5 split is legal now (#96)",
-    underMin === 0,
-    `${underMin} under`
+    "Phase 1 stands with exactly Devin and Steve incomplete",
+    incomplete[1].sort().join(", ") === "Devin Arand, Steve Esswein",
+    incomplete[1].join(", ")
   )
+  check(
+    "Phase 2 has exactly Devin and Mike Vemmer incomplete",
+    incomplete[2].sort().join(", ") === "Devin Arand, Mike Vemmer",
+    incomplete[2].join(", ")
+  )
+  // Phase 1 stragglers are not chased at the Phase 2 close — that phase is
+  // closed — and Steve, with no Phase 2 entry, is counted rather than chased.
+  const phase2Compliance = runSqlFile(path.join(ROOT, "docs/admin/phase-compliance.sql"))
+  const phase2Line = chaseLine(2, phase2Compliance)
+  console.log(`      ${phase2Line}`)
+  check(
+    "the Phase 2 chase line names Devin's $2 forfeit and Pat's worked example on Mike",
+    phase2Line ===
+      "Closing Phase 2 — text these people: Devin Arand ($18 of $20 → $2 forfeits), " +
+        "Mike Vemmer ($20 of $50 → $30 comes back, only $5 of $12 on themselves counts)",
+    phase2Line
+  )
+  const tsPhase2 = buildChaseList(participantsNow, slates, rules, 2)
+  check("and /admin/close says the same sentence", tsPhase2.line === phase2Line, tsPhase2.line)
+  check("Steve is the one approved member with no Phase 2 entry", tsPhase2.not_entered === 1, `${tsPhase2.not_entered}`)
+  const sqlNotEntered =
+    phase2Compliance.match(/approved_but_not_entered_in_closing_phase\s*\n-+\s*\n\s*(\d+)\s*\n/)?.[1] ?? "missing"
+  check("the SQL fallback counts him too", sqlNotEntered === "1", `${sqlNotEntered}`)
 
   await upload("4-phase2-closed-final.xlsx", tid)
   check("every bet is closed", runSql("SELECT count(*) FROM public.bets WHERE status <> 'closed'") === "0")
@@ -645,47 +733,79 @@ async function main() {
   section("Act 10 · final payouts (the expected answer for reconciliation)")
   runSql("UPDATE public.tournaments SET status = 'completed' WHERE year = 2026")
 
-  const payoutRows = normalizePayoutRows(
-    queryJson<PayoutViewQueryRow[]>(
-      `SELECT placement_id, user_id, amount, result, theoretical_payout, refunded_stake
-         FROM public.placement_payouts_view WHERE tournament_id = ${lit(tid)}`
+  const readPayoutRows = () =>
+    normalizePayoutRows(
+      queryJson<PayoutViewQueryRow[]>(
+        `SELECT placement_id, user_id, amount, result, theoretical_payout, refunded_stake, phase, is_self_pick
+           FROM public.placement_payouts_view WHERE tournament_id = ${lit(tid)}`
+      )
     )
-  )
-  const participants = queryJson<ResultsParticipant[]>(
-    `SELECT tp.user_id, u.display_name, tp.entry_fee
-       FROM public.tournament_participants tp JOIN public.users u ON u.id = tp.user_id
-      WHERE tp.tournament_id = ${lit(tid)} AND tp.revoked_at IS NULL`
-  )
-  const table = buildResultsTable(participants, payoutRows)
+  const payoutRows = readPayoutRows()
+  const participants = fetchParticipants(tid)
+  const tables = buildResultsTables(participants, payoutRows, rules)
 
-  const entrySum = participants.reduce((s, p) => s + p.entry_fee, 0)
-  const voided = payoutRows.reduce((s, r) => s + r.refunded, 0)
-  console.log(`\n  Entry fees collected  $${entrySum}`)
-  console.log(`  Voided stakes        −$${voided}`)
-  console.log(`  Pool (void-adjusted)  $${roundCents(table.pool)}`)
-  console.log(`  Σ theoretical         $${roundCents(table.sum_theoretical)}`)
-  console.log(`  Still pending          ${table.pending}\n`)
-  console.log("  " + "Bettor".padEnd(18) + "Entry".padStart(7) + "Theo".padStart(10) + "Refund".padStart(9) + "Actual".padStart(10) + "P/L".padStart(10))
-  console.log("  " + "─".repeat(64))
-  for (const r of table.rows) {
+  // Two pots and their sum (ADR 0002). Each pot splits on its own; Combined
+  // is the per-person sum of the two rows, never a merged split.
+  const printTable = (label: string, table: ResultsTable) => {
+    const refundsVoid = table.rows.reduce((s, r) => s + r.refunded, 0)
+    const refundsUnwagered = table.rows.reduce((s, r) => s + r.refund_unwagered, 0)
+    console.log(`\n  ${label}`)
+    console.log(`  Entries                $${table.entries}`)
+    console.log(`  Unwagered, refunded   −$${roundCents(refundsUnwagered)}`)
+    console.log(`  Voided stakes         −$${roundCents(refundsVoid)}`)
+    console.log(`  Pool                   $${roundCents(table.pool)}`)
+    console.log(`  Σ theoretical          $${roundCents(table.sum_theoretical)}`)
+    console.log(`  Still pending           ${table.pending}\n`)
     console.log(
-      "  " + r.display_name.padEnd(18) +
-        `$${r.entry_fee}`.padStart(7) +
-        `$${roundCents(r.theoretical).toFixed(2)}`.padStart(10) +
-        `$${roundCents(r.refunded).toFixed(2)}`.padStart(9) +
-        `$${roundCents(r.actual).toFixed(2)}`.padStart(10) +
-        `${r.profit_loss >= 0 ? "+" : "−"}$${Math.abs(roundCents(r.profit_loss)).toFixed(2)}`.padStart(10)
+      "  " + "Bettor".padEnd(18) + "Entry".padStart(7) + "Theo".padStart(10) +
+        "Forfeit".padStart(9) + "Refund".padStart(9) + "Actual".padStart(10) + "P/L".padStart(10)
     )
+    console.log("  " + "─".repeat(73))
+    for (const r of table.rows) {
+      console.log(
+        "  " + r.display_name.padEnd(18) +
+          `$${r.entry_fee}`.padStart(7) +
+          `$${roundCents(r.theoretical).toFixed(2)}`.padStart(10) +
+          `$${roundCents(r.forfeit_unwagered + r.forfeit_self).toFixed(2)}`.padStart(9) +
+          `$${roundCents(r.refunded + r.refund_unwagered).toFixed(2)}`.padStart(9) +
+          `$${roundCents(r.actual).toFixed(2)}`.padStart(10) +
+          `${r.profit_loss >= 0 ? "+" : "−"}$${Math.abs(roundCents(r.profit_loss)).toFixed(2)}`.padStart(10)
+      )
+    }
   }
+  printTable("Phase 1 pot", tables[1])
+  printTable("Phase 2 pot", tables[2])
+  printTable("Combined (per-person sum)", tables.combined)
   console.log()
 
-  check("the pool is entry fees minus voided stakes", roundCents(table.pool) === roundCents(entrySum - voided))
+  // The three identities, per pot AND combined (ADR 0002 §1).
+  for (const [label, table] of [
+    ["Phase 1", tables[1]],
+    ["Phase 2", tables[2]],
+    ["Combined", tables.combined],
+  ] as const) {
+    const refunds = table.rows.reduce((s, r) => s + r.refunded + r.refund_unwagered, 0)
+    check(
+      `${label}: every dollar in is the pool plus what comes back`,
+      Math.abs(table.entries - (table.pool + refunds)) < 0.01,
+      `entries $${table.entries} vs pool $${roundCents(table.pool)} + refunds $${roundCents(refunds)}`
+    )
+    check(
+      `${label}: every dollar of the pool is paid out`,
+      Math.abs(table.rows.reduce((s, r) => s + r.actual, 0) - table.pool) < 0.01,
+      `Σ actual = ${roundCents(table.rows.reduce((s, r) => s + r.actual, 0))} vs pool ${roundCents(table.pool)}`
+    )
+    check(
+      `${label}: entry + P/L is the cash that comes back, on every row`,
+      table.rows.every((r) => Math.abs(r.entry_fee + r.profit_loss - cashReturned(r)) < 0.01)
+    )
+    check(`${label}: no placement is left pending`, table.pending === 0)
+  }
   check(
-    "every dollar of the pool is paid out",
-    Math.abs(table.rows.reduce((s, r) => s + r.actual, 0) - table.pool) < 0.01,
-    `Σ actual = ${roundCents(table.rows.reduce((s, r) => s + r.actual, 0))}`
+    "the combined pool is the two pots added",
+    Math.abs(tables.combined.pool - (tables[1].pool + tables[2].pool)) < 0.01
   )
-  check("no placement is left pending", table.pending === 0)
+  check("no placement sits outside a pot", tables[1].dropped_placements + tables[2].dropped_placements === 0)
 
   // Sprint 25 / #108: the guard on the Saturday-night unlock. Everything is
   // settled at this point, so it must say yes — and it must say no the moment
@@ -706,36 +826,66 @@ async function main() {
   )
 
   // And prove the hazard is real rather than theoretical, on this very
-  // dataset: drop one pick back to pending and the same table pays out more
-  // than the pool actually holds.
+  // dataset: drop one Phase 2 hit back to pending and the Phase 2 split
+  // divides by a shrunken Σ theoretical.
   const oneBack = runSql(
-    "SELECT sheet_pick_id FROM public.bet_picks WHERE result = 'hit' ORDER BY sheet_pick_id LIMIT 1"
+    `SELECT pk.sheet_pick_id FROM public.bet_picks pk JOIN public.bets b ON b.id = pk.bet_id
+      WHERE pk.result = 'hit' AND b.phase = 2 ORDER BY pk.sheet_pick_id LIMIT 1`
   )
   runSql(`UPDATE public.bet_picks SET result = 'pending' WHERE sheet_pick_id = ${oneBack}`)
-  const skewed = buildResultsTable(
-    participants,
-    normalizePayoutRows(
-      queryJson<PayoutViewQueryRow[]>(
-        `SELECT placement_id, user_id, amount, result, theoretical_payout, refunded_stake
-           FROM public.placement_payouts_view WHERE tournament_id = ${lit(tid)}`
-      )
-    )
-  )
+  const skewed = buildResultsTables(participants, readPayoutRows(), rules)
   check(
     "with one pick unresolved the shares inflate — the exact silent failure (#108)",
-    skewed.pending > 0 && skewed.sum_theoretical < table.sum_theoretical,
-    `${skewed.pending} pending, Σ theo ${roundCents(skewed.sum_theoretical)} vs ${roundCents(table.sum_theoretical)}`
+    skewed[2].pending > 0 && skewed[2].sum_theoretical < tables[2].sum_theoretical,
+    `${skewed[2].pending} pending, Σ theo ${roundCents(skewed[2].sum_theoretical)} vs ${roundCents(tables[2].sum_theoretical)}`
   )
   runSql(`UPDATE public.bet_picks SET result = 'hit' WHERE sheet_pick_id = ${oneBack}`)
-  const steve = table.rows.find((r) => r.display_name === "Steve Esswein")
-  check(
-    "the paid-but-never-wagered control gets $0 and loses his entry",
-    steve !== undefined && steve.actual === 0 && steve.profit_loss === -steve.entry_fee,
-    steve ? `$${steve.actual} / ${steve.profit_loss}` : "missing"
-  )
-  const refunded = table.rows.filter((r) => r.refunded > 0)
-  check(`${refunded.length} bettors get a void refund on top of their share`, refunded.length > 0)
 
+  // The deliberate cases, by name.
+  const row = (table: ResultsTable, name: string) => table.rows.find((r) => r.display_name === name)
+  const steve = row(tables[1], "Steve Esswein")
+  check(
+    "Steve (paid $50, never wagered): $20 forfeits, $30 comes back, $20 down",
+    steve !== undefined &&
+      steve.actual === 0 &&
+      steve.forfeit_unwagered === 20 &&
+      steve.refund_unwagered === 30 &&
+      steve.profit_loss === -20,
+    steve ? `forfeit $${steve.forfeit_unwagered}, refund $${steve.refund_unwagered}, P/L ${steve.profit_loss}` : "missing"
+  )
+  check("Steve isn't in the Phase 2 pot at all", row(tables[2], "Steve Esswein") === undefined)
+  const devin1 = row(tables[1], "Devin Arand")
+  check(
+    "Devin's Phase 1: $12 of his entry forfeits and $3 of his self-bets don't count",
+    devin1 !== undefined && devin1.forfeit_unwagered === 12 && devin1.forfeit_self === 3,
+    devin1 ? `forfeit $${devin1.forfeit_unwagered}, self $${devin1.forfeit_self}` : "missing"
+  )
+  const devin2 = row(tables[2], "Devin Arand")
+  check(
+    "Devin's Phase 2: $2 forfeits",
+    devin2 !== undefined && devin2.forfeit_unwagered === 2 && devin2.refund_unwagered === 0,
+    devin2 ? `forfeit $${devin2.forfeit_unwagered}` : "missing"
+  )
+  const mike = row(tables[2], "Mike Vemmer")
+  check(
+    "Pat's example — Mike's $50 Phase 2 entry, $20 wagered, $12 on himself: $5 counts, $7 forfeits, $30 back",
+    mike !== undefined &&
+      mike.wagered === 20 &&
+      mike.forfeit_self === 7 &&
+      mike.refund_unwagered === 30 &&
+      mike.committed === 20,
+    mike
+      ? `wagered $${mike.wagered}, self forfeit $${mike.forfeit_self}, refund $${mike.refund_unwagered}`
+      : "missing"
+  )
+  const casey = row(tables.combined, "Casey Sideline")
+  check(
+    "a non-player's self-bet arithmetic is never applied",
+    casey !== undefined && casey.forfeit_self === 0,
+    casey ? `self forfeit $${casey.forfeit_self}` : "missing"
+  )
+  const refunded = tables.combined.rows.filter((r) => r.refunded > 0)
+  check(`${refunded.length} bettors get a void refund on top of their share`, refunded.length > 0)
   // ── The broken sheet ────────────────────────────────────────────────────
   section("Act 3 · the broken file must write nothing")
   const before = runSql("SELECT count(*) || '/' || (SELECT count(*) FROM public.bet_picks) FROM public.bets")

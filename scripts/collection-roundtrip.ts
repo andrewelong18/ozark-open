@@ -21,7 +21,7 @@
 //      independently, in SQL, over the same rows.
 //
 // AND THE ONE PROPERTY THE WHOLE FEATURE RESTS ON: collection is NOT a pool
-// input. The pool is Σ entry_fee − Σ voided stakes (ADR 0001 §9) whether or
+// input. Each phase's pool is built from the phase entries (ADR 0002) whether or
 // not the money arrived. The last check drives paid_amount to zero for
 // everybody and asserts placement_payouts_view is byte-identical, because the
 // day someone wires this into payout math is the day an unpaid member stops
@@ -119,11 +119,14 @@ function main() {
         ELSE 'Gone Gary' END
       WHERE id IN (${ids.map((i) => `'${i}'`).join(",")});
     UPDATE public.users SET is_admin = true WHERE id = '${ADMIN}';
-    INSERT INTO public.tournament_participants (user_id, tournament_id, entry_fee, revoked_at) VALUES
-      ('${PAID}', '${tournamentId}', 30, NULL),
-      ('${HALF}', '${tournamentId}', 30, NULL),
-      ('${NONE}', '${tournamentId}', 20, NULL),
-      ('${GONE}', '${tournamentId}', 50, now());
+    -- Per-phase entries (Sprint 30): Phase 1 only, Phase 2 only, both, and a
+    -- revoked member. What is owed is the sum of the phases entered.
+    INSERT INTO public.tournament_participants
+      (user_id, tournament_id, phase1_entry_fee, phase2_entry_fee, revoked_at) VALUES
+      ('${PAID}', '${tournamentId}', 30,   NULL, NULL),
+      ('${HALF}', '${tournamentId}', NULL, 30,   NULL),
+      ('${NONE}', '${tournamentId}', 20,   20,   NULL),
+      ('${GONE}', '${tournamentId}', 50,   NULL, now());
   `)
 
   // --- 1. The columns ------------------------------------------------------
@@ -222,7 +225,8 @@ function main() {
 
   // The read /results does: live participants only, revoked excluded.
   const rowsCsv = runSql(`
-    SELECT u.display_name || '|' || tp.entry_fee || '|' || tp.paid_amount
+    SELECT u.display_name || '|' || coalesce(tp.phase1_entry_fee::text, '') || '|'
+        || coalesce(tp.phase2_entry_fee::text, '') || '|' || tp.paid_amount
       FROM public.tournament_participants tp
       JOIN public.users u ON u.id = tp.user_id
      WHERE tp.tournament_id = '${tournamentId}'
@@ -234,10 +238,11 @@ function main() {
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [display_name, entry_fee, paid_amount] = line.split("|")
+      const [display_name, phase1, phase2, paid_amount] = line.split("|")
       return {
         display_name,
-        entry_fee: Number(entry_fee),
+        phase1_entry_fee: phase1 === "" ? null : Number(phase1),
+        phase2_entry_fee: phase2 === "" ? null : Number(phase2),
         paid_amount: Number(paid_amount),
       }
     })
@@ -247,7 +252,8 @@ function main() {
   // Computed independently, in SQL, over the same rows — so a bug in the
   // TypeScript sum can't validate itself.
   const truth = runSql(`
-    SELECT sum(tp.entry_fee)::int || '|' || sum(least(tp.paid_amount, tp.entry_fee))::int
+    SELECT sum(coalesce(tp.phase1_entry_fee, 0) + coalesce(tp.phase2_entry_fee, 0))::int || '|' ||
+           sum(least(tp.paid_amount, coalesce(tp.phase1_entry_fee, 0) + coalesce(tp.phase2_entry_fee, 0)))::int
       FROM public.tournament_participants tp
      WHERE tp.tournament_id = '${tournamentId}'
        AND tp.revoked_at IS NULL
@@ -269,7 +275,7 @@ function main() {
     "the two people who are short are named, biggest gap first",
     JSON.stringify(standing.outstanding) ===
       JSON.stringify([
-        { name: "Owes Olivia", owed: 20 },
+        { name: "Owes Olivia", owed: 40 },
         { name: "Half Hayden", owed: 18 },
       ]),
     JSON.stringify(standing.outstanding)
@@ -292,7 +298,7 @@ function main() {
   )
   check(
     "…and names everyone still short",
-    summary.includes("Owes Olivia — $20") && summary.includes("Half Hayden — $18")
+    summary.includes("Owes Olivia — $40") && summary.includes("Half Hayden — $18")
   )
 
   // --- 4. The property the whole feature rests on --------------------------
@@ -313,13 +319,14 @@ function main() {
     `${payoutsBefore} vs ${payoutsAfter} — an unpaid member still funds the pool and still gets paid`
   )
   const feesUnchanged = runSql(`
-    SELECT sum(entry_fee)::int FROM public.tournament_participants
+    SELECT sum(coalesce(phase1_entry_fee, 0) + coalesce(phase2_entry_fee, 0))::int
+      FROM public.tournament_participants
      WHERE tournament_id = '${tournamentId}' AND revoked_at IS NULL
   `)
   check(
     "…and no entry fee moved with it",
     Number(feesUnchanged) > 0,
-    `Σ entry_fee = ${feesUnchanged}`
+    `Σ phase entries = ${feesUnchanged}`
   )
 
   // Leave the database as we found it for anything downstream.

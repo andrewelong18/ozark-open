@@ -7,11 +7,14 @@ import { createClient } from "@/lib/supabase/client"
 import { AVATAR_MAX_BYTES, AVATAR_MIME_TYPES, uploadAvatar } from "@/lib/avatar"
 import { Avatar } from "@/components/avatar"
 import { HowItWorks } from "@/components/onboarding/how-it-works"
+import { EntryRequestForm } from "@/components/entry/entry-request-form"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DISPLAY_NAME_MAX, NICKNAME_MAX } from "@/lib/profile"
+import type { RequestWindow } from "@/lib/entry-request"
+import type { TournamentRules } from "@/lib/validation"
 
 // Both from lib/avatar.ts, which the bucket's own limits mirror in SQL (#144)
 // — a local copy here is how the client and the bucket drift apart.
@@ -20,27 +23,43 @@ const MAX_BYTES = AVATAR_MAX_BYTES
 
 // The required first-run flow (Sprint 16): step 1 sets the member's own
 // display name (+ optional nickname/photo) and stamps onboarded_at; step 2 is
-// the "how it works" walkthrough. Reuses the /profile avatar-upload path
-// (browser → Storage under <uid>/avatar); the API derives the public URL.
+// the "how it works" walkthrough; step 3 (Sprint 30) is the one-time entry
+// request, which can be skipped and done later from the dashboard. Reuses the
+// /profile avatar-upload path (browser → Storage under <uid>/avatar); the API
+// derives the public URL.
 export function OnboardingForm({
   userId,
   email,
-  minPicks,
-  maxPicks,
+  rules,
+  window,
+  showEntryStep,
 }: {
   userId: string
   email: string
-  minPicks: number
-  maxPicks: number
+  rules: TournamentRules
+  window: RequestWindow
+  /** False when money is already on record, or requests are closed. */
+  showEntryStep: boolean
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
-  const [step, setStep] = useState<"identity" | "walkthrough">("identity")
+  const [step, setStep] = useState<"identity" | "walkthrough" | "entry">("identity")
   const [displayName, setDisplayName] = useState("")
   const [nickname, setNickname] = useState("")
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
+
+  // onboarded_at is already set (step 1 stamped it), so middleware will let
+  // us into the app — but only on a *fresh* request. A client router.push()
+  // would replay this page's poisoned Router Cache: the nav Links prefetched
+  // /dashboard, /bets, /my-bets while onboarded_at was still NULL, so
+  // middleware redirected those prefetches back to /onboarding and cached
+  // that result. A hard navigation resets the cache and re-runs middleware
+  // with the now-onboarded session.
+  function enterTheApp() {
+    globalThis.location.assign("/bets")
+  }
 
   function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
     setErrors([])
@@ -106,6 +125,23 @@ export function OnboardingForm({
     }
   }
 
+  if (step === "entry") {
+    return (
+      <>
+        <h1 className="mb-6 text-center font-heading text-2xl leading-tight text-indigo-700">
+          Put Your Money In
+        </h1>
+        <EntryRequestForm
+          rules={rules}
+          window={window}
+          onDone={enterTheApp}
+          onSkip={enterTheApp}
+          doneLabel="Start betting"
+        />
+      </>
+    )
+  }
+
   if (step === "walkthrough") {
     return (
       <>
@@ -116,20 +152,10 @@ export function OnboardingForm({
           How the Sportsbook Works
         </h1>
         <HowItWorks
-          minPicks={minPicks}
-          maxPicks={maxPicks}
-          doneLabel="Start betting"
-          onDone={() => {
-            // onboarded_at is already set (step 1 stamped it), so middleware
-            // will let us into the app — but only on a *fresh* request. A client
-            // router.push() would replay this page's poisoned Router Cache: the
-            // nav Links prefetched /dashboard, /bets, /my-bets while
-            // onboarded_at was still NULL, so middleware redirected those
-            // prefetches back to /onboarding and cached that result. A hard
-            // navigation resets the cache and re-runs middleware with the
-            // now-onboarded session.
-            window.location.assign("/bets")
-          }}
+          minPicks={rules.min_picks_per_phase}
+          entryFeeMin={rules.entry_fee_min}
+          doneLabel={showEntryStep ? "Next" : "Start betting"}
+          onDone={() => (showEntryStep ? setStep("entry") : enterTheApp())}
         />
       </>
     )

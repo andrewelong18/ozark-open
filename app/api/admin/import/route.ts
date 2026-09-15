@@ -5,6 +5,7 @@ import {
   unlandedWrite,
   clockStaleOpenWarnings,
   parseSheet,
+  phaseMoveRefusals,
   planSweep,
   sweepIsEmpty,
   validateSheet,
@@ -230,6 +231,34 @@ export async function POST(request: Request) {
   const sweep = sweepLookupFailed
     ? null
     : planSweep(rows, existingBets, existingPicks, placementRefs)
+
+  // A wager can't change pots (Sprint 30 / ADR 0002): a bet or pick carrying
+  // wagers that the sheet moves to the other phase refuses the whole upload,
+  // before the preview and before the save state. With the placement lookup
+  // down there's no way to know whether a moving bet is wagered, so any move
+  // at all is refused rather than guessed at.
+  const betPhaseById = new Map(existingBets.map((b) => [b.id, b.phase]))
+  const pickBySheetId = new Map(existingPicks.map((p) => [p.sheet_pick_id, p]))
+  const anyPhaseMove = rows.some((row) => {
+    const pick = pickBySheetId.get(row.sheetPickId)
+    return pick !== undefined && betPhaseById.get(pick.bet_id) !== row.phase
+  })
+  if (anyPhaseMove && sweepLookupFailed) {
+    return NextResponse.json(
+      {
+        errors: [
+          `This sheet moves a bet to the other phase, and the wagers on it couldn't be checked (${sweepLookupFailed}). Nothing was imported — try again in a moment.`,
+        ],
+      },
+      { status: 400 }
+    )
+  }
+  const phaseMoves = anyPhaseMove
+    ? phaseMoveRefusals(rows, existingBets, existingPicks, placementRefs)
+    : []
+  if (phaseMoves.length > 0) {
+    return NextResponse.json({ errors: phaseMoves }, { status: 400 })
+  }
 
   // Pass 1: nothing has been written and no snapshot taken. Hand back what
   // would go and let a human look at it. Deliberately BEFORE takeSnapshot(),

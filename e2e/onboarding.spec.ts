@@ -29,7 +29,7 @@ test("a new member is forced through onboarding and lands view-only", async ({ p
   // The walkthrough: four cards, and the counter is the reliable step marker.
   await expect(page.getByText("How the Sportsbook Works")).toBeVisible()
   await expect(page.getByText("1 of 4")).toBeVisible()
-  await expect(page.getByText("One shared pot, no house")).toBeVisible()
+  await expect(page.getByText("Two pots, no house")).toBeVisible()
 
   // `exact` matters: without it this also matches "Open Next.js Dev Tools".
   for (const step of [2, 3, 4]) {
@@ -38,7 +38,11 @@ test("a new member is forced through onboarding and lands view-only", async ({ p
   }
   await expect(page.getByText("Everything reveals at close")).toBeVisible()
 
-  await page.getByRole("button", { name: "Start betting" }).click()
+  // Sprint 30: the entry request follows the walkthrough, and it can wait.
+  // Skipping is the path under test here — e2e/entry-request.spec.ts submits.
+  await page.getByRole("button", { name: "Next", exact: true }).click()
+  await expect(page.getByTestId("entry-form")).toBeVisible()
+  await page.getByTestId("entry-skip").click()
   await expect(page).toHaveURL(/\/bets/)
 
   // Registered, not yet approved: the menu is browsable and inert.

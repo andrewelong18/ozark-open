@@ -17,6 +17,7 @@ import {
   planWrite,
   scopePlacements,
   stakeEntryError,
+  toPhaseEntry,
   toTournamentRules,
   type PickQueryRow,
   type PlacementQueryRow,
@@ -130,16 +131,24 @@ test("toTournamentRules coerces string numerics", () => {
   const rules = toTournamentRules({
     entry_fee_min: 20,
     entry_fee_max: 50,
-    min_picks_per_tournament: 5,
-    max_picks_per_phase: 10,
-    max_single_bet_pct: "0.50",
-    max_single_bet_cap: 20,
+    min_picks_per_phase: "5",
+    max_single_bet: "10",
     max_self_bet_pct: "0.25",
-    max_self_bet_cap: 10,
   })
-  assert.equal(rules.max_single_bet_pct, 0.5)
+  assert.equal(rules.max_single_bet, 10)
+  assert.equal(rules.min_picks_per_phase, 5)
   assert.equal(rules.max_self_bet_pct, 0.25)
   assert.equal(rules.entry_fee_max, 50)
+})
+
+test("toPhaseEntry: a number or numeric string is an entry; NULL, blank and zero are not", () => {
+  assert.equal(toPhaseEntry(40), 40)
+  assert.equal(toPhaseEntry("25"), 25)
+  assert.equal(toPhaseEntry(null), null)
+  assert.equal(toPhaseEntry(undefined), null)
+  assert.equal(toPhaseEntry(""), null)
+  assert.equal(toPhaseEntry(0), null)
+  assert.equal(toPhaseEntry("0"), null)
 })
 
 // ---------------------------------------------------------------------------
@@ -273,12 +282,9 @@ test("normalizeExistingPlacements coerces string amounts", () => {
 const seedRules = {
   entry_fee_min: 20,
   entry_fee_max: 50,
-  min_picks_per_tournament: 5,
-  max_picks_per_phase: 10,
-  max_single_bet_pct: 0.5,
-  max_single_bet_cap: 20,
+  min_picks_per_phase: 5,
+  max_single_bet: 10,
   max_self_bet_pct: 0.25,
-  max_self_bet_cap: 10,
 }
 
 test("assembled context flows through validatePlacement (legal placement)", () => {
@@ -293,7 +299,7 @@ test("assembled context flows through validatePlacement (legal placement)", () =
     },
   })!
   const ctx = buildPlacementContext(
-    { user_id: "user-me", entry_fee: 40, is_player: true },
+    { user_id: "user-me", phase1_entry_fee: 40, phase2_entry_fee: 40, is_player: true },
     target,
     [],
     OPEN_CLOCK,
@@ -311,7 +317,7 @@ test("assembled context surfaces §7 violations verbatim", () => {
     bets: { ...betJoin, bet_categories: { allows_multiple_picks: true } },
   })!
   const ctx = buildPlacementContext(
-    { user_id: "user-me", entry_fee: 40, is_player: true },
+    { user_id: "user-me", phase1_entry_fee: 40, phase2_entry_fee: 40, is_player: true },
     target,
     [],
     OPEN_CLOCK,
@@ -320,7 +326,27 @@ test("assembled context surfaces §7 violations verbatim", () => {
   const verdict = validatePlacement(ctx, 25, seedRules)
   assert.equal(verdict.ok, false)
   if (!verdict.ok)
-    assert.deepEqual(verdict.errors, ["Max single bet is $20 for your $40 entry."])
+    assert.deepEqual(verdict.errors, ["Max single bet is $10."])
+})
+
+test("assembled context refuses a phase the bettor isn't entered in", () => {
+  const target = normalizeTargetPick({
+    id: "pick-1",
+    player_user_id: null,
+    american_odds: 110,
+    bets: { ...betJoin, phase: 2, bet_categories: { allows_multiple_picks: true } },
+  })!
+  const ctx = buildPlacementContext(
+    { user_id: "user-me", phase1_entry_fee: 40, phase2_entry_fee: null, is_player: true },
+    target,
+    [],
+    OPEN_CLOCK,
+    NOW
+  )
+  assert.equal(ctx.bettor.phase2_entry_fee, null)
+  const verdict = validatePlacement(ctx, 5, seedRules)
+  assert.equal(verdict.ok, false)
+  if (!verdict.ok) assert.deepEqual(verdict.errors, ["You're not entered in Phase 2."])
 })
 
 // ---------------------------------------------------------------------------
@@ -330,7 +356,7 @@ test("assembled context surfaces §7 violations verbatim", () => {
 // ---------------------------------------------------------------------------
 
 test("every §7 violation surfaces its validation message verbatim", () => {
-  const me = { user_id: "user-me", entry_fee: 40, is_player: true }
+  const me = { user_id: "user-me", phase1_entry_fee: 40, phase2_entry_fee: 40, is_player: true }
   const openBet = (over: Partial<typeof betJoin> = {}) => ({ ...betJoin, ...over })
   const placementOn = (
     pickId: string,
@@ -384,22 +410,9 @@ test("every §7 violation surfaces its validation message verbatim", () => {
         american_odds: 110,
         bets: openBet({ bet_categories: { allows_multiple_picks: true } }),
       },
-      amount: 21,
+      amount: 11,
       existing: [],
-      expected: "Max single bet is $20 for your $40 entry.",
-    },
-    {
-      name: "over the phase pick count",
-      pick: {
-        id: "pick-new",
-        player_user_id: null,
-        american_odds: 110,
-        bets: openBet({ bet_categories: { allows_multiple_picks: true } }),
-      },
-      amount: 1,
-      existing: Array.from({ length: 10 }, (_, i) => placementOn(`p${i}`, 1)),
-      expected:
-        "Phase 1 is full — 10 picks max.",
+      expected: "Max single bet is $10.",
     },
     {
       name: "over the self-bet cap",
@@ -415,7 +428,7 @@ test("every §7 violation surfaces its validation message verbatim", () => {
       amount: 6,
       existing: [placementOn("p-other-self", 5, 1, "user-me")],
       expected:
-        "Max total on yourself is $10 for your $40 entry — this would put you at $11.",
+        "Max total on yourself is $10 for your $40 Phase 1 entry — this would put you at $11.",
     },
     {
       name: "over the running total",
@@ -425,10 +438,19 @@ test("every §7 violation surfaces its validation message verbatim", () => {
         american_odds: 110,
         bets: openBet({ bet_categories: { allows_multiple_picks: true } }),
       },
-      amount: 20,
-      existing: [placementOn("p1", 15), placementOn("p2", 10, 2)],
+      // $10 is the flat single-bet cap, so this is over the PHASE entry only:
+      // $40 already in Phase 1 plus $10 more. The $10 in Phase 2 is another
+      // pot and doesn't count — under one pot it would have been in the sum.
+      amount: 10,
+      existing: [
+        placementOn("p1", 10),
+        placementOn("p3", 10),
+        placementOn("p4", 10),
+        placementOn("p5", 10),
+        placementOn("p2", 10, 2),
+      ],
       expected:
-        "Over your $40 entry — that's the most you can wager across both phases.",
+        "Over your $40 Phase 1 entry — that's the most you can wager in Phase 1.",
     },
     {
       name: "second pick in a single-pick bet",
@@ -490,7 +512,7 @@ test("a self-pick within the cap validates ok with requires_admin_review", () =>
     },
   })!
   const ctx = buildPlacementContext(
-    { user_id: "user-me", entry_fee: 40, is_player: true },
+    { user_id: "user-me", phase1_entry_fee: 40, phase2_entry_fee: 40, is_player: true },
     target,
     [],
     OPEN_CLOCK,
@@ -524,7 +546,7 @@ test("unlinked picks (Field / Yes / No) are never flagged for review", () => {
     },
   })!
   const ctx = buildPlacementContext(
-    { user_id: "user-me", entry_fee: 40, is_player: true },
+    { user_id: "user-me", phase1_entry_fee: 40, phase2_entry_fee: 40, is_player: true },
     target,
     [],
     OPEN_CLOCK,
@@ -549,7 +571,7 @@ test("recompute on edit: flag follows the pick's CURRENT player link", () => {
     },
   })!
   const ctx = buildPlacementContext(
-    { user_id: "user-me", entry_fee: 40, is_player: true },
+    { user_id: "user-me", phase1_entry_fee: 40, phase2_entry_fee: 40, is_player: true },
     target,
     [
       {
@@ -563,9 +585,9 @@ test("recompute on edit: flag follows the pick's CURRENT player link", () => {
     OPEN_CLOCK,
     NOW
   )
-  const verdict = validatePlacement(ctx, 12, seedRules)
+  const verdict = validatePlacement(ctx, 8, seedRules)
   assert.deepEqual(verdict, { ok: true, requires_admin_review: false })
-  const plan = planWrite({ id: "row-1", deleted_at: null }, 12, 200, false)
+  const plan = planWrite({ id: "row-1", deleted_at: null }, 8, 200, false)
   assert.equal(plan.kind, "update")
   assert.equal(plan.fields.requires_admin_review, false)
 })

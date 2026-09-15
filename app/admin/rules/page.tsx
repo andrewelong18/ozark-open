@@ -55,7 +55,7 @@ export default async function AdminRulesPage() {
       <RulesForm rules={rules} />
 
       <p className="text-center text-xs text-text-muted">
-        These eight values live on the tournament row and are read fresh on
+        These five values live on the tournament row and are read fresh on
         every placement — nothing in the app hardcodes a dollar figure or a
         pick count.
       </p>

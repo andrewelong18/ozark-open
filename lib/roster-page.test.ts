@@ -9,7 +9,7 @@ import {
   type RosterParticipantRow,
 } from "./roster-page.ts"
 
-const live: RosterParticipantRow = { user_id: "u1", entry_fee: 20, is_player: true }
+const live: RosterParticipantRow = { user_id: "u1", phase1_entry_fee: 20, is_player: true }
 
 // ---------------------------------------------------------------------------
 // isFieldParticipant
@@ -19,18 +19,22 @@ test("isFieldParticipant: an approved player is in the field", () => {
   assert.equal(isFieldParticipant(live), true)
 })
 
-test("isFieldParticipant: a string entry_fee is coerced, not trusted", () => {
-  assert.equal(isFieldParticipant({ ...live, entry_fee: "30" }), true)
-  assert.equal(isFieldParticipant({ ...live, entry_fee: "nope" }), false)
+test("isFieldParticipant: an entry in either phase counts", () => {
+  assert.equal(isFieldParticipant({ ...live, phase1_entry_fee: null, phase2_entry_fee: 30 }), true)
 })
 
-test("isFieldParticipant: no fee means not approved yet", () => {
-  assert.equal(isFieldParticipant({ ...live, entry_fee: 0 }), false)
-  assert.equal(isFieldParticipant({ ...live, entry_fee: null }), false)
+test("isFieldParticipant: a string entry is coerced, not trusted", () => {
+  assert.equal(isFieldParticipant({ ...live, phase1_entry_fee: "30" }), true)
+  assert.equal(isFieldParticipant({ ...live, phase1_entry_fee: "nope" }), false)
 })
 
-test("isFieldParticipant: a revoked row is out, fee or not", () => {
-  // The row survives a revoke because it carries the entry fee (#91), so
+test("isFieldParticipant: no entry in either phase means not approved yet", () => {
+  assert.equal(isFieldParticipant({ ...live, phase1_entry_fee: 0 }), false)
+  assert.equal(isFieldParticipant({ ...live, phase1_entry_fee: null }), false)
+})
+
+test("isFieldParticipant: a revoked row is out, entry or not", () => {
+  // The row survives a revoke because it carries the entries (#91), so
   // row-existence alone is never the gate.
   assert.equal(
     isFieldParticipant({ ...live, revoked_at: "2026-09-01T00:00:00Z" }),
@@ -41,7 +45,7 @@ test("isFieldParticipant: a revoked row is out, fee or not", () => {
 test("isFieldParticipant: a bettor who isn't golfing isn't on the roster", () => {
   assert.equal(isFieldParticipant({ ...live, is_player: false }), false)
   // Absent means the schema default (true) applied.
-  assert.equal(isFieldParticipant({ user_id: "u1", entry_fee: 20 }), true)
+  assert.equal(isFieldParticipant({ user_id: "u1", phase1_entry_fee: 20 }), true)
 })
 
 // ---------------------------------------------------------------------------
@@ -56,9 +60,9 @@ test("buildFieldRoster sorts by name, case-insensitively", () => {
       { id: "c", display_name: "Ethan Kipping" },
     ],
     participants: [
-      { user_id: "a", entry_fee: 30, is_player: true },
-      { user_id: "b", entry_fee: 20, is_player: true },
-      { user_id: "c", entry_fee: 20, is_player: true },
+      { user_id: "a", phase1_entry_fee: 30, is_player: true },
+      { user_id: "b", phase1_entry_fee: 20, is_player: true },
+      { user_id: "c", phase2_entry_fee: 20, is_player: true },
     ],
   })
   assert.deepEqual(
@@ -77,7 +81,7 @@ test("buildFieldRoster carries only what the card renders", () => {
         avatar_url: "https://x/y.jpg",
       },
     ],
-    participants: [{ user_id: "a", entry_fee: 20, is_player: true }],
+    participants: [{ user_id: "a", phase1_entry_fee: 20, is_player: true }],
   })
   assert.deepEqual(player, {
     user_id: "a",
@@ -90,7 +94,7 @@ test("buildFieldRoster carries only what the card renders", () => {
 test("buildFieldRoster blanks become null, not empty strings", () => {
   const [player] = buildFieldRoster({
     users: [{ id: "a", display_name: "Pat Leicht", nickname: "   ", avatar_url: "" }],
-    participants: [{ user_id: "a", entry_fee: 20 }],
+    participants: [{ user_id: "a", phase1_entry_fee: 20 }],
   })
   assert.equal(player.nickname, null)
   assert.equal(player.avatar_url, null)
@@ -106,10 +110,10 @@ test("buildFieldRoster drops everyone the gate excludes", () => {
       { id: "e", display_name: "Never signed up" },
     ],
     participants: [
-      { user_id: "a", entry_fee: 20, is_player: true },
-      { user_id: "b", entry_fee: 0, is_player: true },
-      { user_id: "c", entry_fee: 20, is_player: true, revoked_at: "2026-09-01" },
-      { user_id: "d", entry_fee: 20, is_player: false },
+      { user_id: "a", phase1_entry_fee: 20, is_player: true },
+      { user_id: "b", phase1_entry_fee: 0, is_player: true },
+      { user_id: "c", phase1_entry_fee: 20, is_player: true, revoked_at: "2026-09-01" },
+      { user_id: "d", phase1_entry_fee: 20, is_player: false },
     ],
   })
   assert.deepEqual(
@@ -121,7 +125,7 @@ test("buildFieldRoster drops everyone the gate excludes", () => {
 test("buildFieldRoster drops a participant with no users row", () => {
   const roster = buildFieldRoster({
     users: [],
-    participants: [{ user_id: "ghost", entry_fee: 20, is_player: true }],
+    participants: [{ user_id: "ghost", phase1_entry_fee: 20, is_player: true }],
   })
   assert.deepEqual(roster, [])
 })
@@ -130,8 +134,8 @@ test("buildFieldRoster renders each player once", () => {
   const roster = buildFieldRoster({
     users: [{ id: "a", display_name: "Pat Leicht" }],
     participants: [
-      { user_id: "a", entry_fee: 20, is_player: true },
-      { user_id: "a", entry_fee: 20, is_player: true },
+      { user_id: "a", phase1_entry_fee: 20, is_player: true },
+      { user_id: "a", phase1_entry_fee: 20, is_player: true },
     ],
   })
   assert.equal(roster.length, 1)
@@ -140,7 +144,7 @@ test("buildFieldRoster renders each player once", () => {
 test("buildFieldRoster names a member with no display_name", () => {
   const [player] = buildFieldRoster({
     users: [{ id: "a", display_name: "  " }],
-    participants: [{ user_id: "a", entry_fee: 20 }],
+    participants: [{ user_id: "a", phase1_entry_fee: 20 }],
   })
   assert.equal(player.name, "Unknown member")
 })

@@ -163,15 +163,32 @@ export async function buildHealthReport(
     })
   )
 
-  // The collection columns (migration 20260902000000). /admin/people's roster
-  // read IS that page — a database without these renders LoadError to an admin
-  // — so the deploy-order alarm for that change is a check, not a note in a
-  // commit message.
+  // The collection columns (migration 20260902000000) and, since Sprint 30, the
+  // two per-phase entries (20260914000000). /admin/people's roster read IS that
+  // page — a database without these renders LoadError to an admin — and every
+  // wagering read keys off the phase entries, so the deploy-order alarm for
+  // both changes is a check, not a note in a commit message. The name stays:
+  // it is a monitor's alert text.
   checks.push(
     await timed("participants_collection", async () => {
       const { error } = await supabase
         .from("tournament_participants")
-        .select("user_id, entry_fee, paid_amount, paid_note")
+        .select("user_id, phase1_entry_fee, phase2_entry_fee, paid_amount, paid_note")
+        .limit(1)
+      return { error }
+    })
+  )
+
+  // The entry request (migration 20260914000001). The dashboard's entry tile
+  // and /my-bets read it to decide whether to warn a member that no money has
+  // been added — a database without the table takes both pages down. Meets
+  // both bars: it is a schema question (RLS filters `anon` to zero rows with no
+  // error), and its failure breaks the front door.
+  checks.push(
+    await timed("entry_requests_read", async () => {
+      const { error } = await supabase
+        .from("entry_requests")
+        .select("id, phase1_amount, phase2_amount, is_player")
         .limit(1)
       return { error }
     })

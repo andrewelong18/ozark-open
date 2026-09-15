@@ -1,314 +1,34 @@
-// Unit tests for lib/settlement.ts — the copyable payout summary on /results.
+// Unit tests for lib/settlement.ts — the admin-only entry-collection text.
 // Zero-dependency by design: node:test via npm run test.
 //
-// Most of these drive buildResultsTable() rather than hand-building a
-// ResultsTable, so the test exercises the real pipeline. If the payout math
-// changes shape, these fail — which is correct: the summary is the thing 32
-// people read their number off, so it should not be able to drift from the
-// table silently.
+// The member-facing settlement text is gone (PRD §12 A22, #210 — deleted in
+// Sprint 30), so this suite is about the one string that survives: who still
+// owes, and who is owed a refund.
 
 import test from "node:test"
 import assert from "node:assert/strict"
-import { buildResultsTable, type PayoutRow, type ResultsParticipant } from "./payouts.ts"
-import { buildCollectionSummary, buildSettlementSummary } from "./settlement.ts"
+import { buildCollectionSummary } from "./settlement.ts"
 import { collectionStanding } from "./collection.ts"
 
-function participant(
-  user_id: string,
+function person(
   display_name: string,
-  entry_fee: number
-): ResultsParticipant {
-  return { user_id, display_name, entry_fee }
-}
-
-let seq = 0
-function placement(
-  user_id: string,
-  theoretical: number | null,
-  refunded = 0
-): PayoutRow {
-  seq += 1
+  entries: { p1?: number | null; p2?: number | null },
+  paid_amount: number
+) {
   return {
-    placement_id: `p${seq}`,
-    user_id,
-    amount: 10,
-    result: theoretical === null ? "pending" : refunded > 0 ? "void" : "hit",
-    theoretical,
-    refunded,
+    display_name,
+    phase1_entry_fee: entries.p1 ?? null,
+    phase2_entry_fee: entries.p2 ?? null,
+    paid_amount,
   }
 }
-
-// ---------------------------------------------------------------------------
-// The shape people actually read
-// ---------------------------------------------------------------------------
-
-test("the header carries the tournament, the pool and the entry count", () => {
-  const table = buildResultsTable(
-    [participant("a", "Dan Smith", 20), participant("b", "Pat Leicht", 40)],
-    [placement("a", 100)]
-  )
-  const text = buildSettlementSummary(table, "Ozark Open 2026")
-
-  assert.match(text, /^Ozark Open 2026 — final payouts/)
-  assert.match(text, /Pool \$60\.00 · 2 entries/)
-})
-
-test("one participant reads 'entry', not 'entries'", () => {
-  const table = buildResultsTable([participant("a", "Solo", 20)], [placement("a", 50)])
-  assert.match(buildSettlementSummary(table, "T"), /· 1 entry$/m)
-})
-
-test("every line reconciles: in − back equals the stated net", () => {
-  // The property that matters. Someone WILL check one of these by hand in the
-  // group text, and a line that doesn't add up is a support ticket.
-  const table = buildResultsTable(
-    [
-      participant("a", "Dan Smith", 20),
-      participant("b", "Steve Esswein", 20),
-      participant("c", "Pat Leicht", 40),
-    ],
-    [placement("a", 200), placement("b", 100), placement("c", 50)]
-  )
-  const text = buildSettlementSummary(table, "T")
-
-  const lineRe = /^\d+\. .+ — \$([\d.]+) in → \$([\d.]+) back \((even|[+−]\$[\d.]+)\)/gm
-  const matches = [...text.matchAll(lineRe)]
-  assert.equal(matches.length, 3, "expected one line per participant")
-
-  for (const [, inStr, backStr, netStr] of matches) {
-    const expected = Number(backStr) - Number(inStr)
-    const actual =
-      netStr === "even" ? 0 : Number(netStr.replace("−", "-").replace(/[+$]/g, ""))
-    assert.ok(
-      Math.abs(actual - expected) < 0.005,
-      `line doesn't reconcile: ${inStr} in, ${backStr} back, net ${netStr}`
-    )
-  }
-})
-
-test("the order is profit/loss descending — the standings' order", () => {
-  // The text and the table must agree: this block is pasted from directly
-  // underneath the standings, and someone reading both would notice.
-  //
-  // The fixture has to be able to TELL those orders apart, or it asserts
-  // nothing. Equal entry fees and no voids make payout order and P/L order the
-  // same list, which is what the previous version of this test used. So:
-  // varying entry fees, and one void.
-  //
-  //   Σ entry 100, Σ refunded 30 → pool 70;  Σ theoretical 360
-  //   Alice  entry 20, theo 100           → payout 19.44, P/L  −0.56
-  //   Bob    entry 60, theo 200           → payout 38.89, P/L −21.11
-  //   Carol  entry 20, theo  60, void 30  → payout 41.67, P/L +21.67
-  const table = buildResultsTable(
-    [
-      participant("a", "Alice Ace", 20),
-      participant("b", "Bob Birdie", 60),
-      participant("c", "Carol Chip", 20),
-    ],
-    [
-      placement("a", 100),
-      placement("b", 200),
-      placement("c", 60),
-      placement("c", 0, 30),
-    ]
-  )
-  const text = buildSettlementSummary(table, "T")
-
-  const names = [...text.matchAll(/^\d+\. (.+?) —/gm)].map((m) => m[1])
-  assert.deepEqual(names, ["Carol Chip", "Alice Ace", "Bob Birdie"])
-
-  // buildResultsTable's own order is `actual` descending, which serves
-  // /admin/view. The pasted text follows the STANDINGS, so the two differ —
-  // and if this assertion ever fails because they've converged, the test above
-  // has stopped proving anything.
-  assert.deepEqual(
-    table.rows.map((r) => r.display_name),
-    ["Bob Birdie", "Alice Ace", "Carol Chip"]
-  )
-})
-
-// ---------------------------------------------------------------------------
-// Void refunds — the reason this module exists rather than a template string
-// ---------------------------------------------------------------------------
-
-test("a refunded stake is included in 'back' and named on the line", () => {
-  // Pat has a $6 voided wager. The pool loses that $6; the $6 goes back to
-  // him. /results shows `actual` under Payout and never shows `refunded`, so
-  // "$40 in → <actual> back" would be short by exactly $6 and the net would
-  // look wrong. This is the case the whole module is shaped around.
-  const table = buildResultsTable(
-    [participant("a", "Dan Smith", 20), participant("b", "Pat Leicht", 40)],
-    [placement("a", 100), placement("b", 0, 6)]
-  )
-  const pat = table.rows.find((r) => r.display_name === "Pat Leicht")!
-  assert.equal(pat.refunded, 6, "fixture should give Pat a voided stake")
-
-  const text = buildSettlementSummary(table, "T")
-  const line = text.split("\n").find((l) => l.includes("Pat Leicht"))!
-
-  assert.match(line, /incl\. \$6\.00 returned from voided wagers/)
-  // "back" is actual + refunded, so it exceeds the bare actual share.
-  assert.match(line, new RegExp(`→ \\$${(pat.actual + 6).toFixed(2)} back`))
-})
-
-test("the refund note appears only on rows that have one", () => {
-  const table = buildResultsTable(
-    [participant("a", "Clean", 20), participant("b", "Voided", 20)],
-    [placement("a", 100), placement("b", 0, 5)]
-  )
-  const text = buildSettlementSummary(table, "T")
-  const notes = text.split("\n").filter((l) => l.includes("voided wagers"))
-  assert.equal(notes.length, 1)
-  assert.match(notes[0], /Voided/)
-})
-
-test("a refund is reflected in the pool, so the pool line shrinks too", () => {
-  const table = buildResultsTable(
-    [participant("a", "Dan", 20), participant("b", "Pat", 40)],
-    [placement("a", 100), placement("b", 0, 6)]
-  )
-  // pool = 60 entry − 6 voided
-  assert.match(buildSettlementSummary(table, "T"), /Pool \$54\.00/)
-})
-
-// ---------------------------------------------------------------------------
-// The provisional guard — the caveat has to survive the paste
-// ---------------------------------------------------------------------------
-
-test("pending wagers put a PROVISIONAL warning inside the text", () => {
-  const table = buildResultsTable(
-    [participant("a", "Dan", 20), participant("b", "Pat", 20)],
-    [placement("a", 100), placement("b", null)]
-  )
-  assert.equal(table.pending, 1)
-
-  const text = buildSettlementSummary(table, "T")
-  assert.match(text, /PROVISIONAL/)
-  assert.match(text, /read HIGH/)
-  assert.match(text, /Don't pay from this yet/)
-})
-
-test("the provisional warning is above the numbers, not trailing them", () => {
-  // It has to be read before the figures are, including by someone who only
-  // skims the first two lines of a pasted block.
-  const table = buildResultsTable(
-    [participant("a", "Dan", 20)],
-    [placement("a", null)]
-  )
-  const text = buildSettlementSummary(table, "T")
-  assert.ok(
-    text.indexOf("PROVISIONAL") < text.indexOf("Pool "),
-    "the warning must precede the pool and the rows"
-  )
-})
-
-test("a bettor whose wagers are unscored isn't left looking like a loser", () => {
-  // Their line would otherwise read "$20.00 in → $0.00 back (−$20.00)" —
-  // indistinguishable from having lost everything. On the page the caution
-  // card is adjacent; a pasted line travels alone and has to say so itself.
-  const table = buildResultsTable(
-    [participant("a", "Dan", 20), participant("b", "Unscored Sam", 20)],
-    [placement("a", 100), placement("b", null), placement("b", null)]
-  )
-  const line = buildSettlementSummary(table, "T")
-    .split("\n")
-    .find((l) => l.includes("Unscored Sam"))!
-
-  assert.match(line, /2 wagers of theirs not scored yet/)
-})
-
-test("the per-row pending note is singular for one, and absent when settled", () => {
-  const one = buildResultsTable(
-    [participant("a", "Dan", 20)],
-    [placement("a", 30), placement("a", null)]
-  )
-  assert.match(buildSettlementSummary(one, "T"), /1 wager of theirs not scored yet/)
-
-  const settled = buildResultsTable([participant("a", "Dan", 20)], [placement("a", 30)])
-  assert.doesNotMatch(buildSettlementSummary(settled, "T"), /not scored yet/)
-})
-
-test("the warning pluralizes, and is absent from a settled table", () => {
-  const two = buildResultsTable(
-    [participant("a", "Dan", 20)],
-    [placement("a", null), placement("a", null)]
-  )
-  assert.match(buildSettlementSummary(two, "T"), /2 wagers still have no result/)
-
-  const one = buildResultsTable([participant("a", "Dan", 20)], [placement("a", null)])
-  assert.match(buildSettlementSummary(one, "T"), /1 wager still has no result/)
-
-  const settled = buildResultsTable([participant("a", "Dan", 20)], [placement("a", 30)])
-  assert.doesNotMatch(buildSettlementSummary(settled, "T"), /PROVISIONAL/)
-})
-
-// ---------------------------------------------------------------------------
-// Signs, rounding and the degenerate cases
-// ---------------------------------------------------------------------------
-
-test("a win carries an explicit +, a loss a real minus sign", () => {
-  const table = buildResultsTable(
-    [participant("a", "Winner", 20), participant("b", "Loser", 20)],
-    [placement("a", 100)]
-  )
-  const text = buildSettlementSummary(table, "T")
-
-  assert.match(text, /Winner — \$20\.00 in → \$40\.00 back \(\+\$20\.00\)/)
-  // U+2212, not a hyphen — it has to read as a minus at text size.
-  assert.match(text, /Loser — \$20\.00 in → \$0\.00 back \(−\$20\.00\)/)
-})
-
-test("breaking exactly even says 'even' rather than +$0.00", () => {
-  const table = buildResultsTable(
-    [participant("a", "Even Steven", 20)],
-    [placement("a", 25)]
-  )
-  // Sole participant: pool 20, all theoretical is theirs, so actual = 20.
-  assert.match(buildSettlementSummary(table, "T"), /Even Steven — \$20\.00 in → \$20\.00 back \(even\)/)
-})
-
-test("money always shows two decimals", () => {
-  const table = buildResultsTable(
-    [participant("a", "Dan", 20), participant("b", "Pat", 20), participant("c", "Jake", 20)],
-    [placement("a", 100), placement("b", 100), placement("c", 100)]
-  )
-  const text = buildSettlementSummary(table, "T")
-  // $20 each from a $60 pool split three ways — no ragged "$20" or "$20.0".
-  for (const amount of text.match(/\$[\d.]+/g) ?? []) {
-    assert.match(amount, /^\$\d+\.\d{2}$/, `ragged money value: ${amount}`)
-  }
-})
-
-test("no participants returns an explanation, never an empty block", () => {
-  const table = buildResultsTable([], [])
-  const text = buildSettlementSummary(table, "Ozark Open 2026")
-  assert.match(text, /^Ozark Open 2026 — final payouts/)
-  assert.match(text, /Nobody was registered/)
-})
-
-test("a pool with no winning wagers still lists everyone", () => {
-  // Nobody hit: sum_theoretical is 0, so every actual share is 0. The summary
-  // still has to name all three and show each losing their entry.
-  const table = buildResultsTable(
-    [participant("a", "Dan", 20), participant("b", "Pat", 20), participant("c", "Jake", 20)],
-    [placement("a", 0), placement("b", 0)]
-  )
-  const text = buildSettlementSummary(table, "T")
-  const lines = text.split("\n").filter((l) => /^\d+\. /.test(l))
-  assert.equal(lines.length, 3)
-  for (const line of lines) assert.match(line, /→ \$0\.00 back \(−\$20\.00\)/)
-})
-
-// ---------------------------------------------------------------------------
-// buildCollectionSummary — the admin-only entry-collection block
-// ---------------------------------------------------------------------------
 
 test("the collection block names the gap and who it's from", () => {
   const text = buildCollectionSummary(
     collectionStanding([
-      { display_name: "Paid Pat", entry_fee: 30, paid_amount: 30 },
-      { display_name: "Half Hayden", entry_fee: 30, paid_amount: 12 },
-      { display_name: "Owes Olivia", entry_fee: 20, paid_amount: 0 },
+      person("Paid Pat", { p1: 30 }, 30),
+      person("Half Hayden", { p1: 30 }, 12),
+      person("Owes Olivia", { p1: 20 }, 0),
     ]),
     "Ozark Open 2026"
   )
@@ -316,13 +36,21 @@ test("the collection block names the gap and who it's from", () => {
   assert.match(text, /\$42 of \$80 collected · \$38 still out/)
   // The order is collectionStanding's, biggest gap first — not re-sorted.
   assert.ok(text.indexOf("Owes Olivia — $20") < text.indexOf("Half Hayden — $18"))
+  assert.doesNotMatch(text, /refund/)
+})
+
+test("both phases count toward what is owed", () => {
+  const text = buildCollectionSummary(
+    collectionStanding([person("Both Bev", { p1: 20, p2: 30 }, 20)]),
+    "T"
+  )
+  assert.match(text, /\$20 of \$50 collected · \$30 still out/)
+  assert.match(text, /Both Bev — \$30/)
 })
 
 test("fully collected says so instead of printing an empty list", () => {
   const text = buildCollectionSummary(
-    collectionStanding([
-      { display_name: "Paid Pat", entry_fee: 30, paid_amount: 30 },
-    ]),
+    collectionStanding([person("Paid Pat", { p1: 30 }, 30)]),
     "T"
   )
   assert.match(text, /\$30 of \$30 collected/)
@@ -331,19 +59,20 @@ test("fully collected says so instead of printing an empty list", () => {
   assert.doesNotMatch(text, /Still owed:/)
 })
 
-test("an empty roster reads as a sentence, not a blank block", () => {
-  const text = buildCollectionSummary(collectionStanding([]), "T")
-  assert.match(text, /Nobody was registered/)
+test("money paid beyond the entries is listed as a refund (Pat's rule 1)", () => {
+  const text = buildCollectionSummary(
+    collectionStanding([
+      person("Skipped Sam", { p1: 20 }, 40),
+      person("Paid Pat", { p1: 30 }, 30),
+    ]),
+    "T"
+  )
+  assert.match(text, /Every entry is in\./)
+  assert.match(text, /Paid more than their entry — refund:/)
+  assert.match(text, /Skipped Sam — \$20/)
 })
 
-// The reason the two texts are separate functions: /results is member-visible
-// and the settlement block sits behind a Copy button aimed at the group thread.
-// If collection ever leaks into it, this fails.
-test("the member-facing settlement text carries no collection data", () => {
-  const table = buildResultsTable(
-    [participant("u1", "Ann", 30), participant("u2", "Bob", 20)],
-    []
-  )
-  const text = buildSettlementSummary(table, "T")
-  assert.doesNotMatch(text, /collect|still out|still owed|owes/i)
+test("an empty roster reads as a sentence, not a blank block", () => {
+  const text = buildCollectionSummary(collectionStanding([]), "T")
+  assert.match(text, /Nobody has an entry recorded/)
 })

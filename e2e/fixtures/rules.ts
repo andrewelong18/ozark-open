@@ -53,16 +53,42 @@ export async function userIdFor(email: string): Promise<string> {
 }
 
 /**
- * Set a member's entry fee.
+ * Set a member's entry for one phase (Sprint 30 / ADR 0002) — `null` takes
+ * them out of that phase's pot.
  *
- * The gauntlet moves approved@ off its seeded $30 because $30 hides the bug it
- * is hunting: 50% of $30 is exactly $15, so a floor and a round agree. Only a
- * fee with a half-dollar at 50% — $25 → $12.5 — tells them apart.
+ * The gauntlet moves approved@ off its seeded $30 / $30 to reach the rules
+ * that only show at other entries: the self-bet cap floors (a quarter of $25
+ * is $6.25 → $6), and it counts each phase on its own, which only a bettor
+ * with self-bets in BOTH phases can tell apart from a tournament-wide cap.
+ *
+ * Goes through the database trigger like any other write, so an entry can't
+ * be lowered below what is already wagered in that phase (OZ002) — clear the
+ * wagers first.
  */
-export async function setEntryFee(email: string, entryFee: number): Promise<void> {
+export async function setEntryFee(
+  email: string,
+  entryFee: number | null,
+  phase: 1 | 2 = 1
+): Promise<void> {
   const userId = await userIdFor(email)
-  db(`UPDATE public.tournament_participants SET entry_fee = ${entryFee}
+  const column = phase === 1 ? "phase1_entry_fee" : "phase2_entry_fee"
+  db(`UPDATE public.tournament_participants SET ${column} = ${entryFee === null ? "NULL" : entryFee}
       WHERE user_id = '${userId}'`)
+}
+
+/** Put a member back on the seeded entries for both phases. */
+export async function restoreEntries(email: string, phase1: number, phase2: number): Promise<void> {
+  const userId = await userIdFor(email)
+  db(`UPDATE public.tournament_participants
+         SET phase1_entry_fee = ${phase1}, phase2_entry_fee = ${phase2}
+       WHERE user_id = '${userId}'`)
+}
+
+/** The bet_picks uuid behind a sheet pick id — for a request sent without the UI. */
+export function pickIdFor(sheetPickId: number): string {
+  const id = db(`SELECT id FROM public.bet_picks WHERE sheet_pick_id = ${sheetPickId} LIMIT 1`)
+  if (!id) throw new Error(`No pick with sheet_pick_id ${sheetPickId}`)
+  return id
 }
 
 /**

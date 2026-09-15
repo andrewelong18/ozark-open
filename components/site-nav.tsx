@@ -17,16 +17,21 @@ export type NavItem = {
 }
 
 // Only real routes are listed here — no dead links to unbuilt screens.
-// Leaderboard came out Aug 23, 2026 at Andrew's call; /leaderboard is still
-// built and deployed, just not linked from anywhere.
+// The golf leaderboard (/leaderboard, Google Sheets) came out Aug 23, 2026 at
+// Andrew's call; it is still built and deployed, just not linked from
+// anywhere. The "Leaderboard" label returned Sept 14, 2026 (Sprint 30) for a
+// different page — /standings, the money standings with the Phase 1 /
+// Phase 2 / Combined toggle — between My Bets and Roster, where he asked for it.
 const NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Place Bets", href: "/bets" },
   { label: "My Bets", href: "/my-bets" },
+  { label: "Leaderboard", href: "/standings" },
   { label: "Roster", href: "/roster" },
 ]
 
-/** Dashboard/Place Bets/My Bets/Roster, plus whatever the server appended. */
+/** Dashboard/Place Bets/My Bets/Leaderboard/Roster, plus whatever the server
+ *  appended. */
 function navItems(extraItems: NavItem[]): NavItem[] {
   return [...NAV, ...extraItems]
 }

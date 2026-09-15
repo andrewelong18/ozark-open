@@ -1,5 +1,5 @@
 // Unit tests for lib/roster.ts — the email merge and the status rules behind
-// /admin/roster. Zero-dependency by design: node:test via npm run test.
+// /admin/people. Zero-dependency by design: node:test via npm run test.
 
 import test from "node:test"
 import assert from "node:assert/strict"
@@ -8,6 +8,7 @@ import {
   funnelStage,
   normalizeEmail,
   type AuthActivityQueryRow,
+  type EntryRequestQueryRow,
   type InviteQueryRow,
   type ParticipantQueryRow,
   type UserQueryRow,
@@ -18,12 +19,14 @@ function roster(overrides: {
   users?: UserQueryRow[]
   participants?: ParticipantQueryRow[]
   authActivity?: AuthActivityQueryRow[]
+  requests?: EntryRequestQueryRow[]
 }) {
   return buildRoster({
     invites: overrides.invites ?? [],
     users: overrides.users ?? [],
     participants: overrides.participants ?? [],
     authActivity: overrides.authActivity ?? [],
+    requests: overrides.requests,
   })
 }
 
@@ -63,6 +66,7 @@ test("an invite with no matching user is not_registered, never logged in", () =>
   assert.equal(p.name, "Pat")
   assert.equal(p.invited, true)
   assert.equal(p.key, "invite:pat@x.com")
+  assert.equal(p.request, null)
   assert.deepEqual(r.notRegistered, [p])
 })
 
@@ -106,30 +110,47 @@ test("a registered member who isn't on the invite roster still appears", () => {
 // Status rules for registered members
 // ---------------------------------------------------------------------------
 
-test("a participant row with an entry fee is ready to bet", () => {
+test("a participant row with a phase entry is ready to bet", () => {
   const r = roster({
     users: [user("u-a", "a@x.com")],
-    participants: [{ user_id: "u-a", entry_fee: 25 }],
+    participants: [{ user_id: "u-a", phase1_entry_fee: 25 }],
   })
   assert.equal(r.people[0].status, "ready")
   assert.equal(r.people[0].reason, "ready")
+  assert.equal(r.people[0].phase1_entry_fee, 25)
+  assert.equal(r.people[0].phase2_entry_fee, null)
   assert.equal(r.people[0].entry_fee, 25)
 })
 
-test("a string entry_fee from PostgREST is still ready", () => {
+test("an entry in either phase is enough; the total owed is the sum", () => {
+  const r = roster({
+    users: [user("u-a", "a@x.com"), user("u-b", "b@x.com")],
+    participants: [
+      { user_id: "u-a", phase1_entry_fee: null, phase2_entry_fee: 30 },
+      { user_id: "u-b", phase1_entry_fee: 20, phase2_entry_fee: 50 },
+    ],
+  })
+  const byId = new Map(r.people.map((p) => [p.user_id, p]))
+  assert.equal(byId.get("u-a")!.status, "ready")
+  assert.equal(byId.get("u-a")!.entry_fee, 30)
+  assert.equal(byId.get("u-b")!.entry_fee, 70)
+})
+
+test("string entries from PostgREST are coerced", () => {
   const r = roster({
     users: [user("u-a", "a@x.com")],
-    participants: [{ user_id: "u-a", entry_fee: "25" }],
+    participants: [{ user_id: "u-a", phase1_entry_fee: "25", phase2_entry_fee: "0" }],
   })
   assert.equal(r.people[0].status, "ready")
-  assert.equal(r.people[0].entry_fee, 25)
+  assert.equal(r.people[0].phase1_entry_fee, 25)
+  assert.equal(r.people[0].phase2_entry_fee, null)
 })
 
-test("a participant row with no usable fee is not_ready / fee_unset", () => {
+test("a participant row with no usable entry in either phase is not_ready / fee_unset", () => {
   for (const fee of [0, null, "abc"] as const) {
     const r = roster({
       users: [user("u-a", "a@x.com")],
-      participants: [{ user_id: "u-a", entry_fee: fee }],
+      participants: [{ user_id: "u-a", phase1_entry_fee: fee, phase2_entry_fee: fee }],
     })
     assert.equal(r.people[0].status, "not_ready")
     assert.equal(r.people[0].reason, "fee_unset")
@@ -151,11 +172,9 @@ test("never onboarded with no participant row is not_ready / not_onboarded", () 
 })
 
 test("the participant row is the gate — approved but not onboarded is ready", () => {
-  // PRD §12 A11: a tournament_participants row existing = approved to bet.
-  // The roster must not claim otherwise.
   const r = roster({
     users: [user("u-a", "a@x.com", { onboarded_at: null })],
-    participants: [{ user_id: "u-a", entry_fee: 40 }],
+    participants: [{ user_id: "u-a", phase1_entry_fee: 40 }],
   })
   assert.equal(r.people[0].status, "ready")
 })
@@ -168,21 +187,21 @@ test("a revoked row is not ready, and says why", () => {
   const r = roster({
     users: [user("u-a", "a@x.com")],
     participants: [
-      { user_id: "u-a", entry_fee: 40, revoked_at: "2026-08-07T12:00:00Z" },
+      { user_id: "u-a", phase1_entry_fee: 40, revoked_at: "2026-08-07T12:00:00Z" },
     ],
   })
   assert.equal(r.people[0].status, "not_ready")
   assert.equal(r.people[0].reason, "revoked")
-  // The fee is preserved on the row and still shown — that's the whole point
-  // of the soft revoke; re-approval pre-fills from it.
-  assert.equal(r.people[0].entry_fee, 40)
+  // The entries are preserved on the row and still shown — that's the whole
+  // point of the soft revoke; re-approval pre-fills from them.
+  assert.equal(r.people[0].phase1_entry_fee, 40)
 })
 
 test("a revoked person sits in awaiting_approval, so the console offers Approve", () => {
   const r = roster({
     users: [user("u-a", "a@x.com")],
     participants: [
-      { user_id: "u-a", entry_fee: 40, revoked_at: "2026-08-07T12:00:00Z" },
+      { user_id: "u-a", phase1_entry_fee: 40, revoked_at: "2026-08-07T12:00:00Z" },
     ],
   })
   assert.equal(funnelStage(r.people[0]), "awaiting_approval")
@@ -194,7 +213,7 @@ test("a revoked person sits in awaiting_approval, so the console offers Approve"
 test("clearing revoked_at puts them straight back to ready", () => {
   const r = roster({
     users: [user("u-a", "a@x.com")],
-    participants: [{ user_id: "u-a", entry_fee: 40, revoked_at: null }],
+    participants: [{ user_id: "u-a", phase1_entry_fee: 40, revoked_at: null }],
   })
   assert.equal(r.people[0].status, "ready")
   assert.equal(r.people[0].reason, "ready")
@@ -241,7 +260,7 @@ test("people sort chase-first, then alphabetically within a status", () => {
       user("u-ann", "ann@x.com", { display_name: "Ann" }),
       user("u-cy", "cy@x.com", { display_name: "Cy" }),
     ],
-    participants: [{ user_id: "u-cy", entry_fee: 30 }],
+    participants: [{ user_id: "u-cy", phase1_entry_fee: 30 }],
   })
   assert.deepEqual(
     r.people.map((p) => p.name),
@@ -265,7 +284,7 @@ test("the three buckets add up to the total", () => {
   const r = roster({
     invites: [{ email: "pat@x.com" }, { email: "ann@x.com" }],
     users: [user("u-ann", "ann@x.com"), user("u-cy", "cy@x.com")],
-    participants: [{ user_id: "u-cy", entry_fee: 20 }],
+    participants: [{ user_id: "u-cy", phase1_entry_fee: 20 }],
   })
   const { notRegistered, notReady, ready, total } = r.counts
   assert.equal(notRegistered + notReady + ready, total)
@@ -290,9 +309,9 @@ test("is_player rides along; null when there is no participant row", () => {
       user("u-c", "c@x.com", { display_name: "C" }),
     ],
     participants: [
-      { user_id: "u-a", entry_fee: 30, is_player: false },
+      { user_id: "u-a", phase1_entry_fee: 30, is_player: false },
       // Omitted on the row = the schema default (true) applied.
-      { user_id: "u-b", entry_fee: 30 },
+      { user_id: "u-b", phase1_entry_fee: 30 },
     ],
   })
   const byName = new Map(r.people.map((p) => [p.name, p]))
@@ -313,7 +332,7 @@ test("each funnel stage holds exactly the rows at that step", () => {
       user("u-wait", "wait@x.com", { display_name: "Wait" }),
       user("u-in", "in@x.com", { display_name: "In" }),
     ],
-    participants: [{ user_id: "u-in", entry_fee: 30 }],
+    participants: [{ user_id: "u-in", phase1_entry_fee: 30 }],
   })
   const names = (people: { name: string }[]) => people.map((p) => p.name)
   assert.deepEqual(names(r.funnel.noAccount), ["Pat"])
@@ -330,7 +349,7 @@ test("the funnel stages partition people — the header can't disagree with the 
       user("u-cy", "cy@x.com"),
       user("u-dee", "dee@x.com", { onboarded_at: null }),
     ],
-    participants: [{ user_id: "u-cy", entry_fee: 20 }],
+    participants: [{ user_id: "u-cy", phase1_entry_fee: 20 }],
   })
   const { noAccount, notOnboarded, awaitingApproval, approved } = r.funnel
   assert.equal(
@@ -340,10 +359,12 @@ test("the funnel stages partition people — the header can't disagree with the 
   assert.equal(r.people.length, 4)
 })
 
-test("a fee-unset participant sits under awaiting approval, not approved", () => {
+test("a participant with no entries sits under awaiting approval, not approved", () => {
+  // The ordinary state after the Sprint 30 reset: the row and the verified
+  // name survive, the entries are cleared until the money is recorded.
   const r = roster({
     users: [user("u-a", "a@x.com", { display_name: "A" })],
-    participants: [{ user_id: "u-a", entry_fee: 0 }],
+    participants: [{ user_id: "u-a", phase1_entry_fee: null, phase2_entry_fee: null }],
   })
   const person = r.people[0]
   assert.equal(person.reason, "fee_unset")
@@ -361,6 +382,42 @@ test("with no invites the funnel simply starts at 'signed in'", () => {
 })
 
 // ---------------------------------------------------------------------------
+// The entry request (Sprint 30 / A26) — what the approve form prefills from
+// ---------------------------------------------------------------------------
+
+test("a request rides along on the person, coerced, and counts while unapproved", () => {
+  const r = roster({
+    users: [user("u-a", "a@x.com", { display_name: "A" }), user("u-b", "b@x.com", { display_name: "B" })],
+    participants: [{ user_id: "u-b", phase1_entry_fee: 20 }],
+    requests: [
+      { user_id: "u-a", phase1_amount: "30", phase2_amount: 20, is_player: false, created_at: "2026-09-15T10:00:00Z" },
+      { user_id: "u-b", phase1_amount: 20, phase2_amount: 0 },
+    ],
+  })
+  const byName = new Map(r.people.map((p) => [p.name, p]))
+  assert.deepEqual(byName.get("A")!.request, {
+    phase1_amount: 30,
+    phase2_amount: 20,
+    is_player: false,
+    created_at: "2026-09-15T10:00:00Z",
+  })
+  assert.deepEqual(byName.get("B")!.request, {
+    phase1_amount: 20,
+    phase2_amount: 0,
+    is_player: true,
+    created_at: null,
+  })
+  // B is already approved, so only A is in the "requested, waiting" count.
+  assert.equal(r.counts.requested, 1)
+})
+
+test("no requests read given (a caller that predates Sprint 30) is fine", () => {
+  const r = roster({ users: [user("u-a", "a@x.com")] })
+  assert.equal(r.people[0].request, null)
+  assert.equal(r.counts.requested, 0)
+})
+
+// ---------------------------------------------------------------------------
 // Entry collection on the row
 // ---------------------------------------------------------------------------
 
@@ -368,7 +425,7 @@ test("paid_amount and paid_note ride along on an approved row", () => {
   const r = roster({
     users: [user("u-a", "a@x.com", { display_name: "A" })],
     participants: [
-      { user_id: "u-a", entry_fee: 30, paid_amount: 12, paid_note: " Venmo 9/2 " },
+      { user_id: "u-a", phase1_entry_fee: 30, paid_amount: 12, paid_note: " Venmo 9/2 " },
     ],
   })
   assert.equal(r.people[0].paid_amount, 12)
@@ -376,11 +433,9 @@ test("paid_amount and paid_note ride along on an approved row", () => {
 })
 
 test("a database without the collection columns reads as nothing paid", () => {
-  // What every row looks like until migration 20260902000000 is applied. It
-  // must be a zero, never NaN or undefined — the console sums these.
   const r = roster({
     users: [user("u-a", "a@x.com", { display_name: "A" })],
-    participants: [{ user_id: "u-a", entry_fee: 30 }],
+    participants: [{ user_id: "u-a", phase1_entry_fee: 30 }],
   })
   assert.equal(r.people[0].paid_amount, 0)
   assert.equal(r.people[0].paid_note, null)
@@ -393,8 +448,8 @@ test("PostgREST string ints and a nonsense value both coerce, never NaN", () => 
       user("u-b", "b@x.com", { display_name: "B" }),
     ],
     participants: [
-      { user_id: "u-a", entry_fee: 30, paid_amount: "25" },
-      { user_id: "u-b", entry_fee: 30, paid_amount: -5 },
+      { user_id: "u-a", phase1_entry_fee: 30, paid_amount: "25" },
+      { user_id: "u-b", phase1_entry_fee: 30, paid_amount: -5 },
     ],
   })
   const byName = Object.fromEntries(r.people.map((p) => [p.name, p.paid_amount]))
@@ -403,8 +458,6 @@ test("PostgREST string ints and a nonsense value both coerce, never NaN", () => 
 })
 
 test("someone with no participant row owes nothing rather than reading unpaid", () => {
-  // The distinction the console relies on: paid_amount is 0 for an unapproved
-  // person too, so "owes" is derived from entry_fee, which is null here.
   const r = roster({ users: [user("u-a", "a@x.com", { display_name: "A" })] })
   assert.equal(r.people[0].entry_fee, null)
   assert.equal(r.people[0].paid_amount, 0)

@@ -17,6 +17,7 @@ type Failures = {
   tournaments?: string
   bets?: string
   participants?: string
+  entryRequests?: string
   /** Every read comes back EMPTY with no error — what RLS does to an
    *  anonymous caller. The bug that shipped: this must stay green. */
   rlsFiltersEverything?: boolean
@@ -38,7 +39,9 @@ function stub(failures: Failures = {}): SupabaseClient {
         ? failures.tournaments
         : table === "bets"
           ? failures.bets
-          : failures.participants
+          : table === "entry_requests"
+            ? failures.entryRequests
+            : failures.participants
 
     // PostgREST returns no data alongside an error. Note the non-failing case
     // returns an EMPTY array, not a row: that is what every one of these reads
@@ -83,7 +86,7 @@ test("a healthy stack is ok, with every check green", async () => {
   assert.equal(report.ok, true)
   assert.deepEqual(
     report.checks.map((c) => c.name),
-    ["tournament_rules", "bets_read", "participants_collection"]
+    ["tournament_rules", "bets_read", "participants_collection", "entry_requests_read"]
   )
   assert.ok(report.checks.every((c) => c.ok))
   assert.ok(report.checks.every((c) => c.error === undefined))
@@ -114,6 +117,30 @@ test("this change's own deploy order: missing paid_amount turns it red", async (
   assert.equal(checks.bets_read.ok, true)
 })
 
+test("Sprint 30's deploy order: a missing per-phase entry column turns it red", async () => {
+  // Every wagering read keys off phase1_entry_fee / phase2_entry_fee; a deploy
+  // that outruns migration 20260914000000 must say so by name.
+  const report = await buildHealthReport(
+    stub({ participants: "column tournament_participants.phase1_entry_fee does not exist" })
+  )
+  assert.equal(report.ok, false)
+  const checks = byName(report)
+  assert.equal(checks.participants_collection.ok, false)
+  assert.match(checks.participants_collection.error ?? "", /phase1_entry_fee/)
+  assert.equal(checks.entry_requests_read.ok, true)
+})
+
+test("Sprint 30's second table: a missing entry_requests table turns it red and names it", async () => {
+  const report = await buildHealthReport(
+    stub({ entryRequests: 'relation "public.entry_requests" does not exist' })
+  )
+  assert.equal(report.ok, false)
+  const checks = byName(report)
+  assert.equal(checks.entry_requests_read.ok, false)
+  assert.match(checks.entry_requests_read.error ?? "", /entry_requests/)
+  assert.equal(checks.participants_collection.ok, true)
+})
+
 // THE REGRESSION TEST. This endpoint is public, so it runs as `anon`, and
 // every table it touches is RLS-protected — so every read comes back EMPTY
 // with NO ERROR. The first version treated that emptiness as "no tournament
@@ -131,7 +158,7 @@ test("every check runs unconditionally — none is gated on a visible row", () =
   // from a row `anon` can never see, so they never ran at all.
   const report = stub()
   return buildHealthReport(report).then((r) => {
-    assert.equal(r.checks.length, 3)
+    assert.equal(r.checks.length, 4)
     assert.ok(r.checks.every((c) => c.ok))
   })
 })
@@ -154,7 +181,7 @@ test("an unreadable tournaments table is red but does not stop the rest", async 
   assert.equal(report.ok, false)
   assert.equal(byName(report).tournament_rules.ok, false)
   // The remaining three still run and still report.
-  assert.equal(report.checks.length, 3)
+  assert.equal(report.checks.length, 4)
   assert.equal(byName(report).bets_read.ok, true)
 })
 

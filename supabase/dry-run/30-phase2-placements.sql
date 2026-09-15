@@ -8,19 +8,24 @@
 --
 -- ── WHAT THIS IS TESTING BY CONSTRUCTION ───────────────────────────────────
 --
--- Rule 6 says the total wagered across BOTH phases must equal the entry fee
--- exactly by Phase 2 close — and the split between phases is the
--- participant's choice (Q2). Every slate below is sized to the exact dollar
--- each bettor has left over from Phase 1, so after this runs the compliance
--- sweep in Act 9 should show a clean board...
+-- Since Sprint 30 (ADR 0002) Phase 2 is its own entry and its own pot: what a
+-- bettor did or didn't spend in Phase 1 has nothing to do with it. Every
+-- slate below is sized to the bettor's PHASE 2 entry, so after this runs the
+-- Phase 2 chase list in Act 9 should show a clean board...
 --
--- ...with one deliberate exception: Devin Arand lands on $18 of his $20. He
--- was already the Phase 1 straggler; now he is also the off-exact-total case.
--- Act 9's job is to catch him. If the compliance query shows a green board,
--- something is wrong with the query, not with Devin.
+-- ...with two deliberate exceptions:
 --
--- Steve Esswein still has nothing. He stays the "paid, never wagered"
--- control all the way to /results.
+--   · Devin Arand lands on $18 of his $20 Phase 2 entry, 5 picks. The first
+--     $20 of an entry is committed either way, so $2 forfeits to the pot.
+--     If the chase list doesn't name him, something is wrong with the list.
+--   · Mike Vemmer is PAT'S OWN WORKED EXAMPLE: a $50 Phase 2 entry, $20
+--     wagered, $12 of it on himself. $12 is inside his placement-time cap (a
+--     quarter of $50, floored), but at close the line is a quarter of what he
+--     actually wagered — $5 — so $7 of his self-bets stays in the pot earning
+--     nothing, and $30 of his entry comes back.
+--
+-- Steve Esswein has no Phase 2 entry, so he isn't in this pot at all; the
+-- Phase 2 close counts him as the one approved member not entered.
 --
 -- Idempotent: only deletes each bettor's PHASE 2 rows, so the Phase 1 wagers
 -- (and the odds they snapshotted) survive a re-run untouched. The delete is
@@ -39,68 +44,68 @@ BEGIN;
 
 -- Step 0: the slate, materialised — the single source of truth for both the
 -- DELETE and the INSERT below.
--- (email, sheet_pick_id, amount) — sized to each bettor's exact remaining
--- budget. Phase 2 picks are sheet_pick_id 58–87.
+-- (email, sheet_pick_id, amount) — sized to each bettor's Phase 2 entry.
+-- Phase 2 picks are sheet_pick_id 58–87. Every amount is within the flat $10
+-- max single bet.
 CREATE TEMP TABLE slate (email text, sheet_pick_id int, amount int) ON COMMIT DROP;
 
 INSERT INTO slate (email, sheet_pick_id, amount) VALUES
-    -- Garrett Klenke · $8 left · self cap $5, $4 already used → $1 headroom
-    ('garrett.klenke@dryrun.ozark.test',  60, 1),   -- self (takes him to the cap)
-    ('garrett.klenke@dryrun.ozark.test',  63, 2),
-    ('garrett.klenke@dryrun.ozark.test',  70, 2),
-    ('garrett.klenke@dryrun.ozark.test',  82, 2),
-    ('garrett.klenke@dryrun.ozark.test',  86, 1),   -- $20 of $20 ✓
+    -- Garrett Klenke · Phase 2 $20 · self cap $5 (pick 60 is him)
+    ('garrett.klenke@dryrun.ozark.test',  60, 1),   -- self
+    ('garrett.klenke@dryrun.ozark.test',  63, 5),
+    ('garrett.klenke@dryrun.ozark.test',  70, 5),
+    ('garrett.klenke@dryrun.ozark.test',  82, 4),
+    ('garrett.klenke@dryrun.ozark.test',  86, 5),   -- $20 of $20 ✓
 
-    -- Ethan Kipping · $12 left · already at his $7 self cap, so no self-picks
-    ('ethan.kipping@dryrun.ozark.test',   58, 3),
-    ('ethan.kipping@dryrun.ozark.test',   63, 2),
-    ('ethan.kipping@dryrun.ozark.test',   71, 3),
-    ('ethan.kipping@dryrun.ozark.test',   82, 2),
-    ('ethan.kipping@dryrun.ozark.test',   86, 2),   -- $30 of $30 ✓
+    -- Ethan Kipping · Phase 2 $20 · no self-picks
+    ('ethan.kipping@dryrun.ozark.test',   58, 4),
+    ('ethan.kipping@dryrun.ozark.test',   63, 4),
+    ('ethan.kipping@dryrun.ozark.test',   71, 4),
+    ('ethan.kipping@dryrun.ozark.test',   82, 4),
+    ('ethan.kipping@dryrun.ozark.test',   86, 4),   -- $20 of $20 ✓
 
-    -- Alex Leslie · $16 left · at his $10 self cap (pick 64 is him — avoided)
+    -- Alex Leslie · Phase 2 $20 · no self-picks (pick 64 is him — avoided)
     ('alex.leslie@dryrun.ozark.test',     58, 4),
-    ('alex.leslie@dryrun.ozark.test',     63, 3),
-    ('alex.leslie@dryrun.ozark.test',     71, 3),
+    ('alex.leslie@dryrun.ozark.test',     63, 4),
+    ('alex.leslie@dryrun.ozark.test',     71, 4),
     ('alex.leslie@dryrun.ozark.test',     76, 2),
-    ('alex.leslie@dryrun.ozark.test',     84, 2),
-    ('alex.leslie@dryrun.ozark.test',     86, 2),   -- $40 of $40 ✓
+    ('alex.leslie@dryrun.ozark.test',     84, 3),
+    ('alex.leslie@dryrun.ozark.test',     86, 3),   -- $20 of $20 ✓
 
-    -- Devin Arand · $12 left, places only $10 → THE OFF-EXACT-TOTAL CASE
-    ('devin.arand@dryrun.ozark.test',     58, 3),
-    ('devin.arand@dryrun.ozark.test',     63, 2),
-    ('devin.arand@dryrun.ozark.test',     70, 2),
-    ('devin.arand@dryrun.ozark.test',     84, 2),
-    ('devin.arand@dryrun.ozark.test',     86, 1),   -- $18 of $20 ✗ (deliberate)
+    -- Devin Arand · Phase 2 $20 · places $18 → $2 FORFEITS (deliberate)
+    ('devin.arand@dryrun.ozark.test',     58, 5),
+    ('devin.arand@dryrun.ozark.test',     63, 4),
+    ('devin.arand@dryrun.ozark.test',     70, 4),
+    ('devin.arand@dryrun.ozark.test',     84, 3),
+    ('devin.arand@dryrun.ozark.test',     86, 2),   -- $18 of $20 ✗ (deliberate)
 
-    -- Dustin Scheller · $14 left · at his $8 self cap
-    ('dustin.scheller@dryrun.ozark.test', 58, 3),
-    ('dustin.scheller@dryrun.ozark.test', 63, 3),
-    ('dustin.scheller@dryrun.ozark.test', 71, 3),
-    ('dustin.scheller@dryrun.ozark.test', 82, 3),
-    ('dustin.scheller@dryrun.ozark.test', 86, 2),   -- $35 of $35 ✓
+    -- Dustin Scheller · Phase 2 $20 · no self-picks (65 and 76 are him)
+    ('dustin.scheller@dryrun.ozark.test', 58, 4),
+    ('dustin.scheller@dryrun.ozark.test', 63, 4),
+    ('dustin.scheller@dryrun.ozark.test', 71, 4),
+    ('dustin.scheller@dryrun.ozark.test', 82, 4),
+    ('dustin.scheller@dryrun.ozark.test', 86, 4),   -- $20 of $20 ✓
 
-    -- Mike Vemmer · $20 left · at his $10 self cap (68 and 77 are him)
-    ('mike.vemmer@dryrun.ozark.test',     58, 5),
-    ('mike.vemmer@dryrun.ozark.test',     64, 4),
-    ('mike.vemmer@dryrun.ozark.test',     71, 4),
-    ('mike.vemmer@dryrun.ozark.test',     76, 3),
-    ('mike.vemmer@dryrun.ozark.test',     82, 2),
-    ('mike.vemmer@dryrun.ozark.test',     86, 2),   -- $50 of $50 ✓
+    -- Mike Vemmer · Phase 2 $50 · PAT'S EXAMPLE: $20 wagered, $12 on himself
+    ('mike.vemmer@dryrun.ozark.test',     68, 7),   -- self · Top 6 Finish
+    ('mike.vemmer@dryrun.ozark.test',     77, 5),   -- self · Medalist R3 → $12, at the placement cap
+    ('mike.vemmer@dryrun.ozark.test',     58, 3),
+    ('mike.vemmer@dryrun.ozark.test',     71, 3),
+    ('mike.vemmer@dryrun.ozark.test',     86, 2),   -- $20 of $50 ✗ → $30 back, $5 of $12 on self counts
 
-    -- Rob Vemmer · $10 left · at his $6 self cap (63 and 78 are him)
-    ('rob.vemmer@dryrun.ozark.test',      58, 3),
-    ('rob.vemmer@dryrun.ozark.test',      64, 2),
-    ('rob.vemmer@dryrun.ozark.test',      71, 2),
-    ('rob.vemmer@dryrun.ozark.test',      82, 2),
-    ('rob.vemmer@dryrun.ozark.test',      86, 1),   -- $25 of $25 ✓
+    -- Rob Vemmer · Phase 2 $20 · no self-picks (63 and 78 are him)
+    ('rob.vemmer@dryrun.ozark.test',      58, 4),
+    ('rob.vemmer@dryrun.ozark.test',      64, 4),
+    ('rob.vemmer@dryrun.ozark.test',      71, 4),
+    ('rob.vemmer@dryrun.ozark.test',      82, 4),
+    ('rob.vemmer@dryrun.ozark.test',      86, 4),   -- $20 of $20 ✓
 
-    -- Andrew Long · $6 left · no player link, so no self-picks possible
-    ('andrewelong18@gmail.com',           58, 2),
-    ('andrewelong18@gmail.com',           63, 1),
-    ('andrewelong18@gmail.com',           71, 1),
-    ('andrewelong18@gmail.com',           82, 1),
-    ('andrewelong18@gmail.com',           86, 1);   -- $20 of $20 ✓
+    -- Andrew Long · Phase 2 $20 · no player link, so no self-picks possible
+    ('andrewelong18@gmail.com',           58, 4),
+    ('andrewelong18@gmail.com',           63, 4),
+    ('andrewelong18@gmail.com',           71, 4),
+    ('andrewelong18@gmail.com',           82, 4),
+    ('andrewelong18@gmail.com',           86, 4);   -- $20 of $20 ✓
 
 -- Step 1: clear Phase 2, as its own statement so the INSERT below sees it,
 -- and scoped to exactly the bettors in the slate — never the hand-driven four.
@@ -137,23 +142,21 @@ SELECT user_id, pick_id, amount, odds_at_placement, requires_admin_review FROM r
 COMMIT;
 
 -- ── Verify ──────────────────────────────────────────────────────────────────
--- Expect every bulk bettor at exactly their entry fee EXCEPT Devin Arand at
--- $18 of $20. Phase counts 5–6 each; Devin's phase 1 count stays at 3, which
--- with his 5 Phase 2 picks puts him at 8 across the tournament — over the
--- 5-pick minimum (#96), so the exact total is his only outstanding rule.
+-- Phase 2 only. Expect every bulk bettor at exactly their Phase 2 entry
+-- EXCEPT Devin Arand at $18 of $20 and Mike Vemmer at $20 of $50. Picks 5–6
+-- each.
 SELECT
   u.display_name,
-  tp.entry_fee,
-  count(*) FILTER (WHERE bt.phase = 1) AS p1_picks,
-  count(*) FILTER (WHERE bt.phase = 2) AS p2_picks,
-  sum(p.amount)                        AS total_wagered,
-  tp.entry_fee - sum(p.amount)         AS remaining,
-  CASE WHEN sum(p.amount) = tp.entry_fee THEN 'exact' ELSE 'OFF' END AS rule_6
+  tp.phase2_entry_fee                                   AS entry,
+  count(*)                                              AS picks,
+  sum(p.amount)                                         AS wagered,
+  sum(p.amount) FILTER (WHERE p.requires_admin_review)  AS on_self,
+  CASE WHEN sum(p.amount) = tp.phase2_entry_fee THEN 'exact' ELSE 'OFF' END AS phase_2
 FROM public.bet_placements p
 JOIN public.bet_picks pk ON pk.id = p.pick_id
-JOIN public.bets bt      ON bt.id = pk.bet_id
+JOIN public.bets bt      ON bt.id = pk.bet_id AND bt.phase = 2
 JOIN public.users u      ON u.id = p.user_id
-JOIN public.tournament_participants tp ON tp.user_id = u.id
+JOIN public.tournament_participants tp ON tp.user_id = u.id AND tp.tournament_id = bt.tournament_id
 WHERE p.deleted_at IS NULL
-GROUP BY u.display_name, tp.entry_fee
+GROUP BY u.display_name, tp.phase2_entry_fee
 ORDER BY u.display_name;

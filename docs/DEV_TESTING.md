@@ -127,15 +127,15 @@ Re-running `seed-dev-accounts.sql` resets all five to exactly these states.
 | Email | State | What it's for |
 |---|---|---|
 | `admin@ozark.test` | Admin · onboarded · approved ($40, player) | Do the approving (`/profile → Participants`) and also place bets. |
-| `approved@ozark.test` | Onboarded · approved ($30, player) | A normal bettor — place/edit/remove wagers on `/bets`. |
-| `nonplayer@ozark.test` | Onboarded · approved ($20, **non-player**) | Non-playing bettor — exempt from the self-bet cap. |
-| `pending@ozark.test` | Onboarded · **no participant row** | The pending-approval state: sees the menu but can't place. Approve from `admin@` to watch them gain betting access. |
-| `newbie@ozark.test` | **Un-onboarded** | Forced through the required onboarding flow (set display name → walkthrough → `/bets` view-only). |
+| `approved@ozark.test` | Onboarded · approved ($30 Phase 1 + $30 Phase 2, player) | A normal bettor — place/edit/remove wagers on `/bets`. |
+| `nonplayer@ozark.test` | Onboarded · approved ($20 + $20, **non-player**) | Non-playing bettor — exempt from the self-bet cap. |
+| `pending@ozark.test` | Onboarded · **no participant row** · has an **entry request** ($30 / $20) | The pending-approval state: sees the menu but can't place. Approve from `admin@` — the panel is prefilled from the request — to watch them gain betting access. |
+| `newbie@ozark.test` | **Un-onboarded** | Forced through the required onboarding flow (set display name → walkthrough → the skippable one-time entry request → `/bets` view-only). |
 
 **Full happy path in one sitting:** sign in as `newbie@` → complete onboarding → confirm
 you're view-only on `/bets`. Then sign in as `admin@` → `/admin/people` → the newly
-onboarded account is under **Awaiting approval** → set an entry fee + player flag →
-**Approve to bet**. Back as that account, you can now place a wager.
+onboarded account is under **Awaiting approval** → set the Phase 1 / Phase 2 entries (prefilled
+if they requested one during onboarding) + player flag → **Approve to bet**. Back as that account, you can now place a wager.
 
 The accounts are **passwordless** (magic-link only) — there's no password to set.
 

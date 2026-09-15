@@ -259,8 +259,8 @@ async function main() {
   runSql(`
     INSERT INTO auth.users (id, email) VALUES (${lit(BETTOR)}, 'sweep@test.local')
       ON CONFLICT (id) DO NOTHING;
-    INSERT INTO public.tournament_participants (user_id, tournament_id, entry_fee, is_player)
-      VALUES (${lit(BETTOR)}, ${lit(tournamentId)}, 40, true)
+    INSERT INTO public.tournament_participants (user_id, tournament_id, phase1_entry_fee, phase2_entry_fee, is_player)
+      VALUES (${lit(BETTOR)}, ${lit(tournamentId)}, 40, 40, true)
       ON CONFLICT (user_id, tournament_id) DO NOTHING;
     INSERT INTO public.bet_placements (user_id, pick_id, amount, odds_at_placement)
     SELECT ${lit(BETTOR)}, p.id, 7, p.american_odds

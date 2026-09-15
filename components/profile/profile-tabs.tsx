@@ -35,8 +35,22 @@ function toTab(value: string | undefined, isAdmin: boolean): Tab {
 type StatusModel = {
   isAdmin: boolean
   hasTournament: boolean
-  participant: { entry_fee: number; is_player: boolean } | null
+  participant: {
+    phase1_entry_fee: number | null
+    phase2_entry_fee: number | null
+    is_player: boolean
+  } | null
   readyToBet: boolean
+}
+
+/** "P1 $30 · P2 $20", "P2 $20 only", or "None yet" (Sprint 30: per phase). */
+function entriesLabel(participant: NonNullable<StatusModel["participant"]>): string {
+  const parts: string[] = []
+  if (participant.phase1_entry_fee) parts.push(`P1 $${participant.phase1_entry_fee}`)
+  if (participant.phase2_entry_fee) parts.push(`P2 $${participant.phase2_entry_fee}`)
+  if (parts.length === 0) return "None yet"
+  if (parts.length === 1) return `${parts[0]} only`
+  return parts.join(" · ")
 }
 
 export function ProfileTabs({
@@ -162,8 +176,8 @@ function StatusPanel({ status }: { status: StatusModel }) {
           tone={participant ? "good" : "muted"}
         />
         <StatusRow
-          label="Entry fee"
-          value={participant ? `$${participant.entry_fee}` : "—"}
+          label="Entries"
+          value={participant ? entriesLabel(participant) : "—"}
         />
         <StatusRow
           label="Ready to bet"

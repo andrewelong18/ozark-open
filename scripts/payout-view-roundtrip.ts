@@ -70,9 +70,9 @@ function main() {
       ('${ADMIN}', 'admin2@test.local')
     ON CONFLICT (id) DO NOTHING;
     UPDATE public.users SET is_admin = true WHERE id = '${ADMIN}';
-    INSERT INTO public.tournament_participants (user_id, tournament_id, entry_fee, is_player) VALUES
-      ('${CARL}', '${tournamentId}', 40, true),
-      ('${DANA}', '${tournamentId}', 40, true)
+    INSERT INTO public.tournament_participants (user_id, tournament_id, phase1_entry_fee, phase2_entry_fee, is_player) VALUES
+      ('${CARL}', '${tournamentId}', 40, 40, true),
+      ('${DANA}', '${tournamentId}', 40, 40, true)
     ON CONFLICT (user_id, tournament_id) DO NOTHING;
   `)
 
@@ -177,6 +177,30 @@ function main() {
       openPicks[0],
       `(bet_id IS NOT NULL AND tournament_id = '${tournamentId}' AND placement_id IS NOT NULL)::text`
     ) === "true"
+  )
+  // Sprint 30 (ADR 0002): the two trailing columns the per-phase split reads.
+  check(
+    "the view carries the bet's phase (which pot the wager belongs to)",
+    viewRow(openPicks[0], "phase") ===
+      runSql(
+        `SELECT b.phase FROM public.bet_picks p JOIN public.bets b ON b.id = p.bet_id
+          WHERE p.id = '${openPicks[0]}'`
+      )
+  )
+  check(
+    "is_self_pick is false on an unlinked pick",
+    viewRow(openPicks[0], "is_self_pick::text") === "false"
+  )
+  check(
+    "is_self_pick is true only when the pick's player IS the bettor",
+    (() => {
+      runSql(`UPDATE public.bet_picks SET player_user_id = '${CARL}' WHERE id = '${openPicks[1]}'`)
+      const self = viewRow(openPicks[1], "is_self_pick::text")
+      runSql(`UPDATE public.bet_picks SET player_user_id = '${DANA}' WHERE id = '${openPicks[1]}'`)
+      const other = viewRow(openPicks[1], "is_self_pick::text")
+      runSql(`UPDATE public.bet_picks SET player_user_id = NULL WHERE id = '${openPicks[1]}'`)
+      return self === "true" && other === "false"
+    })()
   )
   check(
     "the view computes from odds_at_placement, not the live pick odds",

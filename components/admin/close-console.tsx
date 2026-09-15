@@ -151,9 +151,16 @@ export function CloseConsole({
           </div>
           <p className="mt-0.5 text-xs text-text-muted">
             {chase.closing_phase === 1
-              ? "Being short of your entry fee is normal right now, so it isn't a reason to text anyone yet."
-              : "Last chance for both the pick minimum and the exact total."}
+              ? "Phase 1 is its own pot: anyone entered in it who is short of the pick minimum or their Phase 1 entry gets a text now — the shortfall is money at this close."
+              : "Last chance for the Phase 2 pick minimum and the exact Phase 2 entry. Phase 1 is closed, so nobody is chased for it any more."}
           </p>
+          {chase.closing_phase === 2 && chase.not_entered > 0 && (
+            <p className="mt-1 text-xs text-caution-strong">
+              {chase.not_entered} approved{" "}
+              {chase.not_entered === 1 ? "member has" : "members have"} no Phase 2
+              entry recorded — they can&apos;t bet in it until an admin records one.
+            </p>
+          )}
         </div>
 
         {/* The line an admin reads off a phone, verbatim and copyable. */}
@@ -173,11 +180,20 @@ export function CloseConsole({
           </Button>
         </div>
 
+        {/* Everyone entered in the closing phase, chased first. The columns
+            are that phase's alone (Sprint 30): its pick count, and wagered
+            against its entry. The reason names the money — what forfeits,
+            what comes back, what on themselves stops counting. */}
         <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 border-b border-border px-4 py-2 text-[10px] font-bold tracking-wider text-text-muted uppercase">
           <span>Player</span>
-          <span className="text-right">Picks</span>
+          <span className="text-right">P{chase.closing_phase} picks</span>
           <span className="text-right">Wagered</span>
         </div>
+        {chase.people.length === 0 && (
+          <p className="px-4 py-3 text-sm text-text-muted">
+            Nobody has a Phase {chase.closing_phase} entry recorded.
+          </p>
+        )}
         {chase.people.map((p) => (
           <div
             key={p.user_id}
@@ -193,12 +209,13 @@ export function CloseConsole({
               {p.reason && (
                 <span className="ml-2 text-xs text-caution-strong">{p.reason}</span>
               )}
+              {!p.needs_a_text && p.refund > 0 && (
+                <span className="ml-2 text-xs text-text-muted">${p.refund} back</span>
+              )}
             </span>
+            <span className="tabular text-right text-text-body">{p.pick_count}</span>
             <span className="tabular text-right text-text-body">
-              {p.phase1_picks} + {p.phase2_picks}
-            </span>
-            <span className="tabular text-right text-text-body">
-              ${p.total_wagered} / ${p.entry_fee}
+              ${p.wagered} / ${p.entry}
             </span>
           </div>
         ))}

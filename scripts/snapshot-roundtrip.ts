@@ -173,7 +173,7 @@ runSql(`
   INSERT INTO public.bet_picks (bet_id, sheet_pick_id, label, american_odds, fractional_odds, probability)
   VALUES ('${betId}', 999999, 'PHANTOM PICK', -110, '10/11', 0.5238);
   -- and the entry fee moved, which changes the pool itself
-  UPDATE public.tournament_participants SET entry_fee = entry_fee + 100
+  UPDATE public.tournament_participants SET phase1_entry_fee = coalesce(phase1_entry_fee, 0) + 100
   WHERE id = (SELECT id FROM public.tournament_participants ORDER BY id LIMIT 1);`)
 
 check("the mangled state differs from the snapshot", stateChecksum() !== before)

@@ -26,13 +26,15 @@ import {
   createPhase2SelfBet,
   dropPhase2SelfBet,
   linkPickToUser,
+  pickIdFor,
   placementRowsFor,
+  restoreEntries,
   seedWager,
   setEntryFee,
   unlinkAllPicks,
 } from "./fixtures/rules.ts"
 
-/** approved@'s seeded entry fee, restored after each test that moves it. */
+/** approved@'s seeded entry per phase, restored after each test that moves it. */
 const SEEDED_ENTRY = 30
 
 /** A pick's row, found by its name as TEXT. The gauntlet unlinks every pick in
@@ -97,7 +99,7 @@ test.beforeEach(async () => {
   dropPhase2SelfBet()
   unlinkAllPicks()
   await deletePlacementsFor(ACCOUNTS.approved)
-  await setEntryFee(ACCOUNTS.approved, SEEDED_ENTRY)
+  await restoreEntries(ACCOUNTS.approved, SEEDED_ENTRY, SEEDED_ENTRY)
 })
 
 test.afterAll(async () => {
@@ -106,37 +108,38 @@ test.afterAll(async () => {
   dropPhase2SelfBet()
   unlinkAllPicks()
   reloadFixture()
-  await setEntryFee(ACCOUNTS.approved, SEEDED_ENTRY)
+  await restoreEntries(ACCOUNTS.approved, SEEDED_ENTRY, SEEDED_ENTRY)
 })
 
 // ---------------------------------------------------------------------------
-// 4.5 — the max-single-bet floor. "The subtlest rule in the book."
+// 4.5 — the max single bet. Since Sprint 30 (ADR 0002): a flat $10.
 // ---------------------------------------------------------------------------
 
-test("the max single bet FLOORS: on a $25 entry $13 is refused and $12 is not", async ({
+test("the max single bet is a flat $10: at a $50 entry $11 is refused and $10 is not", async ({
   page,
 }) => {
-  // $30 cannot catch this. 50% of $30 is exactly $15, so a floor and a round
-  // give the same answer and a rounding bug is invisible. $25 is the smallest
-  // seeded-plausible fee where they disagree: 0.5 × 25 = 12.5 → $12, not $13.
-  await setEntryFee(ACCOUNTS.approved, 25)
+  // $50 is the entry where the OLD rule (50% of the entry, capped at $20) and
+  // the new flat $10 disagree most — the old code would take $20 here. So a
+  // regression to a percentage fails this test loudly instead of passing at
+  // an entry where the two happen to agree.
+  await setEntryFee(ACCOUNTS.approved, 50)
   await signInAs(page, ACCOUNTS.approved)
   await page.goto("/bets")
 
-  await placeAndConfirm(page, "bet-1", "Dan Mercer", "13")
+  await placeAndConfirm(page, "bet-1", "Dan Mercer", "11")
 
   const alert = refusal(page, "Max single bet")
   await expect(alert).toBeVisible()
-  await expect(alert).toContainText("Max single bet is $12 for your $25 entry.")
+  await expect(alert).toContainText("Max single bet is $10.")
 
   // Refused means nothing was written — not "written and hidden".
   await page.goto("/my-bets")
   await expect(page.getByText("Dan Mercer")).toHaveCount(0)
 
   // And the dollar below it goes through, which is what makes the assertion
-  // above about flooring rather than about the rule being off by one.
+  // above about the cap rather than about the rule being off by one.
   await page.goto("/bets")
-  await placeAndConfirm(page, "bet-1", "Dan Mercer", "12")
+  await placeAndConfirm(page, "bet-1", "Dan Mercer", "10")
   await expect(page.getByText("Locked in")).toBeVisible()
 
   await page.goto("/my-bets")
@@ -144,18 +147,19 @@ test("the max single bet FLOORS: on a $25 entry $13 is refused and $12 is not", 
 })
 
 // ---------------------------------------------------------------------------
-// 4.7 — the self-bet cap, across both phases
+// 4.7 — the self-bet cap, PER PHASE (Sprint 30)
 // ---------------------------------------------------------------------------
 
-test("the self-bet cap counts the whole tournament, not each phase", async ({ page }) => {
-  // At a $40 entry the cap is min(25% × 40, $10) = $10.
+test("the self-bet cap counts each phase on its own, and floors", async ({ page }) => {
+  // $40 in each phase → a quarter of that, $10 on yourself, in EACH phase.
   //
   // The two self-picks sit in DIFFERENT phases on purpose. Inside one phase a
-  // per-phase implementation and a tournament-wide one are indistinguishable —
-  // every single-phase test passes against the buggy version. Splitting the
-  // phases is the only thing that tells them apart, and a per-phase bug here
-  // lets a player back himself for twice the cap.
-  await setEntryFee(ACCOUNTS.approved, 40)
+  // per-phase implementation and a tournament-wide one are indistinguishable.
+  // Under the old tournament-wide cap $6 + $5 = $11 was refused; under Pat's
+  // per-phase rule it's $6 of $10 in Phase 1 and $5 of $10 in Phase 2, and a
+  // regression back to one cap fails the placement below.
+  await setEntryFee(ACCOUNTS.approved, 40, 1)
+  await setEntryFee(ACCOUNTS.approved, 40, 2)
   await linkPickToUser(1, ACCOUNTS.approved) // Phase 1, bet 1 — "Dan Mercer"
   await createPhase2SelfBet(ACCOUNTS.approved) // Phase 2, bet 900 — pick 900
   await seedWager(ACCOUNTS.approved, 1, 6) // $6 on himself, Phase 1
@@ -163,25 +167,95 @@ test("the self-bet cap counts the whole tournament, not each phase", async ({ pa
   await signInAs(page, ACCOUNTS.approved)
   await page.goto("/bets")
 
-  // $6 (phase 1) + $5 (phase 2) = $11, one dollar over the $10 cap.
   await placeAndConfirm(page, "bet-900", "Avery Approved", "5")
+  await expect(page.getByTestId("bet-900").getByText("✓ Locked in")).toBeVisible()
+
+  // Now the floor, in Phase 2 alone. At a $25 Phase 2 entry the cap is a
+  // quarter of $25 = $6.25 → $6, so moving his $5 to $7 is one dollar over
+  // and the Phase 1 $6 plays no part in the sentence.
+  await setEntryFee(ACCOUNTS.approved, 25, 2)
+  await page.goto("/bets")
+  await placeAndConfirm(page, "bet-900", "Avery Approved", "7")
 
   const alert = refusal(page, "Max total on yourself")
   await expect(alert).toBeVisible()
   await expect(alert).toContainText(
-    "Max total on yourself is $10 for your $40 entry — this would put you at $11."
+    "Max total on yourself is $6 for your $25 Phase 2 entry — this would put you at $7."
   )
 
   // Landing exactly on the cap is allowed — the rule is >, not >=.
   await page.goto("/bets")
-  await placeAndConfirm(page, "bet-900", "Avery Approved", "4")
-  await expect(page.getByText("Locked in")).toBeVisible()
+  await placeAndConfirm(page, "bet-900", "Avery Approved", "6")
+  await expect(page.getByTestId("bet-900").getByText("✓ Locked in")).toBeVisible()
 
   // Scoped to main: the bettor's own name is also in the header, and a
   // self-pick is the one case where the pick label and the signed-in member
   // are the same string.
   await page.goto("/my-bets")
   await expect(page.getByRole("main").getByText("Avery Approved")).toBeVisible()
+})
+
+// ---------------------------------------------------------------------------
+// Sprint 30 — the running total is per phase, and so is eligibility
+// ---------------------------------------------------------------------------
+
+test("the running total is capped at the PHASE entry, with the database's own sentence", async ({
+  page,
+}) => {
+  // $30 Phase 1 entry, $30 of it already down on three bets. One more dollar
+  // anywhere in Phase 1 is over — and the refusal names the phase.
+  await seedWager(ACCOUNTS.approved, 2, 10) // bet 1, Garrett Klenke
+  await seedWager(ACCOUNTS.approved, 24, 10) // bet 3, Garrett Klenke
+  await seedWager(ACCOUNTS.approved, 46, 10) // bet 8, Brendan Nulsen
+
+  await signInAs(page, ACCOUNTS.approved)
+  await page.goto("/bets")
+  await placeAndConfirm(page, "bet-1", "Dan Mercer", "1")
+
+  const alert = refusal(page, "Over your")
+  await expect(alert).toBeVisible()
+  await expect(alert).toContainText(
+    "Over your $30 Phase 1 entry — that's the most you can wager in Phase 1."
+  )
+
+  // Phase 1 being full takes nothing from Phase 2: its own $30 is untouched.
+  await createPhase2SelfBet(ACCOUNTS.admin) // a Phase 2 bet approved@ isn't in
+  await page.goto("/bets")
+  await placeAndConfirm(page, "bet-900", "Avery Approved", "10")
+  await expect(page.getByTestId("bet-900").getByText("✓ Locked in")).toBeVisible()
+})
+
+test("a phase you have no entry for has no stake box, and the API refuses it by name", async ({
+  page,
+}) => {
+  await setEntryFee(ACCOUNTS.approved, null, 2)
+  await createPhase2SelfBet(ACCOUNTS.admin)
+
+  await signInAs(page, ACCOUNTS.approved)
+  await page.goto("/bets")
+
+  // The Phase 2 bet renders read-only, and says why in the member's terms.
+  const card = page.getByTestId("bet-900")
+  await expect(card).toContainText("You're not entered in Phase 2")
+  await expect(card.getByRole("button", { name: "Place stake" })).toHaveCount(0)
+
+  // The UI isn't the gate — the route is. A hand-built request from the same
+  // session is refused with the same sentence, and nothing is written.
+  const response = await page.request.post("/api/placements", {
+    data: { pick_id: pickIdFor(900), amount: 5 },
+  })
+  expect(response.status()).toBe(403)
+  expect((await response.json()).error).toBe(
+    "You're not entered in Phase 2 — ask an admin if you'd like to be."
+  )
+  expect(await placementRowsFor(ACCOUNTS.approved, 900)).toHaveLength(0)
+
+  // Phase 1 is still theirs. The menu opens on the phase being closed next —
+  // Phase 2, now that a Phase 2 bet is published — so switch tabs first.
+  await page.getByRole("button", { name: "Phase 1", exact: true }).click()
+  await expect(
+    page.getByTestId("bet-1").getByRole("button", { name: "Place stake" }).first()
+  ).toBeVisible()
 })
 
 // ---------------------------------------------------------------------------

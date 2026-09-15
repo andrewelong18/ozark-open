@@ -9,11 +9,14 @@ import { PeopleConsole } from "@/components/admin/people-console"
 import {
   buildRoster,
   type AuthActivityQueryRow,
+  type EntryRequestQueryRow,
   type InviteQueryRow,
   type ParticipantQueryRow,
   type RosterPerson,
   type UserQueryRow,
 } from "@/lib/roster"
+import { TOURNAMENT_CLOCK_COLUMNS, toPhaseClock } from "@/lib/placements"
+import { phaseClosedByClock } from "@/lib/phases"
 
 // The admin people console (Sprint 20) — the merge of Sprint 10's read-only
 // /admin/roster and Sprint 16's /admin/participants, which were two views of
@@ -24,6 +27,10 @@ import {
 // NOT participants: an invite with no account, a member who signed in and
 // abandoned onboarding. Seeing someone is stuck and unsticking them are the
 // same page now.
+//
+// Since Sprint 30 (ADR 0002) an approval is one entry PER PHASE, and the
+// member's own entry request (what they asked for, and their Venmo) sits next
+// to the approve form to prefill it.
 
 /** One chase list — the count, what to do about it, and the names to copy. */
 function ChaseBlock({
@@ -60,9 +67,10 @@ export default async function AdminPeoplePage() {
 
   // The fee bounds come off the tournaments row — the approve/edit forms never
   // hardcode a dollar figure (and the API re-validates against the same row).
+  // The clock rides along so the form can caution that Phase 1 has closed.
   const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
-    .select("id, name, entry_fee_min, entry_fee_max")
+    .select(`id, name, entry_fee_min, entry_fee_max, ${TOURNAMENT_CLOCK_COLUMNS}`)
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -101,44 +109,54 @@ export default async function AdminPeoplePage() {
       </div>
     )
   }
+  const now = new Date()
+  const clock = toPhaseClock(tournamentData as unknown as Record<string, unknown>)
+  const closedPhases = {
+    1: phaseClosedByClock(1, clock, now),
+    2: phaseClosedByClock(2, clock, now),
+  }
 
   // NOTE the users query has no onboarded_at filter. The old
   // /admin/participants page filtered them out, which made a member who
   // clicked the magic link and abandoned onboarding invisible on the very page
   // you'd go to in order to help them — that's the bug this merge fixes.
-  const [invitesRes, usersRes, participantsRes, activityRes] = await Promise.all([
-    supabase
-      .from("tournament_invites")
-      .select("email, invited_name")
-      .eq("tournament_id", tournament.id),
-    supabase
-      .from("users")
-      .select("id, email, display_name, nickname, avatar_url, is_admin, onboarded_at"),
-    supabase
-      // Revoked rows are NOT filtered out here — the console has to show a
-      // revoked person so an admin can re-approve them (Sprint 21 / #91).
-      .from("tournament_participants")
-      // paid_amount/paid_note need migration 20260902000000. This read IS the
-      // page (a failure renders LoadError), so that migration must be applied
-      // to production BEFORE this deploys — /api/health checks exactly this.
-      // Deliberately not split into a degrading read: unlike /results, every
-      // viewer here is an admin, and an admin who can't see the console is a
-      // clearer failure than one silently missing a column.
-      .select(
-        "user_id, entry_fee, is_player, revoked_at, paid_amount, paid_note"
-      )
-      .eq("tournament_id", tournament.id),
-    // Degrades to "Never" everywhere if it fails — losing last-login must not
-    // take down the chase page.
-    supabase.rpc("admin_auth_activity"),
-  ])
+  const [invitesRes, usersRes, participantsRes, requestsRes, activityRes] =
+    await Promise.all([
+      supabase
+        .from("tournament_invites")
+        .select("email, invited_name")
+        .eq("tournament_id", tournament.id),
+      supabase
+        .from("users")
+        .select("id, email, display_name, nickname, avatar_url, is_admin, onboarded_at"),
+      supabase
+        // Revoked rows are NOT filtered out here — the console has to show a
+        // revoked person so an admin can re-approve them (Sprint 21 / #91).
+        .from("tournament_participants")
+        // The per-phase entries need migration 20260914000000 and the
+        // collection columns 20260902000000. This read IS the page (a failure
+        // renders LoadError), so those migrations must be applied to
+        // production BEFORE this deploys — /api/health checks exactly this.
+        .select(
+          "user_id, phase1_entry_fee, phase2_entry_fee, is_player, revoked_at, paid_amount, paid_note"
+        )
+        .eq("tournament_id", tournament.id),
+      // What each member asked for (Sprint 30). Admins read every row.
+      supabase
+        .from("entry_requests")
+        .select("user_id, phase1_amount, phase2_amount, is_player, created_at")
+        .eq("tournament_id", tournament.id),
+      // Degrades to "Never" everywhere if it fails — losing last-login must not
+      // take down the chase page.
+      supabase.rpc("admin_auth_activity"),
+    ])
 
-  // The three roster reads are the page. A silent failure renders an empty
-  // access funnel — "nobody has registered" — on the console an admin uses to
-  // decide who still needs chasing (#132). activityRes stays excluded on
-  // purpose: its degrade-to-"Never" is a decision, documented above.
+  // The roster reads are the page. A silent failure renders an empty access
+  // funnel — "nobody has registered" — on the console an admin uses to decide
+  // who still needs chasing (#132). activityRes stays excluded on purpose: its
+  // degrade-to-"Never" is a decision, documented above.
   const rosterError =
-    invitesRes.error ?? usersRes.error ?? participantsRes.error
+    invitesRes.error ?? usersRes.error ?? participantsRes.error ?? requestsRes.error
   if (rosterError) {
     console.error("[admin/people] roster read failed:", rosterError.message)
     return (
@@ -162,6 +180,7 @@ export default async function AdminPeoplePage() {
     invites: (invitesRes.data ?? []) as InviteQueryRow[],
     users: (usersRes.data ?? []) as UserQueryRow[],
     participants: (participantsRes.data ?? []) as ParticipantQueryRow[],
+    requests: (requestsRes.data ?? []) as EntryRequestQueryRow[],
     authActivity: (activityRes.data ?? []) as AuthActivityQueryRow[],
   })
 
@@ -183,12 +202,20 @@ export default async function AdminPeoplePage() {
 
       {/* The funnel, left to right. Every count is a filter over the same
           sorted array the table renders, so the header and the table cannot
-          disagree. A fee-unset participant row counts as awaiting approval —
-          it is still awaiting a valid one. */}
+          disagree. A participant row with no entries counts as awaiting
+          approval — it is still awaiting a valid one. */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
         <StatCard label="No account" value={funnel.noAccount.length} />
         <StatCard label="Not onboarded" value={funnel.notOnboarded.length} />
-        <StatCard label="Awaiting approval" value={funnel.awaitingApproval.length} />
+        <StatCard
+          label="Awaiting approval"
+          value={funnel.awaitingApproval.length}
+          caption={
+            roster.counts.requested > 0
+              ? `${roster.counts.requested} asked for an entry`
+              : undefined
+          }
+        />
         <StatCard label="Approved" value={funnel.approved.length} feature />
       </div>
 
@@ -216,7 +243,7 @@ export default async function AdminPeoplePage() {
                 tone="amber"
                 count={notReady.length}
                 heading="Registered but not set up to bet"
-                hint="Approve them on their row below, or fix an email mismatch in Studio."
+                hint="Approve them on their row below once their Venmo lands, or fix an email mismatch in Studio."
                 people={notReady}
               />
             )}
@@ -229,13 +256,16 @@ export default async function AdminPeoplePage() {
         hasInvites={roster.hasInvites}
         entryFeeMin={tournament.entry_fee_min}
         entryFeeMax={tournament.entry_fee_max}
+        closedPhases={closedPhases}
       />
 
       <p className="text-center text-xs text-text-muted">
         Approving creates the <code>tournament_participants</code> row that
-        grants betting access; revoking marks that row revoked rather than
-        deleting it, so the entry fee and the bettor&apos;s wagers leave the
-        pool together and both come back on re-approval. Invites only say who we
+        grants betting access, one entry per phase; revoking marks that row
+        revoked rather than deleting it, so the entries and the bettor&apos;s
+        wagers leave the pots together and both come back on re-approval. A
+        member&apos;s request only says what they asked for — the entries you
+        record are what the pots are built from. Invites only say who we
         expect — they never touch pool math.
       </p>
     </div>

@@ -438,15 +438,16 @@ export default function StyleGuidePage() {
         <div className="grid gap-6 sm:grid-cols-3">
           <Card>
             <CardContent>
-              <BudgetModule wagered={23} entryFee={40} picksLine="Phase 1: 3 picks" />
+              <BudgetModule label="Phase 1" wagered={23} entryFee={40} picksLine="3 picks · 5 min" />
             </CardContent>
           </Card>
           <Card>
             <CardContent>
               <BudgetModule
+                label="Phase 1"
                 wagered={40}
                 entryFee={40}
-                picksLine="Phase 1: 6 picks"
+                picksLine="6 picks · 5 min"
                 balanced
               />
             </CardContent>
@@ -454,9 +455,10 @@ export default function StyleGuidePage() {
           <Card>
             <CardContent>
               <BudgetModule
+                label="Phase 2"
                 wagered={52}
                 entryFee={40}
-                picksLine="Phase 1: 5 picks · Phase 2: 2 picks"
+                picksLine="7 picks · 5 min"
               />
             </CardContent>
           </Card>
@@ -491,7 +493,7 @@ export default function StyleGuidePage() {
             bodyClassName="flex flex-col gap-2 p-3"
           >
             <ComplianceBanner tone="warning" title="Not enough picks yet">
-              You&apos;ve made 3 picks. The minimum is 5 across both phases.
+              2 more picks needed in Phase 1 (3 of 5).
             </ComplianceBanner>
             <ComplianceBanner tone="warning" title="Not balanced yet">
               You&apos;ve wagered $23 of $40. Add $17 before Phase 2 closes.
@@ -512,7 +514,7 @@ export default function StyleGuidePage() {
 
       <Section title="RulesCard & EmptyState">
         <div className="grid gap-4 sm:grid-cols-2">
-          <RulesCard entryFee={40} maxSingle={20} maxSelf={10} minBets={5} maxBets={10} />
+          <RulesCard maxSingle={10} minPicks={5} />
           <EmptyState
             title="No bets published yet"
             message="Round 2 opens Saturday morning. Check back then."

@@ -121,10 +121,17 @@ function one<T>(value: T | T[] | null | undefined): T | null {
 }
 
 /** The select list matching TournamentRules — every page/route that feeds
- * toTournamentRules uses this so the rule set stays in one place. */
+ * toTournamentRules uses this so the rule set stays in one place. Five since
+ * Sprint 30 (ADR 0002): the flat single-bet cap replaced a percentage and a
+ * cap, the self-bet hard cap went, and the pick minimum moved back to the
+ * phase. */
 export const TOURNAMENT_RULE_COLUMNS =
-  "entry_fee_min, entry_fee_max, min_picks_per_tournament, max_picks_per_phase, " +
-  "max_single_bet_pct, max_single_bet_cap, max_self_bet_pct, max_self_bet_cap"
+  "entry_fee_min, entry_fee_max, min_picks_per_phase, max_single_bet, max_self_bet_pct"
+
+/** The participant columns every wagering read needs (Sprint 30): both phase
+ * entries, because eligibility is per phase, and the player flag. */
+export const PARTICIPANT_ENTRY_COLUMNS =
+  "user_id, phase1_entry_fee, phase2_entry_fee, is_player"
 
 /** The clock columns, kept SEPARATE from the rule columns on purpose:
  * toTournamentRules() below coerces every field with Number(), and a timestamp
@@ -155,13 +162,19 @@ export function toTournamentRules(row: Record<string, unknown>): TournamentRules
   return {
     entry_fee_min: n("entry_fee_min"),
     entry_fee_max: n("entry_fee_max"),
-    min_picks_per_tournament: n("min_picks_per_tournament"),
-    max_picks_per_phase: n("max_picks_per_phase"),
-    max_single_bet_pct: n("max_single_bet_pct"),
-    max_single_bet_cap: n("max_single_bet_cap"),
+    min_picks_per_phase: n("min_picks_per_phase"),
+    max_single_bet: n("max_single_bet"),
     max_self_bet_pct: n("max_self_bet_pct"),
-    max_self_bet_cap: n("max_self_bet_cap"),
   }
+}
+
+/** A phase entry as PostgREST hands it back — a number, a numeric string, or
+ * NULL for "not entered". Anything that isn't a positive number is not an
+ * entry; a stray "0" must not read as a $0 entry. */
+export function toPhaseEntry(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? n : null
 }
 
 /** Raw shape of the target-pick query (bet_picks → bets → category + siblings). */
@@ -278,9 +291,11 @@ export function normalizeExistingPlacements(
 // Context assembly
 // ---------------------------------------------------------------------------
 
+/** The bettor's participant row as read with PARTICIPANT_ENTRY_COLUMNS. */
 export type ParticipantRow = {
   user_id: string
-  entry_fee: number
+  phase1_entry_fee: number | string | null
+  phase2_entry_fee: number | string | null
   is_player: boolean
 }
 
@@ -299,8 +314,9 @@ export function buildPlacementContext(
 ): PlacementContext {
   const bettor: Bettor = {
     user_id: participant.user_id,
-    entry_fee: Number(participant.entry_fee),
     is_player: participant.is_player,
+    phase1_entry_fee: toPhaseEntry(participant.phase1_entry_fee),
+    phase2_entry_fee: toPhaseEntry(participant.phase2_entry_fee),
   }
   return {
     bettor,

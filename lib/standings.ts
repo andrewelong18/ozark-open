@@ -1,7 +1,7 @@
 // The Final Standings sort model (Sprint 28 / #198) — column keys, comparators,
 // and the pinned-leader rule. NOTHING here computes money.
 //
-// Every number this module orders comes from lib/payouts.ts:buildResultsTable(),
+// Every number this module orders comes from lib/payouts.ts:buildPhaseResults(),
 // which already implements Pat's formula and returns his exact six fields. This
 // file decides only what order the rows appear in, so that a disagreement
 // between the standings and the payout math is impossible by construction.
@@ -38,7 +38,7 @@ export type StandingsSort = {
  * Profit/Loss descending — Pat's written default: "sorted by profit/loss
  * descending by default".
  *
- * Note this is NOT buildResultsTable()'s own order, which is `actual`
+ * Note this is NOT buildPhaseResults()'s own order, which is `actual`
  * descending. That order still serves /admin/view; this one is what members
  * read. Entry fees vary, so the two genuinely differ.
  */

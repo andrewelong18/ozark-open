@@ -1,26 +1,27 @@
 // Unit tests for lib/my-bets.ts — the pure half of the /my-bets page:
-// row normalization and phase grouping. Zero-dependency by design: node:test
-// via npm run test.
+// row normalization, phase grouping, the per-phase rules model and the
+// per-phase compliance banners (Sprint 30 / ADR 0002). Zero-dependency by
+// design: node:test via npm run test.
 
 import test from "node:test"
 import assert from "node:assert/strict"
 import {
   buildComplianceSummary,
   buildRulesModel,
+  enteredPhases,
   entryPayout,
   entryRefund,
   groupByPhase,
   normalizeMyBets,
   payoutSummary,
   picksLine,
+  standingAside,
+  standingHeadline,
+  toBettor,
   type MyBetEntry,
   type MyBetsQueryRow,
 } from "./my-bets.ts"
-import {
-  checkPickMinimum,
-  checkTournamentTotal,
-  type TournamentRules,
-} from "./validation.ts"
+import { phaseStanding, type Bettor, type TournamentRules } from "./validation.ts"
 
 const T = "t-1"
 
@@ -161,7 +162,7 @@ test("groupByPhase splits phases with counts and dollar subtotals", () => {
   )
 })
 
-test("groupByPhase skips phases with no placements (Q2)", () => {
+test("groupByPhase skips phases with no placements", () => {
   const entries = normalizeMyBets(
     [row({ pick_id: "p-1", amount: 10, phase: 2 })],
     T
@@ -192,22 +193,19 @@ test("groupByPhase orders entries round → sheet_bet_id → sheet_pick_id", () 
 })
 
 // ---------------------------------------------------------------------------
-// Entries feed validation's §8.1 checks directly — the compliance numbers
+// Entries feed validation's §8.1 standing directly — the compliance numbers
 // come from the same rows the page renders.
 // ---------------------------------------------------------------------------
 
 const RULES: TournamentRules = {
   entry_fee_min: 20,
   entry_fee_max: 50,
-  min_picks_per_tournament: 5,
-  max_picks_per_phase: 10,
-  max_single_bet_pct: 0.5,
-  max_single_bet_cap: 20,
+  min_picks_per_phase: 5,
+  max_single_bet: 10,
   max_self_bet_pct: 0.25,
-  max_self_bet_cap: 10,
 }
 
-test("MyBetEntry rows satisfy the phase-close checks structurally", () => {
+test("MyBetEntry rows satisfy the phase standing structurally", () => {
   const entries: MyBetEntry[] = normalizeMyBets(
     [
       row({ pick_id: "p-1", amount: 10, phase: 1 }),
@@ -215,16 +213,11 @@ test("MyBetEntry rows satisfy the phase-close checks structurally", () => {
     ],
     T
   )
-  const rules = RULES
-  const picks = checkPickMinimum(entries, rules)
-  assert.deepEqual(
-    [picks.pick_count, picks.meets_minimum],
-    [2, false]
-  )
-  const total = checkTournamentTotal(entries, 40)
-  assert.equal(total.total, 23)
-  assert.equal(total.remaining, 17)
-  assert.equal(total.exact, false)
+  const standing = phaseStanding(entries, 40, 1, RULES)
+  assert.equal(standing.wagered, 23)
+  assert.equal(standing.pick_count, 2)
+  assert.equal(standing.meets_pick_minimum, false)
+  assert.equal(standing.refund, 17)
 })
 
 test("picksLine shows only phases bet in, with singular/plural", () => {
@@ -238,170 +231,241 @@ test("picksLine shows only phases bet in, with singular/plural", () => {
 })
 
 // ---------------------------------------------------------------------------
-// buildRulesModel — the personalized rules card's numbers
+// toBettor / enteredPhases — the participant row, coerced once
 // ---------------------------------------------------------------------------
 
-test("buildRulesModel derives caps via the validation helpers (floored)", () => {
-  // $25 entry at 50% floors to $12 — Math.round would say $13.
-  const model = buildRulesModel({ entry_fee: 25, is_player: true }, RULES)
-  assert.deepEqual(model, {
-    entry_fee: 25,
-    max_single_bet: 12,
-    max_self_bet: 6,
-    min_picks_per_tournament: 5,
-    max_picks_per_phase: 10,
+test("toBettor coerces PostgREST strings and reads NULL as not entered", () => {
+  const b = toBettor("me", {
+    phase1_entry_fee: "40" as unknown as number,
+    phase2_entry_fee: null,
+    is_player: true,
+  })
+  assert.deepEqual(b, { user_id: "me", is_player: true, phase1_entry_fee: 40, phase2_entry_fee: null })
+  assert.deepEqual(enteredPhases(b), [{ phase: 1, entry: 40 }])
+  assert.deepEqual(
+    enteredPhases(toBettor("me", { phase1_entry_fee: null, phase2_entry_fee: null, is_player: true })),
+    []
+  )
+})
+
+// ---------------------------------------------------------------------------
+// buildRulesModel — the personalized rules card's numbers, per phase
+// ---------------------------------------------------------------------------
+
+const ME: Bettor = { user_id: "me", is_player: true, phase1_entry_fee: 25, phase2_entry_fee: 50 }
+
+test("buildRulesModel derives the self cap per phase via the validation helper (floored, uncapped)", () => {
+  assert.deepEqual(buildRulesModel(ME, RULES), {
+    max_single_bet: 10,
+    min_picks_per_phase: 5,
+    phases: [
+      { phase: 1, entry_fee: 25, max_self_bet: 6 }, // floor(6.25)
+      { phase: 2, entry_fee: 50, max_self_bet: 12 }, // floor(12.5), no $10 cap any more
+    ],
   })
 })
 
-test("buildRulesModel applies the hard caps at higher entries", () => {
-  const model = buildRulesModel({ entry_fee: 50, is_player: true }, RULES)
-  assert.equal(model.max_single_bet, 20)
-  assert.equal(model.max_self_bet, 10)
+test("buildRulesModel lists only the phases the bettor is in", () => {
+  const model = buildRulesModel({ ...ME, phase2_entry_fee: null }, RULES)
+  assert.deepEqual(model.phases.map((p) => p.phase), [1])
 })
 
 test("buildRulesModel exempts non-players from the self-bet cap (Q14)", () => {
-  const model = buildRulesModel({ entry_fee: 40, is_player: false }, RULES)
-  assert.equal(model.max_self_bet, null)
-  assert.equal(model.max_single_bet, 20)
-})
-
-test("buildRulesModel coerces a string entry_fee from PostgREST", () => {
-  const model = buildRulesModel(
-    { entry_fee: "40" as unknown as number, is_player: true },
-    RULES
-  )
-  assert.equal(model.entry_fee, 40)
-  assert.equal(model.max_single_bet, 20)
+  const model = buildRulesModel({ ...ME, is_player: false }, RULES)
+  assert.deepEqual(model.phases.map((p) => p.max_self_bet), [null, null])
+  assert.equal(model.max_single_bet, 10)
 })
 
 // ---------------------------------------------------------------------------
-// buildComplianceSummary — banners assembled from the §8.1 checks
+// buildComplianceSummary — banners assembled from the per-phase standing
 // ---------------------------------------------------------------------------
 
-function placement(phase: 1 | 2, amount: number, n: number) {
+function placement(phase: 1 | 2, amount: number, n: number, player: string | null = null) {
   return {
     pick_id: `p-${phase}-${n}`,
     bet_id: `b-${phase}-${n}`,
     phase,
     amount,
-    pick_player_user_id: null,
+    pick_player_user_id: player,
   }
 }
 
-// The completion blind spot. Until this, a registered member who never opened
-// the menu was the ONLY one the app told nothing — and the dry run has two of
-// them on the record (OUTSTANDING_DECISIONS.md §2b): Steve paid his entry,
-// never wagered, and finished at −$20.00.
+const FORTY: Bettor = { user_id: "me", is_player: true, phase1_entry_fee: 40, phase2_entry_fee: null }
 
-test("compliance: no placements says what they still owe, once", () => {
-  const items = buildComplianceSummary([], 40, RULES)
-  assert.equal(items.length, 1)
-  assert.equal(items[0].title, "No bets placed yet")
-  assert.match(items[0].message, /at least 5 picks/)
-  assert.match(items[0].message, /exactly \$40/)
-})
-
-test("compliance: the no-placements item is info, so the alert count stays 0", () => {
-  // Not cosmetic. PRD Q2 says they are not in violation until the Phase 2
-  // close, and the dashboard's "Alerts (n)" badge counts warnings — a red 1 on
-  // a page where nothing is yet wrong is an alert people learn to ignore.
-  const items = buildComplianceSummary([], 40, RULES)
-  assert.equal(items[0].tone, "info")
-  assert.equal(items.filter((i) => i.tone === "warning").length, 0)
-})
-
-test("compliance: once wagering is over, no placements says nothing at all", () => {
-  // There is nothing they can do about it now, and telling someone to go place
-  // bets on results night is worse than silence.
+test("compliance: entered and nothing placed says what it will cost, as warnings", () => {
+  // The zero-wager blind spot (Sept 2, 2026), now with real money behind it:
+  // under two pots the first $20 of an entry forfeits at this phase's close.
+  const items = buildComplianceSummary([], FORTY, RULES)
   assert.deepEqual(
-    buildComplianceSummary([], 40, RULES, { wageringOver: true }),
+    items.map((i) => [i.tone, i.title]),
+    [
+      ["warning", "Not enough picks in Phase 1"],
+      ["warning", "Money on the table in Phase 1"],
+    ]
+  )
+  assert.equal(items[0].message, "5 more picks needed in Phase 1 (0 of 5).")
+  assert.match(items[1].message, /\$20 forfeits to the Phase 1 pot/)
+  assert.ok(items.every((i) => i.phase === 1))
+})
+
+test("compliance: not entered anywhere yields nothing — that is the entry request's job", () => {
+  assert.deepEqual(
+    buildComplianceSummary([], { ...FORTY, phase1_entry_fee: null }, RULES),
     []
   )
 })
 
-test("compliance: wageringOver does not silence a real warning", () => {
-  // The suppression is only for the zero-placement nudge. Someone who wagered
-  // $20 of $40 is genuinely off, and that stays visible after the close — it is
-  // what the settlement text will be built against.
-  const items = buildComplianceSummary(
-    [placement(1, 4, 1), placement(1, 4, 2), placement(1, 4, 3), placement(1, 4, 4), placement(1, 4, 5)],
-    40,
-    RULES,
-    { wageringOver: true }
-  )
-  assert.equal(items.length, 1)
-  assert.equal(items[0].tone, "warning")
-  assert.equal(items[0].title, "Not balanced yet")
-})
-
-test("compliance: the pick minimum's own zero exemption is untouched", () => {
-  // checkPickMinimum() exempts zero picks deliberately (PRD Q2, cited in
-  // lib/chase.ts, mirrored in docs/admin/phase-compliance.sql, relied on by
-  // scripts/dry-run-verify.ts). The fix above is a DISPLAY fix; if this ever
-  // starts failing, the rule was changed and three other things need looking at.
-  const picks = checkPickMinimum([], RULES)
-  assert.equal(picks.meets_minimum, true)
-})
-
-test("compliance: under the tournament-wide minimum warns with validation's message verbatim", () => {
+test("compliance: under the minimum picks warns with validation's message verbatim", () => {
   const existing = [placement(1, 20, 1), placement(1, 20, 2)]
-  const items = buildComplianceSummary(existing, 40, RULES)
+  const items = buildComplianceSummary(existing, FORTY, RULES)
   assert.deepEqual(
     items.map((i) => [i.tone, i.title]),
-    [["warning", "Not enough picks yet"]]
+    [["warning", "Not enough picks in Phase 1"]]
+  )
+  assert.equal(items[0].message, "3 more picks needed in Phase 1 (2 of 5).")
+})
+
+test("compliance: over $20 but under the entry is money coming back — info, not a warning", () => {
+  const existing = [1, 2, 3, 4, 5].map((n) => placement(1, 5, n))
+  const items = buildComplianceSummary(existing, FORTY, RULES)
+  assert.deepEqual(
+    items.map((i) => [i.tone, i.title]),
+    [["info", "Phase 1 refund"]]
+  )
+  assert.equal(items[0].message, "$15 of your Phase 1 entry comes back unless you wager it.")
+})
+
+test("compliance: Pat's example — the self-bet warning names what counts", () => {
+  const fifty: Bettor = { ...FORTY, phase1_entry_fee: 50 }
+  const existing = [placement(1, 12, 0, "me"), ...[1, 2, 3, 4].map((n) => placement(1, 2, n))]
+  const items = buildComplianceSummary(existing, fifty, RULES)
+  assert.deepEqual(
+    items.map((i) => [i.tone, i.title]),
+    [
+      ["warning", "Self-bet over the line in Phase 1"],
+      ["info", "Phase 1 refund"],
+    ]
   )
   assert.equal(
     items[0].message,
-    "Only 2 of the 5 minimum picks across both phases — you have until Phase 2 closes."
+    "Only $5 of your $12 on yourself counts until you've wagered $48 in Phase 1."
   )
 })
 
-test("compliance: a 3+2 split across phases is complete — no banner (#96)", () => {
-  const existing = [
-    placement(1, 10, 1), placement(1, 10, 2), placement(1, 10, 3),
-    placement(2, 5, 1), placement(2, 5, 2),
-  ]
-  const items = buildComplianceSummary(existing, 40, RULES)
-  assert.deepEqual(
-    items.map((i) => [i.tone, i.title]),
-    [["success", "You're balanced"]]
-  )
-})
-
-test("compliance: off-exact total warns; a one-phase slate is fine (Q2)", () => {
-  const existing = [1, 2, 3, 4, 5].map((n) => placement(1, 4, n))
-  const items = buildComplianceSummary(existing, 40, RULES)
-  assert.deepEqual(
-    items.map((i) => [i.tone, i.title]),
-    [["warning", "Not balanced yet"]]
-  )
-  assert.equal(
-    items[0].message,
-    "You've wagered $20 of $40 — Phase 2 must bring you to exactly $40."
-  )
-})
-
-test("compliance: both shortfalls stack as separate warnings", () => {
-  const existing = [placement(1, 10, 1), placement(2, 13, 1)]
-  const items = buildComplianceSummary(existing, 40, RULES)
-  assert.deepEqual(
-    items.map((i) => i.title),
-    ["Not enough picks yet", "Not balanced yet"]
-  )
-})
-
-test("compliance: everything passing yields a single success banner", () => {
+test("compliance: a complete phase yields a single success banner", () => {
   const existing = [1, 2, 3, 4, 5].map((n) => placement(1, 8, n))
-  const items = buildComplianceSummary(existing, 40, RULES)
+  const items = buildComplianceSummary(existing, FORTY, RULES)
   assert.deepEqual(
     items.map((i) => [i.tone, i.title]),
-    [["success", "You're balanced"]]
+    [["success", "Phase 1 is balanced"]]
   )
+})
+
+test("compliance: two entered phases report separately, each tagged with its phase", () => {
+  const both: Bettor = { ...FORTY, phase2_entry_fee: 20 }
+  const existing = [...[1, 2, 3, 4, 5].map((n) => placement(1, 8, n)), placement(2, 4, 1)]
+  const items = buildComplianceSummary(existing, both, RULES)
+  assert.deepEqual(
+    items.map((i) => [i.phase, i.tone, i.title]),
+    [
+      [1, "success", "Phase 1 is balanced"],
+      [2, "warning", "Not enough picks in Phase 2"],
+      [2, "warning", "Money on the table in Phase 2"],
+    ]
+  )
+})
+
+test("compliance: a closed phase is stated in the past tense, once, as info", () => {
+  // Nothing they can do about it now; telling someone to go place bets on
+  // results night is worse than silence. What happened is still worth a line.
+  const existing = [placement(1, 6, 1), placement(1, 6, 2)]
+  const items = buildComplianceSummary(existing, FORTY, RULES, { closed: { 1: true } })
+  assert.deepEqual(items.map((i) => [i.tone, i.title]), [["info", "Phase 1 is closed"]])
+  assert.equal(
+    items[0].message,
+    "You wagered $12 of your $40 with 2 picks — $8 forfeited to the pot, $20 comes back to you."
+  )
+})
+
+test("compliance: a closed complete phase is locked in", () => {
+  const existing = [1, 2, 3, 4, 5].map((n) => placement(1, 8, n))
+  const items = buildComplianceSummary(existing, FORTY, RULES, { closed: { 1: true } })
+  assert.deepEqual(items.map((i) => [i.tone, i.title]), [["success", "Phase 1 is locked in"]])
 })
 
 // ---------------------------------------------------------------------------
 // Payouts on My Bets — theoretical per resolved entry, voids as refunds
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// standingHeadline / standingAside — the /bets slip bar's two lines
+// ---------------------------------------------------------------------------
+
+function standingOf(
+  existing: ReturnType<typeof placement>[],
+  bettor: Bettor = FORTY,
+  phase: 1 | 2 = 1
+) {
+  const entry = phase === 1 ? bettor.phase1_entry_fee : bettor.phase2_entry_fee
+  return phaseStanding(existing, entry ?? 0, phase, RULES, {
+    is_player: bettor.is_player,
+    bettor_user_id: bettor.user_id,
+  })
+}
+
+test("standingHeadline: nothing placed keeps the sentence an E2E journey pins", () => {
+  assert.deepEqual(standingHeadline(standingOf([])), {
+    tone: "warning",
+    text: "No picks placed yet",
+  })
+})
+
+test("standingHeadline: leads with the pick shortfall, counted from the rules", () => {
+  const two = standingOf([placement(1, 20, 1), placement(1, 20, 2)])
+  assert.deepEqual(standingHeadline(two), { tone: "warning", text: "3 more picks needed" })
+  const four = standingOf([1, 2, 3, 4].map((n) => placement(1, 10, n)))
+  assert.deepEqual(standingHeadline(four), { tone: "warning", text: "1 more pick needed" })
+})
+
+test("standingHeadline: the forfeit, then the refund, then balanced", () => {
+  // $15 on five picks of a $40 entry: under the $20 floor, so $5 forfeits —
+  // and that outranks the $20 that comes back.
+  const under = standingOf([1, 2, 3, 4, 5].map((n) => placement(1, 3, n)))
+  assert.deepEqual(standingHeadline(under), {
+    tone: "warning",
+    text: "$5 forfeits unless you wager it",
+  })
+  // $25 on five picks: nothing forfeits, $15 comes back — info, not a warning.
+  const refund = standingOf([1, 2, 3, 4, 5].map((n) => placement(1, 5, n)))
+  assert.deepEqual(standingHeadline(refund), {
+    tone: "info",
+    text: "$15 comes back unless you wager it",
+  })
+  const done = standingOf([1, 2, 3, 4, 5].map((n) => placement(1, 8, n)))
+  assert.deepEqual(standingHeadline(done), { tone: "success", text: "Phase 1 balanced" })
+})
+
+test("standingHeadline: Pat's example leads with the self-bet line", () => {
+  const fifty: Bettor = { ...FORTY, phase1_entry_fee: 50 }
+  const s = standingOf(
+    [placement(1, 12, 0, "me"), ...[1, 2, 3, 4].map((n) => placement(1, 2, n))],
+    fifty
+  )
+  assert.deepEqual(standingHeadline(s), {
+    tone: "warning",
+    text: "Only $5 of $12 on yourself counts",
+  })
+})
+
+test("standingAside: the other phase in one line, open or closed", () => {
+  const open = standingOf([placement(1, 20, 1)])
+  assert.equal(standingAside(open, false), "Phase 1 · $20 of $40")
+  const done = standingOf([1, 2, 3, 4, 5].map((n) => placement(1, 8, n)))
+  assert.equal(standingAside(done, false), "Phase 1 · $40 of $40 ✓")
+  assert.equal(standingAside(done, true), "Phase 1 closed · locked in")
+  const short = standingOf([1, 2, 3, 4, 5].map((n) => placement(1, 3, n)))
+  assert.equal(standingAside(short, true), "Phase 1 closed · $5 forfeited, $20 back")
+})
 
 test("normalizeMyBets carries the pick's result (unknown strings → pending)", () => {
   const [hit] = normalizeMyBets([row({ pick_id: "p-1", amount: 5, result: "hit" })], T)

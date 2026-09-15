@@ -6,7 +6,7 @@ import { HowItWorks } from "@/components/onboarding/how-it-works"
 import { AccordionSection } from "@/components/ui/accordion-section"
 
 // The persistent re-open entry point for the Sprint 16 walkthrough. Drops
-// anywhere a server page can supply the tournament's pick-count range; toggles
+// anywhere a server page can supply the tournament's pick minimum; toggles
 // the same cards the first-run flow uses.
 //
 // It was a ghost button that grew the walkthrough out of itself; it is now the
@@ -16,10 +16,10 @@ import { AccordionSection } from "@/components/ui/accordion-section"
 // frame, which the accordion now supplies.
 export function HowItWorksLauncher({
   minPicks,
-  maxPicks,
+  entryFeeMin,
 }: {
   minPicks: number
-  maxPicks: number
+  entryFeeMin: number
 }) {
   // Owned here rather than inside AccordionSection: "Close" on the last step
   // has to collapse the section, and the section's own state is private.
@@ -36,7 +36,7 @@ export function HowItWorksLauncher({
       <HowItWorks
         bare
         minPicks={minPicks}
-        maxPicks={maxPicks}
+        entryFeeMin={entryFeeMin}
         doneLabel="Close"
         onDone={() => setOpen(false)}
       />

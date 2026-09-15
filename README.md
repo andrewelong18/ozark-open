@@ -148,10 +148,10 @@ Everything an admin does during tournament week runs on **two tracks** (full rat
 | Track | Tool | Owns |
 |---|---|---|
 | 1 | The bets spreadsheet → **`/admin/import`** | The entire menu: bets, picks, odds, probabilities, **statuses** (`hidden`/`open`/`closed`), **results** (`hit`/`miss`/`push`/`void`) |
-| 1b | **`/admin/people`** | The whole access funnel in one page: who's invited but absent, signed in but stalled, awaiting approval, approved — plus approving bettors (verify display name, set entry fee + player flag, create/edit/revoke their pool entry — revoke is soft, so the entry fee and their wagers leave the pool together and both return on re-approval), **correcting a display name after onboarding**, and pasting in the invite list (Sprint 20 + Sprint 23) |
+| 1b | **`/admin/people`** | The whole access funnel in one page: who's invited but absent, signed in but stalled, awaiting approval, approved — plus approving bettors (verify display name, set the **Phase 1 and Phase 2 entries** + player flag — prefilled from the member's in-app entry request, shown on their row as "Asked for …" — create/edit/revoke their pool entry — revoke is soft, so the entries and their wagers leave the pots together and both return on re-approval), **correcting a display name after onboarding**, and pasting in the invite list (Sprint 20 + Sprint 23) |
 | 2 | **Supabase Studio** (Table Editor) | Remaining fixes: promoting admins, one-off data fixes, pick→player links |
 | 3 | **`/admin/close`** | The clock and the money: chase list, closing a phase, publishing final results |
-| 4 | **`/admin/rules`** | The house rules: entry-fee bounds, pick counts, bet-size percentages and caps, with the derived per-entry-fee limits shown as you type (Sprint 23) |
+| 4 | **`/admin/rules`** | The house rules — five since Sprint 30: the per-phase entry bounds, the per-phase pick minimum, the flat max single bet, and the self-bet percentage, with the max-on-yourself per entry shown as you type |
 
 Three rules make the whole thing safe:
 
@@ -175,7 +175,7 @@ No deployments, no code, no Git — the app re-renders on the next page load.
 
 ### Recipe: close a phase (Thursday morning / Saturday morning)
 
-1. **First**, open **`/admin/close`**. It shows the chase list with a one-line "text these people" answer at the top, ready to copy into the group chat. It knows which close it is: before **Phase 1** it chases only people under the pick minimum, because nobody can have hit their exact entry-fee total yet; before **Phase 2** it chases on the minimum *or* the exact total, the last moment either can be fixed. The pick minimum is 5 **across both phases combined** (the 10-pick maximum is the per-phase one). Chase whoever it names. After the close, whatever stands, stands.
+1. **First**, open **`/admin/close`**. It shows the chase list with a one-line "text these people" answer at the top, ready to copy into the group chat. It knows which close it is, and since Sprint 30 **each close is its own reckoning** (each phase is its own entry and its own pot — ADR 0002): it lists everyone entered in the closing phase who is short of 5 picks, short of their entry for that phase, or over the self-bet line, and says what it costs — *"Devin Arand ($8 of $20, 3 of 5 picks → $12 forfeits)"*. That includes anyone who paid and never wagered. At the Phase 2 close it also counts approved members with **no Phase 2 entry** — check those were meant. Chase whoever it names. After the close, whatever stands, stands: unwagered entry up to $20 forfeits to the pot, anything above $20 comes back.
 
    *(The same query lives in [`docs/admin/phase-compliance.sql`](docs/admin/phase-compliance.sql) for the Supabase SQL editor — the fallback for when the app itself is the thing that's broken.)*
 
@@ -217,17 +217,28 @@ No deployments, no code, no Git — the app re-renders on the next page load.
 
 ### Recipe: change a house rule
 
-Go to **`/admin/rules`**. Every rule the app enforces is on that page, and the table under the form shows what the numbers actually mean per entry fee — "50%, capped at $20" doesn't tell you that a $25 entry allows $12 (amounts floor, they don't round) or that everything from $40 up allows exactly $20. Bad values are refused with a reason, including the ones that look fine and quietly break the tournament: a percentage that floors to a $0 maximum bet, or a pick minimum nobody can reach in two phases.
+Go to **`/admin/rules`**. Every rule the app enforces is on that page, and the table under the form shows what the self-bet percentage actually means per phase entry — a quarter of $25 is $6 (amounts floor, they don't round), and $50 allows $12 (there is no hard cap). The max single bet is a flat dollar amount. Bad values are refused with a reason, including the ones that look fine and quietly break the tournament: a minimum above the maximum, or a pick minimum larger than the minimum entry (five $1 picks is the least an entry can buy).
 
 **Changing a rule never re-checks wagers already placed.** Whatever stands, stands — every wager keeps the limits it was placed under, and a lowered cap can leave existing slates above it. New values apply from the next placement onward.
 
+### Recipe: approve an entry (Sprint 30)
+
+Members ask for their entry **in the app** — a total split between Phase 1 and Phase 2, once, during onboarding or later from the dashboard's entry tile or the My Bets budget — and are sent to Venmo (`https://venmo.com/u/AndrewLong99`, memo **golf**). Until they've asked or been approved, both of those places show them a warning.
+
+1. On **`/admin/people`**, a member who has asked shows **"Asked for Phase 1 $30 · Phase 2 $20"** on their row.
+2. Check Venmo for the money (memo "golf").
+3. Press **Approve** (or **Edit** for someone already approved). Both entry boxes and the playing-golfer flag are **prefilled from the request** — change them to what actually arrived, then save. A blank box means *not entered in that phase*.
+4. Record the payment in **Entry collected** while you're there.
+
+A request can't be changed by the member. If one is wrong, set the right entries on approval; the request is only a record of what they asked for. **An entry can't be lowered below what the member has already wagered in that phase** — the database refuses it and says so; remove wagers first if you really mean it.
+
 ### Recipe: place a wager for someone who can't
 
-Some members won't get through the magic-link flow. On **`/admin/people`**, open their **Edit** panel and press **Place bets for them** — that opens the ordinary bet menu at `/bets?for=<them>`, showing **their** entry fee, their remaining budget, their existing slate and their locked odds, with a banner across the top so you can't forget whose menu you're in.
+Some members won't get through the magic-link flow. On **`/admin/people`**, open their **Edit** panel and press **Place bets for them** — that opens the ordinary bet menu at `/bets?for=<them>`, showing **their** phase entries, their budget in each phase, their existing slate and their locked odds, with a banner across the top so you can't forget whose menu you're in.
 
 Two things to know:
 
-- **Every rule is checked against them, not you.** Their entry fee, their running total, their self-bet cap, their opponent block. A wager that would break one of their limits is refused, in the same words they would see.
+- **Every rule is checked against them, not you.** Their phase entries, their running total in each phase, their self-bet cap, their opponent block. A phase they have no entry for is refused with "set their Phase 2 entry on /admin/people first". A wager that would break one of their limits is refused, in the same words they would see.
 - **The wager is recorded as entered by you.** `/admin/view` shows "Entered by <name>" on those rows. It's their wager and their money — the attribution just makes a September dispute reconstructable.
 
 If they never logged in at all, create their account first — the next recipe.
@@ -235,9 +246,9 @@ If they never logged in at all, create their account first — the next recipe.
 ### Recipe: add a member who can't use the magic link at all
 
 On **`/admin/people`**, open **"Add a member who can't use the magic link"**. Type their email, their
-display name, their entry fee and whether they're playing, then **Add and approve**. That creates
+display name, their Phase 1 and/or Phase 2 entry and whether they're playing, then **Add and approve**. That creates
 their account outright — **no email is sent and there is nothing for them to click** — approves them,
-and puts their entry fee in the pool. You can place wagers for them immediately (previous recipe).
+and puts their entries in the pots. You can place wagers for them immediately (previous recipe).
 
 Three things to know:
 
@@ -248,7 +259,7 @@ Three things to know:
   importer links picks to people by matching it, and a mismatch silently disables that person's
   self-bet cap, self-pick flag and opponent block.
 - **They can still claim the account later.** It's an ordinary account — if they eventually get the
-  magic link working, that address signs them into *this* account, with their entry fee, name and
+  magic link working, that address signs them into *this* account, with their entries, name and
   wagers all intact. Nothing to merge.
 
 **Requires `SUPABASE_SERVICE_ROLE_KEY`** in Vercel's environment variables (Supabase dashboard →

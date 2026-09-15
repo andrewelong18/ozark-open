@@ -98,9 +98,9 @@ function main() {
       ('${ADMIN}', 'admin@test.local')
     ON CONFLICT (id) DO NOTHING;
     UPDATE public.users SET is_admin = true WHERE id = '${ADMIN}';
-    INSERT INTO public.tournament_participants (user_id, tournament_id, entry_fee, is_player) VALUES
-      ('${ALICE}', '${tournamentId}', 40, true),
-      ('${BOB}', '${tournamentId}', 40, true)
+    INSERT INTO public.tournament_participants (user_id, tournament_id, phase1_entry_fee, phase2_entry_fee, is_player) VALUES
+      ('${ALICE}', '${tournamentId}', 40, 40, true),
+      ('${BOB}', '${tournamentId}', 40, 40, true)
     ON CONFLICT (user_id, tournament_id) DO NOTHING;
   `)
 
@@ -141,9 +141,17 @@ function main() {
   const openPick2 = pickByStatus("open", 1)
   const closedPick = pickByStatus("closed")
   const hiddenPick = pickByStatus("hidden")
-  check("menu has open, closed, and hidden picks to test against",
-    Boolean(openPick && openPick2 && closedPick && hiddenPick),
-    JSON.stringify({ openPick, openPick2, closedPick, hiddenPick }))
+  // A Phase 2 pick, whatever its status: the per-phase cap (Sprint 30) reads
+  // the bet's PHASE, not its status, and the sample menu ships Phase 2 hidden.
+  // The race below runs as the superuser, so RLS is not in the way.
+  const phase2Pick = runSql(
+    `SELECT p.id FROM public.bet_picks p JOIN public.bets b ON b.id = p.bet_id
+     WHERE b.tournament_id = '${tournamentId}' AND b.phase = 2
+     ORDER BY p.sheet_pick_id LIMIT 1`
+  )
+  check("menu has open, closed, hidden and Phase 2 picks to test against",
+    Boolean(openPick && openPick2 && closedPick && hiddenPick && phase2Pick),
+    JSON.stringify({ openPick, openPick2, closedPick, hiddenPick, phase2Pick }))
 
   const aliceRow = (fields: string) =>
     runSql(
@@ -400,7 +408,7 @@ function main() {
     asUser(
       ADMIN,
       `SELECT count(*) FROM public.tournament_participants
-       WHERE user_id = '${ALICE}' AND entry_fee = 40 AND revoked_at IS NOT NULL`
+       WHERE user_id = '${ALICE}' AND phase1_entry_fee = 40 AND revoked_at IS NOT NULL`
     ) === "1"
   )
   check(
@@ -416,7 +424,7 @@ function main() {
      WHERE user_id = '${ALICE}' AND tournament_id = '${tournamentId}'`
   )
 
-  return { tournamentId, openPick, openPick2 }
+  return { tournamentId, openPick, openPick2, phase2Pick }
 }
 
 // ---------------------------------------------------------------------------
@@ -464,14 +472,16 @@ async function raceCheck(ctx: {
   tournamentId: string
   openPick: string
   openPick2: string
+  phase2Pick: string
 }) {
-  console.log("\nThe over-commit race (PRD §7 rule 6, as a database guarantee):")
+  console.log("\nThe over-commit race (PRD §7 rule 6, as a database guarantee, per phase):")
 
-  // A $20 entry and a clean board, so two $15 wagers is unambiguously one too
+  // A $20 Phase 1 entry (and a $20 Phase 2 one, for the cross-phase check
+  // below) and a clean board, so two $15 wagers is unambiguously one too
   // many. Hard DELETE as the superuser — RLS has no DELETE policy.
   runSql(`
     DELETE FROM public.bet_placements WHERE user_id = '${BOB}';
-    UPDATE public.tournament_participants SET entry_fee = 20
+    UPDATE public.tournament_participants SET phase1_entry_fee = 20, phase2_entry_fee = 20
      WHERE user_id = '${BOB}' AND tournament_id = '${ctx.tournamentId}';
   `)
 
@@ -509,7 +519,7 @@ async function raceCheck(ctx: {
   const loser = first.ok ? second.stderr : first.stderr
   check(
     "the loser is refused with validateRunningTotal()'s exact sentence",
-    loser.includes("Over your $20 entry"),
+    loser.includes("Over your $20 Phase 1 entry"),
     loser.split("\n")[0]
   )
 
@@ -520,7 +530,7 @@ async function raceCheck(ctx: {
   const sequential = await psqlAsync(wager(ctx.openPick2))
   check(
     "a plain second wager over the entry is refused as well",
-    !sequential.ok && sequential.stderr.includes("Over your $20 entry")
+    !sequential.ok && sequential.stderr.includes("Over your $20 Phase 1 entry")
   )
 
   // Editing DOWN must still work: the guard excludes the row's own old amount
@@ -536,7 +546,7 @@ async function raceCheck(ctx: {
   )
   check(
     "editing a wager UP past the entry is refused",
-    !raise.ok && raise.stderr.includes("Over your $20 entry")
+    !raise.ok && raise.stderr.includes("Over your $20 Phase 1 entry")
   )
 
   // Removing is always allowed — a soft delete only reduces the total, and a
@@ -547,10 +557,102 @@ async function raceCheck(ctx: {
   )
   check("removing a wager is never blocked", remove.ok, remove.stderr)
 
+  // --- The pots are separate (Sprint 30 / ADR 0002) --------------------------
+  // The same two $15 wagers, one per phase, against $20 and $20: both land,
+  // because each phase re-sums only its own wagers. A guard still summing
+  // across the tournament would refuse the second.
+  runSql(`DELETE FROM public.bet_placements WHERE user_id = '${BOB}'`)
+  const crossPhase = await Promise.all([
+    psqlAsync(`BEGIN; ${wager(ctx.openPick)}; SELECT pg_sleep(1); COMMIT;`),
+    psqlAsync(`SELECT pg_sleep(0.3); BEGIN; ${wager(ctx.phase2Pick)}; COMMIT;`),
+  ])
+  check(
+    "$15 in Phase 1 and $15 in Phase 2 against $20/$20 both land — the pots are separate",
+    crossPhase.every((r) => r.ok) &&
+      runSql(
+        `SELECT coalesce(sum(amount), 0) FROM public.bet_placements
+          WHERE user_id = '${BOB}' AND deleted_at IS NULL`
+      ) === "30",
+    crossPhase.map((r) => r.stderr.split("\n")[0]).join(" | ")
+  )
+
+  // Not entered in a phase (NULL entry): the cap has nothing to enforce and
+  // stands aside — eligibility is the app's sentence, not a raw database
+  // error (lib/placement-write.ts refuses this before any write).
+  runSql(`
+    DELETE FROM public.bet_placements WHERE user_id = '${BOB}';
+    UPDATE public.tournament_participants SET phase2_entry_fee = NULL
+     WHERE user_id = '${BOB}' AND tournament_id = '${ctx.tournamentId}';
+  `)
+  const unentered = await psqlAsync(wager(ctx.phase2Pick))
+  check(
+    "a NULL phase entry is not the cap's business (eligibility is the app's job)",
+    unentered.ok,
+    unentered.stderr.split("\n")[0]
+  )
+
+  // --- enforce_participant_entry(): the entry can't drop under the wagers ---
+  // The other side of the race: an admin lowering an entry while wagers sit
+  // under it. $15 is on Phase 1 now (and $15 on Phase 2 with no entry).
+  runSql(`
+    DELETE FROM public.bet_placements WHERE user_id = '${BOB}';
+    UPDATE public.tournament_participants SET phase1_entry_fee = 20, phase2_entry_fee = 20
+     WHERE user_id = '${BOB}' AND tournament_id = '${ctx.tournamentId}';
+    ${wager(ctx.openPick)};
+  `)
+  const lower = await psqlAsync(
+    `UPDATE public.tournament_participants SET phase1_entry_fee = 10
+      WHERE user_id = '${BOB}' AND tournament_id = '${ctx.tournamentId}'`
+  )
+  check(
+    "lowering a phase entry below what is wagered in it is refused (OZ002)",
+    !lower.ok && lower.stderr.includes("Can't set the Phase 1 entry to $10"),
+    lower.stderr.split("\n")[0]
+  )
+  const clear = await psqlAsync(
+    `UPDATE public.tournament_participants SET phase1_entry_fee = NULL
+      WHERE user_id = '${BOB}' AND tournament_id = '${ctx.tournamentId}'`
+  )
+  check(
+    "clearing a phase entry that has wagers under it is refused too",
+    !clear.ok && clear.stderr.includes("entry to nothing"),
+    clear.stderr.split("\n")[0]
+  )
+  const raiseEntry = await psqlAsync(
+    `UPDATE public.tournament_participants SET phase1_entry_fee = 50
+      WHERE user_id = '${BOB}' AND tournament_id = '${ctx.tournamentId}'`
+  )
+  check("raising a phase entry is always allowed", raiseEntry.ok, raiseEntry.stderr)
+  const otherPhase = await psqlAsync(
+    `UPDATE public.tournament_participants SET phase2_entry_fee = NULL
+      WHERE user_id = '${BOB}' AND tournament_id = '${ctx.tournamentId}'`
+  )
+  check(
+    "the other phase's entry moves freely — only the changed phase is judged",
+    otherPhase.ok,
+    otherPhase.stderr
+  )
+  const untouched = await psqlAsync(
+    `UPDATE public.tournament_participants SET paid_amount = 5
+      WHERE user_id = '${BOB}' AND tournament_id = '${ctx.tournamentId}'`
+  )
+  check(
+    "a row's other columns stay editable while wagers sit under its entry",
+    untouched.ok,
+    untouched.stderr
+  )
+  runSql(`DELETE FROM public.bet_placements WHERE user_id = '${BOB}'`)
+  const clearAfter = await psqlAsync(
+    `UPDATE public.tournament_participants SET phase1_entry_fee = NULL
+      WHERE user_id = '${BOB}' AND tournament_id = '${ctx.tournamentId}'`
+  )
+  check("with the wagers gone, the entry can be cleared", clearAfter.ok, clearAfter.stderr)
+
   // Restore the fixture for anything downstream.
   runSql(`
     DELETE FROM public.bet_placements WHERE user_id = '${BOB}';
-    UPDATE public.tournament_participants SET entry_fee = 40
+    UPDATE public.tournament_participants
+       SET phase1_entry_fee = 40, phase2_entry_fee = 40, paid_amount = 0
      WHERE user_id = '${BOB}' AND tournament_id = '${ctx.tournamentId}';
   `)
 }
@@ -564,7 +666,7 @@ async function run() {
     process.exit(1)
   }
   console.log(
-    "\nPlacement round trip passed: lifecycle and visibility hold under RLS, and two concurrent wagers cannot exceed the entry."
+    "\nPlacement round trip passed: lifecycle and visibility hold under RLS, two concurrent wagers cannot exceed a phase entry, and an entry cannot drop under its wagers."
   )
 }
 

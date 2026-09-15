@@ -78,10 +78,14 @@ Sprint 9 was closed on **Sept 7, 2026**, and two were settled — one by what sh
 Andrew's own call. Resolved rows are kept rather than deleted, because the record of *what was
 asked* is half the value of this file.
 
-1. **Devin Arand's case** — someone is $2 short of their entry at Phase 2 close and isn't
+1. ~~**Devin Arand's case** — someone is $2 short of their entry at Phase 2 close and isn't
    answering. Bets stand? (Documented answer is Q3 — *whatever stands, stands* — but never
    confirmed aloud. Their full entry funds the pool while only part works for them; Devin
-   finished the dry run at −$2.04, almost entirely from this.)
+   finished the dry run at −$2.04, almost entirely from this.)~~
+   **✅ ANSWERED Sept 14, 2026 by Pat's per-phase rules (PRD §12 A25, ADR 0002).** Bets stand,
+   and the shortfall now has a stated price: of an entry left unwagered, the first $20 is
+   forfeited to that phase's pot and anything above $20 comes back. The dry run now rehearses
+   exactly this case — Devin's $18 of $20 in Phase 2 forfeits $2.
 2. ~~**Steve Esswein's case** — someone pays the entry and never wagers. He appeared on the
    board at **$0.00 / −$20.00**. Is that what Pat wants when it's a real person?~~
    **✅ RESOLVED Sept 7, 2026 — settled by conduct, and reopenable in one line if Pat disagrees.**
@@ -115,14 +119,20 @@ asked* is half the value of this file.
    `components/results/standings-table.tsx` under the heading "Final Standings", and why renaming
    that heading later must not rename those modules.
 
-## 3. Entry collection mechanism
-**Owner:** Pat (+ tournament treasurer) · **Blocks:** nothing in the app (payments are out of band) — documentation accuracy only.
+## 3. Entry collection mechanism — ✅ RESOLVED 2026-09-14
+**Owner:** Pat (+ tournament treasurer) · **Blocks:** nothing.
+
+**✅ RESOLVED Sept 14, 2026 (Andrew, Sprint 30 — PRD §12 A26): entirely Venmo, to Andrew.**
+Members request their entry once in the app (a total split between the phases) and are
+sent to `https://venmo.com/u/AndrewLong99` with the memo **golf**; an admin records the
+money on `/admin/people` when it lands. The deposit deduction below is retired. `PRD.md`
+§1/§10 and `README.md` now say so. The history is kept because it explains the columns.
 
 Pat: "I would say the minimum entry ($20) can be deducted from the deposit. Extra
 should prolly be collected by other means (Venmo/Cash)." Phrased tentatively.
 Confirm the split is firm so `PRD.md` §1/§10 and `README.md` state it correctly.
 
-**Still open, and narrowed (Sept 2, 2026).** The MECHANISM is Pat's call and this
+**Narrowed (Sept 2, 2026), before it closed.** The MECHANISM is Pat's call and this
 entry stays open until he confirms it. What changed is that the app now **records**
 collection without deciding it: `tournament_participants.paid_amount` / `paid_at` /
 `paid_note` (migration `20260902000000`), edited on `/admin/people`, summarised there
@@ -132,16 +142,30 @@ deposit", "Venmo 9/2" — so the columns are true whichever way Pat lands.
 Two rules make that safe to build ahead of the decision, and both are asserted by
 `scripts/collection-roundtrip.ts`:
 
-- **It is never an input to pool math.** The pool is Σ entry fees − Σ voided stakes
-  (ADR 0001 §9) whether or not the money arrived. An unpaid member still funds the
+- **It is never an input to pool math.** Each phase's pool is built from the phase
+  entries (ADR 0002) whether or not the money arrived. An unpaid member still funds the
   pool on paper — which is exactly why an admin needs to see the gap, and exactly why
   no payout calculation may read these columns. The round trip wipes every payment to
   zero and asserts `placement_payouts_view` is unchanged.
-- **"Paid in full" is derived** (`paid_amount >= entry_fee`), never stored, so a
-  partial payment needs no second source of truth.
+- **"Paid in full" is derived** (`paid_amount >=` the sum of the phase entries), never
+  stored, so a partial payment needs no second source of truth.
 
 So the line "the app tracks no payment status" is no longer true; the line that
 replaces it is that the app tracks payment status and *acts on none of it*.
+
+## 3b. Three questions the per-phase rules leave open (Sept 14, 2026 — Sprint 30)
+**Owner:** Pat · **Blocks:** nothing — the app ships a stated default for each, recorded in
+`docs/adr/0002-per-phase-entries-and-pots.md`, and each is a one-line change if Pat rules otherwise.
+
+1. **A pot where nothing hit.** If no Phase 2 wager cashes (Σ theoretical = 0), the split has
+   nothing to divide by. Today the standings say the pot wasn't paid out and leave its fate to the
+   admins. Refund everyone's committed money? Roll it into the other pot? Something else?
+2. **The self-bet line when under $20 is wagered.** Pat's rule counts self-bets up to a quarter of
+   the phase entry *"if that total entry is fully submitted."* Andrew read that as: at close, a
+   quarter of what was actually **wagered** counts — including below the $20 floor ($8 wagered
+   with $5 on yourself counts $2). Pat to confirm, or say whether under $20 should use the floor.
+3. **Should a Group Match be pick-counted too?** The importer now refuses a `Match` without
+   exactly two picks (Pat's ask). A Group Match isn't checked. Should it need at least three?
 
 ## 4. "Non-Goals — see word doc for more" (Pat §3)
 **Owner:** Pat · **Blocks:** nothing — clarification only.

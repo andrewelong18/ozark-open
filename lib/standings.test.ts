@@ -1,11 +1,11 @@
-// Unit tests for lib/standings.ts — the Final Standings sort model (Sprint 28).
+// Unit tests for lib/standings.ts — the standings sort model (Sprint 28).
 //
-// These drive buildResultsTable() rather than hand-building a ResultsTable, the
-// same way lib/settlement.test.ts does, so they exercise the real pipeline: if
+// These drive buildPhaseResults() rather than hand-building a ResultsTable, the
+// same way lib/payouts.test.ts does, so they exercise the real pipeline: if
 // the payout math changes shape these fail, which is correct.
 //
 // The fixture below is built so that THREE orderings genuinely disagree —
-// profit/loss, payout (actual + refunded) and bare `actual` all rank the same
+// profit/loss, payout (actual + refunds) and bare `actual` all rank the same
 // three people differently, and none of the three matches alphabetical order.
 // That is deliberate. A comparator that silently sorted on the wrong field, or
 // fell through to the name tie-break, would pass a gentler fixture; this
@@ -15,7 +15,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import {
-  buildResultsTable,
+  buildPhaseResults,
   cashReturned,
   roundCents,
   type PayoutRow,
@@ -30,18 +30,28 @@ import {
   standingsLeader,
   type StandingsSort,
 } from "./standings.ts"
+import type { TournamentRules } from "./validation.ts"
+
+const RULES: TournamentRules = {
+  entry_fee_min: 20,
+  entry_fee_max: 50,
+  min_picks_per_phase: 5,
+  max_single_bet: 10,
+  max_self_bet_pct: 0.25,
+}
 
 function participant(
   user_id: string,
   display_name: string,
   entry_fee: number
 ): ResultsParticipant {
-  return { user_id, display_name, entry_fee }
+  return { user_id, display_name, is_player: true, phase1_entry_fee: entry_fee, phase2_entry_fee: null }
 }
 
 let seq = 0
 function placement(
   user_id: string,
+  amount: number,
   theoretical: number | null,
   refunded = 0
 ): PayoutRow {
@@ -49,10 +59,12 @@ function placement(
   return {
     placement_id: `p${seq}`,
     user_id,
-    amount: 10,
+    amount,
     result: theoretical === null ? "pending" : refunded > 0 ? "void" : "hit",
     theoretical,
     refunded,
+    phase: 1,
+    is_self_pick: false,
   }
 }
 
@@ -60,32 +72,37 @@ function placement(
 // The fixture, and the arithmetic that makes it discriminating
 // ---------------------------------------------------------------------------
 //
-//   Σ entry = 100, Σ refunded = 30  →  pool = 70
-//   Σ theoretical = 360
+//   Alice   entry 20, wagered 20, theo 100
+//   Bob     entry 50, wagered 50, theo 200
+//   Carol   entry 20, wagered 20: theo 60 on $10, and a $10 void refunded
 //
-//   Alice   entry 20, theo 100          actual 19.44   payout 19.44   P/L  −0.56
-//   Bob     entry 60, theo 200          actual 38.89   payout 38.89   P/L −21.11
-//   Carol   entry 20, theo  60, void 30 actual 11.67   payout 41.67   P/L +21.67
+//   Σ committed = 90, Σ refunded = 10  →  pool = 80;  Σ theoretical = 360
+//
+//   Alice   actual 22.22   payout 22.22   P/L  +2.22
+//   Bob     actual 44.44   payout 44.44   P/L  −5.56
+//   Carol   actual 13.33   payout 23.33   P/L  +3.33
 //
 //   P/L desc      → Carol, Alice, Bob
-//   payout desc   → Carol, Bob,   Alice
-//   `actual` desc → Bob,   Alice, Carol   (buildResultsTable's own order)
+//   payout desc   → Bob,   Carol, Alice
+//   `actual` desc → Bob,   Alice, Carol   (buildPhaseResults's own order)
 //   alphabetical  → Alice, Bob,   Carol
 //
 // Four different answers from one table.
 function fixture(): ResultsRow[] {
-  return buildResultsTable(
+  return buildPhaseResults(
+    1,
     [
       participant("a", "Alice Ace", 20),
-      participant("b", "Bob Birdie", 60),
+      participant("b", "Bob Birdie", 50),
       participant("c", "Carol Chip", 20),
     ],
     [
-      placement("a", 100),
-      placement("b", 200),
-      placement("c", 60),
-      placement("c", 0, 30),
-    ]
+      placement("a", 20, 100),
+      placement("b", 50, 200),
+      placement("c", 10, 60),
+      placement("c", 10, 0, 10),
+    ],
+    RULES
   ).rows
 }
 
@@ -104,9 +121,7 @@ test("the default sort is profit/loss descending", () => {
   ])
 })
 
-test("the default is NOT buildResultsTable's own `actual` order", () => {
-  // buildResultsTable sorts by actual descending — Bob first. The standings
-  // must not inherit that, or Pat's schema is quietly not what ships.
+test("the default is NOT buildPhaseResults's own `actual` order", () => {
   assert.deepEqual(names(fixture()), ["Bob Birdie", "Alice Ace", "Carol Chip"])
   assert.notDeepEqual(names(sortStandings(fixture())), names(fixture()))
 })
@@ -133,11 +148,11 @@ test("theoretical sorts on the theoretical column", () => {
   assert.deepEqual(names(desc), ["Bob Birdie", "Alice Ace", "Carol Chip"])
 })
 
-test("payout sorts on cashReturned (actual + refunded), never bare actual", () => {
-  // THE #157 CASE. Carol's $30 void is money that changed hands; sorting on
-  // bare `actual` would rank her last on the very column that shows her top.
+test("payout sorts on cashReturned (actual + refunds), never bare actual", () => {
+  // THE #157 CASE. Carol's $10 void is money that changed hands; sorting on
+  // bare `actual` would rank her last on the very column that shows her second.
   const desc = sortStandings(fixture(), { column: "payout", direction: "desc" })
-  assert.deepEqual(names(desc), ["Carol Chip", "Bob Birdie", "Alice Ace"])
+  assert.deepEqual(names(desc), ["Bob Birdie", "Carol Chip", "Alice Ace"])
 
   const byActual = [...fixture()].sort((x, y) => y.actual - x.actual)
   assert.notDeepEqual(names(desc), names(byActual))
@@ -155,28 +170,19 @@ test("player sorts by name, and reverses", () => {
 // ---------------------------------------------------------------------------
 
 test("ties break by name ascending, in BOTH directions", () => {
-  // The tie has to be on a column where the rows DON'T already arrive in name
-  // order, or this proves nothing: buildResultsTable applies its own name
-  // tie-break, so two rows tied on `actual` come out alphabetical already and a
-  // comparator with no tie-break at all would pass on a stable sort. (It did —
-  // this test was rewritten after the sabotage pass caught it.)
-  //
-  // So: equal entry fees, unequal theoretical. Zoe's bigger payout puts her
-  // FIRST on the way in; sorting by Entry must put Mike first on the way out.
-  const rows = buildResultsTable(
-    [
-      participant("z", "Zoe Zinger", 20),
-      participant("m", "Mike Mulligan", 20),
-    ],
-    [placement("z", 200), placement("m", 100)]
+  // Equal entry fees, unequal theoretical. Zoe's bigger payout puts her FIRST
+  // on the way in; sorting by Entry must put Mike first on the way out.
+  const rows = buildPhaseResults(
+    1,
+    [participant("z", "Zoe Zinger", 20), participant("m", "Mike Mulligan", 20)],
+    [placement("z", 20, 200), placement("m", 20, 100)],
+    RULES
   ).rows
   assert.deepEqual(names(rows), ["Zoe Zinger", "Mike Mulligan"])
 
   const desc = sortStandings(rows, { column: "entry_fee", direction: "desc" })
   const asc = sortStandings(rows, { column: "entry_fee", direction: "asc" })
   assert.deepEqual(names(desc), ["Mike Mulligan", "Zoe Zinger"])
-  // Ascending must NOT flip the tie-break — two people on the same number read
-  // alphabetically whichever way the column is pointing.
   assert.deepEqual(names(asc), ["Mike Mulligan", "Zoe Zinger"])
 })
 
@@ -196,9 +202,6 @@ test("the leader is the top profit/loss, whatever the viewer sorted by", () => {
   const leader = standingsLeader(rows)
   assert.equal(leader?.display_name, "Carol Chip")
 
-  // Under three sorts that each put somebody ELSE in the first row, the leader
-  // is unchanged. Let the spotlight follow the sort and sorting by Entry Fee
-  // crowns whoever paid the most — which here is Bob, who lost $21.
   for (const sort of [
     { column: "entry_fee", direction: "desc" },
     { column: "theoretical", direction: "desc" },
@@ -276,6 +279,6 @@ test("entry_fee + profit_loss === Payout on every row, void or not", () => {
 
 test("the fixture really does carry a void, or the test above proves nothing", () => {
   const carol = fixture().find((r) => r.display_name === "Carol Chip")
-  assert.equal(carol?.refunded, 30)
+  assert.equal(carol?.refunded, 10)
   assert.notEqual(roundCents(carol!.actual), roundCents(cashReturned(carol!)))
 })

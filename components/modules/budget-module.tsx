@@ -2,9 +2,11 @@ import { cn } from "@/lib/utils"
 import { MoneyDisplay } from "@/components/betting/money-display"
 
 export type BudgetModuleProps = {
+  /** The left-hand label — "Wagered" by default, "Phase 1" on a per-phase bar. */
+  label?: string
   wagered?: number
   entryFee?: number
-  /** Short per-phase pick-count line, e.g. "Phase 1: 6 picks · Phase 2: 2
+  /** Short pick-count line, e.g. "3 picks" or "Phase 1: 6 picks · Phase 2: 2
    * picks". Counts only — rule spans belong to the rules card, and
    * shortfalls to the compliance banner. */
   picksLine?: string
@@ -16,10 +18,12 @@ export type BudgetModuleProps = {
 }
 
 /**
- * "Wagered $X of $Y" budget module with a progress bar and a per-phase
- * pick-count line. Turns amber when over-committed, green when balanced.
+ * "Wagered $X of $Y" budget module with a progress bar and a pick-count line.
+ * Turns amber when over-committed, green when balanced. Since Sprint 30 a
+ * page renders one per phase the member is entered in.
  */
 export function BudgetModule({
+  label = "Wagered",
   wagered = 0,
   entryFee = 40,
   picksLine,
@@ -37,7 +41,7 @@ export function BudgetModule({
   return (
     <div className={cn("flex flex-col", compact ? "gap-2" : "gap-3", className)}>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-sm font-semibold text-text-body">Wagered</span>
+        <span className="text-sm font-semibold text-text-body">{label}</span>
         <span data-testid="budget-summary" className="text-sm text-text-muted">
           {/* Testid on the running total alone: it's the number /my-bets is
               read for, and "$1" is a substring of "$10 of $40" — a text filter

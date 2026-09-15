@@ -41,8 +41,9 @@ reporting.
   wrong, not the app. Take **Cancel** or **Import without deleting** and go fix the sheet.
 - **Rows that carry wagers are kept unless you say otherwise**, on a separate button, with the
   bettors named. Clearing them deletes those wagers for good. Two things to know before you tap
-  it: **the pool doesn't change** (it's the sum of entry fees, not of wagers), and the people named
-  **drop below their entry fee and are told nothing** — you have to text them.
+  it: **the pots are still funded by the entries, not the wagers**, and the people named
+  **drop below their phase entry and are told nothing** — you have to text them, because
+  unwagered entry forfeits or comes back at that phase's close.
 - Whatever you choose, a save state is taken before anything is written, so
   `/admin/snapshots` undoes the whole upload.
 
@@ -183,11 +184,18 @@ so the project can pause and the automatic save states can stop.
       - [ ] Paste the invite list into the bulk box so everyone expected is on the page.
       - [ ] Chase the *No account* and *Not onboarded* rows — those people cannot bet, and no amount
             of admin clicking fixes it. Text them.
-      - [ ] Approve everyone else with the right **entry fee** and the **playing golfer** flag.
-            A non-player still bets; the flag is what exempts them from the self-bet rules.
+      - [ ] Approve everyone else with the right **Phase 1 and Phase 2 entries** and the
+            **playing golfer** flag. Members request their entries in the app and pay by Venmo
+            (memo "golf"); their row shows *"Asked for …"* and the approve panel is prefilled
+            from it — check Venmo, then set what actually arrived. A blank box is *not entered in
+            that phase*. A non-player still bets; the flag is what exempts them from the self-bet
+            rules.
+      - [ ] Anyone approved with **no entry in either phase** can't bet at all — the dashboard
+            and My Bets are warning them. Chase the request or the Venmo.
 
-- [ ] **The house rules match what everyone agreed.** `/admin/rules` — entry-fee bounds, max single
-      bet, self-bet cap, pick minimum, max picks per phase. These are read from the tournament row
+- [ ] **The house rules match what everyone agreed.** `/admin/rules` — the five since Sprint 30:
+      entry bounds per phase ($20–$50), pick minimum per phase (5), max single bet ($10 flat),
+      and the self-bet percentage (25 % of the phase entry). These are read from the tournament row
       everywhere in the app; nothing is hardcoded. Check them once now rather than arguing on
       Thursday.
 
@@ -218,8 +226,8 @@ so the project can pause and the automatic save states can stop.
       - [ ] **Message two or three of them out of band** — text, not email — and confirm the magic
             link actually arrived, and how long it took. This is the check nothing automated can
             make.
-      - [ ] Approve as they come in, with the right entry fee and playing-golfer flag, rather than
-            in one batch on Wednesday.
+      - [ ] Approve as the Venmos come in, with the right phase entries and playing-golfer flag,
+            rather than in one batch on Wednesday.
 
 - [ ] **Set the two deadlines.** `/admin/close` → *Phase clock*. Defaults are Round 1 and Round 3
       tee-off — **Thu Sept 24, 11:00 CT** and **Sat Sept 26, 11:00 CT** (PRD §8). Times are Central,
@@ -232,7 +240,8 @@ so the project can pause and the automatic save states can stop.
       ```bash
       bash scripts/db-export.sh "$SUPABASE_DB_URL" before-phase-1
       ```
-      Read `MANIFEST.txt` — row counts, and `pool = entry_fees − voided_stakes`. Then **copy the
+      Read `MANIFEST.txt` — row counts, and the per-phase reconciliation: `pool = committed −
+      voided_stakes` for each phase. Then **copy the
       folder off the machine**. Full instructions and what to do when it complains:
       [`DATA_SAFETY.md`](DATA_SAFETY.md). This is the floor you rebuild from if the weekend goes
       wrong, and the free tier has no automated backups.
@@ -241,9 +250,11 @@ so the project can pause and the automatic save states can stop.
 
 ## Day before (Wednesday Sept 23)
 
-- [ ] **Chase the stragglers.** `/admin/close` → the chase list, which is phase-aware: before a
-      Phase 1 close it chases the **pick minimum only**, because being short of your entry fee is
-      normal while Phase 2 is still ahead. Copy the one-line "text these people" and send it.
+- [ ] **Chase the stragglers.** `/admin/close` → the chase list. Each phase is its own pot, so
+      before the Phase 1 close it names **everyone entered in Phase 1** who is short of 5 picks,
+      short of their Phase 1 entry, or over the self-bet line — with what it will cost them
+      ("$12 forfeits"). That includes people who paid and never bet. Copy the one-line "text
+      these people" and send it.
 - [ ] **Confirm the deadlines** one more time — they're the thing that closes betting, and they're
       editable right up to the moment they fire.
 - [ ] **Post the link** in the group thread with a nudge to sign in *tonight*, not at the first tee.
@@ -290,10 +301,14 @@ so the project can pause and the automatic save states can stop.
 
 **Friday night** — Phase 2 opens:
 
-- [ ] **Upload #3.** Phase 2 bets `hidden` → `open`, Tournament odds updated.
+- [ ] **Upload #3.** Phase 2 bets `hidden` → `open`, Tournament odds updated. (The upload refuses a
+      bet with wagers moving between phases, and a Match without exactly two picks.)
+- [ ] **Phase 2 entries are recorded.** `/admin/close` at the Phase 2 close counts approved members
+      with no Phase 2 entry. Anyone who paid for both phases but only has Phase 1 typed in can't bet
+      tonight — fix it on `/admin/people` before telling the group.
 - [ ] Confirm on `/bets` that Phase 2 is taking wagers and Phase 1 is still readable as closed.
-- [ ] Tell the group Phase 2 is live. **Remind them the total must land exactly on their entry
-      fee** — that rule is only checkable now, and it's what the Saturday chase is about.
+- [ ] Tell the group Phase 2 is live. **Remind them to wager their whole Phase 2 entry** — of what
+      they leave unwagered, the first $20 forfeits to the pot; it's what the Saturday chase is about.
 
 **Saturday night** — the end:
 
@@ -303,19 +318,24 @@ so the project can pause and the automatic save states can stop.
       **Post the leaderboard**. If not, it lists exactly what is still unresolved — that list is
       what to go fix in the sheet, and it is the same check `/admin/close` runs.
 - [ ] **Post the leaderboard.** From the import report, or `/admin/close` → *Post the leaderboard*.
-      This turns **every member's dashboard** into the final standings: the pool total, entry, bets
-      placed, place-bets button, house rules, alerts and the countdown all go.
+      This turns **every member's dashboard** into the final standings — the same board as the
+      Leaderboard page, opening on *Combined*: the pots, entry, bets placed, place-bets button,
+      house rules, alerts and the countdown all go.
       The button refuses while any pick has no result — deliberately. Posting early splits the pool
       across only the settled wagers, so every payout reads too high and **nothing on the page looks
       wrong** (PRD §8.1 / #108). Do not work around it; fix the sheet and re-upload.
 - [ ] **Check the money before you announce it.** On your own dashboard:
       - [ ] No *Provisional* banner.
-      - [ ] `Pool $X` = entry fees − voided stakes.
+      - [ ] On *Phase 1* and *Phase 2*, `Pool $X` = that phase's committed entries − voided stakes,
+            and *Combined* is the two added. `/admin/view` shows all three.
+      - [ ] **Refunds to send.** Each row's Payout includes money coming back — voided stakes and
+            unwagered entry above $20 ("incl. $30 refunded"). The admin-only collection block lists
+            anyone who paid more than their entries.
       - [ ] The *Biggest Winner* spotlight is showing.
       - [ ] Click a column heading and confirm the table re-sorts. The gold row must stay on the
             winner, not jump to whoever is on top.
 - [ ] **If it went up too early, take it back down.** `/admin/close` → *Take it back down*, two
-      taps. Nothing is deleted — every wager, result and entry fee stays exactly as it is, and
+      taps. Nothing is deleted — every wager, result and entry stays exactly as it is, and
       posting again brings back the same numbers. Fix the sheet, re-upload, post again.
 - [ ] **📦 Run the final database export.**
       ```bash
