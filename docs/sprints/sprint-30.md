@@ -1,6 +1,6 @@
 # Sprint 30 — Per-phase entries, per-phase pots, and the entry request
 
-> Part of the [Ozark Open roadmap](../ROADMAP.md). **Post-freeze** (Andrew, Sept 14, 2026 — from Pat's rewritten rules after the Sept 4 user test). **This sprint changes the money model.** Read ADR 0002 before touching `lib/validation.ts`, `lib/payouts.ts` or either trigger.
+> Part of the [Ozark Open roadmap](../ROADMAP.md). ✅ **Code complete Sept 14, 2026** — production rollout pending (#234). **Post-freeze** (Andrew, Sept 14, 2026 — from Pat's rewritten rules after the Sept 4 user test). **This sprint changes the money model.** Read ADR 0002 before touching `lib/validation.ts`, `lib/payouts.ts` or either trigger.
 
 **Goal:** the two betting phases become two separate entries and two separate pots — each with its own $20–$50 entry, its own 5-pick minimum, its own pari-mutuel split, and its own forfeit/refund rules for money left on the table — and members ask for their entry in the app instead of by text.
 
@@ -62,7 +62,7 @@ Recorded in full in ADR 0002 and PRD §12 **A25** (money) / **A26** (entry reque
 
 ### Rollout
 
-Expand → migrate → contract, per `20260812000000_drop_min_picks_per_phase.sql`'s doctrine. Tracked, with the exact SQL, in the production-rollout issue linked from the ROADMAP row.
+Expand → migrate → contract, per `20260812000000_drop_min_picks_per_phase.sql`'s doctrine. Tracked, with the exact SQL and the token hand-off, in **#234** — not yet applied: the building session had no `SUPABASE_ACCESS_TOKEN`.
 
 1. **Before the merge:** `list_migrations`; apply #222 (`20260911000000`) and #229 (`20260912000001`) if still missing, then **A** and **A2**, via the Supabase MCP. Verify the two entry columns, `entry_requests` and its three policies, and both trigger functions exist.
 2. **The reset** (data, not schema), in this order — wagers first, because OZ002 refuses clearing an entry that still has wagers under it:
@@ -93,5 +93,7 @@ Expand → migrate → contract, per `20260812000000_drop_min_picks_per_phase.sq
 | Phase 1 | $455 | $30 | $24 | **$401** |
 | Phase 2 | $300 | $30 | $37 | **$233** |
 | Combined | $755 | $60 | $61 | **$634** |
+
+**Residue, as issues:** #234 production rollout · #235 Pat's three open calls (empty pot, self-bet line under $20, Group Match pick count) · #236 the untracked marketing seed writes `entry_fee` · #237 the three e2e failures diagnosed, plus two #217 fixture findings · #238 Base UI `nativeButton` dev warning. #210 (`buildSettlementSummary()` uncalled) is closed by this sprint's deletion.
 
 **How e2e was run.** The shared local Supabase stack (project `ozark-open`, 9 days old, 22 accounts, migrations behind `origin/main`) belongs to the main checkout, and applying this sprint's destructive migration to it would break that checkout. So the suite ran against a second, throwaway stack (project `ozark-open-s30-e2e`, every port +100) with a Next dev server on :3130, reproducing `scripts/e2e-verify.sh`'s grants and seeds.
