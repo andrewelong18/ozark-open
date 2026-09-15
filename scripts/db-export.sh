@@ -235,61 +235,78 @@ for t in "${TABLES[@]}"; do
   done
 done
 
-# The reconciliation, per tournament. Same shape as the number the dry run and
-# scripts/sim-pool-verify.sh check against: entry fees − voided stakes = pool.
+# The reconciliation, per tournament and PHASE (Sprint 30 / ADR 0002 — each
+# phase is its own pot). Same shape as the numbers the dry run and
+# scripts/sim-pool-verify.sh check against: per phase, committed entries
+# (min(E, max(W, entry_fee_min)) per bettor) minus voided stakes = pool.
+# Exact unless a void lands on a self pick over the self-bet line, whose
+# refund lib/payouts.ts scales down; entries is what was put in, and
+# entries − committed is what comes back unwagered.
 {
   echo
-  echo "Pool reconciliation (per tournament)"
+  echo "Pool reconciliation (per tournament, per phase)"
 } >> "$OUT/MANIFEST.txt"
 
 psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 >> "$OUT/MANIFEST.txt" <<'SQL'
-SELECT
-  t.name,
-  t.status,
-  coalesce(fees.entry_fees, 0)                                     AS entry_fees,
-  coalesce(v.voided_stakes, 0)                                     AS voided_stakes,
-  coalesce(fees.entry_fees, 0) - coalesce(v.voided_stakes, 0)      AS pool,
-  coalesce(w.wagered, 0)                                           AS wagered,
-  coalesce(w.live_placements, 0)                                   AS live_placements,
-  coalesce(p.pending_picks, 0)                                     AS pending_picks
-FROM public.tournaments t
-LEFT JOIN LATERAL (
-  -- Revoked participants leave the pool entirely, fee and wagers together
-  -- (PRD §12 A13) — so the denominator here has to match lib/payouts.ts.
-  SELECT sum(tp.entry_fee) AS entry_fees
+WITH phases AS (
+  SELECT t.id AS tournament_id, t.name, t.status, t.year, t.entry_fee_min, ph.phase
+  FROM public.tournaments t
+  CROSS JOIN (VALUES (1), (2)) AS ph (phase)
+),
+entries AS (
+  -- Revoked participants leave the pots entirely, fees and wagers together
+  -- (PRD §12 A13). NULL = not entered in that phase.
+  SELECT tp.tournament_id, ph.phase, tp.user_id,
+         CASE ph.phase WHEN 1 THEN tp.phase1_entry_fee ELSE tp.phase2_entry_fee END AS entry
   FROM public.tournament_participants tp
-  WHERE tp.tournament_id = t.id AND tp.revoked_at IS NULL
-) fees ON true
-LEFT JOIN LATERAL (
-  SELECT sum(bp.amount) AS voided_stakes
+  CROSS JOIN (VALUES (1), (2)) AS ph (phase)
+  WHERE tp.revoked_at IS NULL
+),
+live AS (
+  SELECT b.tournament_id, b.phase, bp.user_id,
+         sum(bp.amount)                                    AS wagered,
+         coalesce(sum(bp.amount) FILTER (WHERE pk.result = 'void'), 0) AS voided,
+         count(*)                                          AS placements
   FROM public.bet_placements bp
   JOIN public.bet_picks pk ON pk.id = bp.pick_id
   JOIN public.bets b       ON b.id  = pk.bet_id
-  JOIN public.tournament_participants tp
-    ON tp.user_id = bp.user_id AND tp.tournament_id = b.tournament_id
-  WHERE b.tournament_id = t.id
-    AND bp.deleted_at IS NULL
-    AND tp.revoked_at IS NULL
-    AND pk.result = 'void'
-) v ON true
-LEFT JOIN LATERAL (
-  SELECT sum(bp.amount) AS wagered, count(*) AS live_placements
-  FROM public.bet_placements bp
-  JOIN public.bet_picks pk ON pk.id = bp.pick_id
-  JOIN public.bets b       ON b.id  = pk.bet_id
-  JOIN public.tournament_participants tp
-    ON tp.user_id = bp.user_id AND tp.tournament_id = b.tournament_id
-  WHERE b.tournament_id = t.id
-    AND bp.deleted_at IS NULL
-    AND tp.revoked_at IS NULL
-) w ON true
-LEFT JOIN LATERAL (
-  SELECT count(*) AS pending_picks
-  FROM public.bet_picks pk
-  JOIN public.bets b ON b.id = pk.bet_id
-  WHERE b.tournament_id = t.id AND pk.result = 'pending'
-) p ON true
-ORDER BY t.year DESC;
+  WHERE bp.deleted_at IS NULL
+  GROUP BY b.tournament_id, b.phase, bp.user_id
+),
+per_bettor AS (
+  -- Only people entered in the phase: a wager in a phase with no entry
+  -- belongs to no pot (lib/payouts.ts drops it the same way).
+  SELECT e.tournament_id, e.phase, e.entry,
+         coalesce(l.wagered, 0)    AS wagered,
+         coalesce(l.voided, 0)     AS voided,
+         coalesce(l.placements, 0) AS placements
+  FROM entries e
+  LEFT JOIN live l
+    ON l.tournament_id = e.tournament_id AND l.phase = e.phase AND l.user_id = e.user_id
+  WHERE e.entry IS NOT NULL
+)
+SELECT
+  p.name,
+  p.status,
+  p.phase,
+  count(pb.entry)                                                        AS entrants,
+  coalesce(sum(pb.entry), 0)                                             AS entries,
+  coalesce(sum(LEAST(pb.entry, GREATEST(pb.wagered, p.entry_fee_min))), 0) AS committed,
+  coalesce(sum(pb.voided), 0)                                            AS voided_stakes,
+  coalesce(sum(LEAST(pb.entry, GREATEST(pb.wagered, p.entry_fee_min))), 0)
+    - coalesce(sum(pb.voided), 0)                                        AS pool,
+  coalesce(sum(pb.wagered), 0)                                           AS wagered,
+  coalesce(sum(pb.placements), 0)                                        AS live_placements,
+  (SELECT count(*)
+     FROM public.bet_picks pk
+     JOIN public.bets b ON b.id = pk.bet_id
+    WHERE b.tournament_id = p.tournament_id
+      AND b.phase = p.phase
+      AND pk.result = 'pending')                                         AS pending_picks
+FROM phases p
+LEFT JOIN per_bettor pb ON pb.tournament_id = p.tournament_id AND pb.phase = p.phase
+GROUP BY p.tournament_id, p.name, p.status, p.year, p.phase, p.entry_fee_min
+ORDER BY p.year DESC, p.phase;
 SQL
 
 echo

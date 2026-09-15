@@ -162,6 +162,35 @@ WHERE email = 'newbie@ozark.test';
 DELETE FROM public.tournament_participants
 WHERE user_id IN (SELECT id FROM public.users WHERE email IN ('newbie@ozark.test', 'pending@ozark.test'));
 
+-- Per-phase entries back to the dev-account values (Sprint 30), so a spec that
+-- moved one — the gauntlet does — can't leak it into the next run.
+UPDATE public.tournament_participants tp
+SET phase1_entry_fee = v.phase1_entry_fee,
+    phase2_entry_fee = v.phase2_entry_fee,
+    revoked_at       = NULL
+FROM (VALUES
+  ('admin@ozark.test',     40, 40),
+  ('approved@ozark.test',  30, 30),
+  ('nonplayer@ozark.test', 20, 20)
+) AS v (email, phase1_entry_fee, phase2_entry_fee)
+JOIN public.users u ON u.email = v.email
+WHERE tp.user_id = u.id;
+
+-- Entry requests: only pending@'s, at the seeded numbers. newbie@ must be able
+-- to make its one request again on the next run, and nobody else has one.
+DELETE FROM public.entry_requests
+WHERE user_id IN (SELECT id FROM public.users WHERE email LIKE '%@ozark.test' AND email <> 'pending@ozark.test');
+
+INSERT INTO public.entry_requests (tournament_id, user_id, phase1_amount, phase2_amount, is_player)
+SELECT t.id, u.id, 30, 20, true
+FROM public.tournaments t
+CROSS JOIN (SELECT id FROM public.users WHERE email = 'pending@ozark.test') u
+WHERE t.year = 2026
+ON CONFLICT (tournament_id, user_id) DO UPDATE SET
+  phase1_amount = EXCLUDED.phase1_amount,
+  phase2_amount = EXCLUDED.phase2_amount,
+  is_player     = EXCLUDED.is_player;
+
 COMMIT;
 
 -- Sanity: Phase 1 is 4 open / 9 closed, Phase 2 is 2 hidden, and two wagers are

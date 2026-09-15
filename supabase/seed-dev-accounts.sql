@@ -81,19 +81,34 @@ BEGIN
 END $$;
 
 -- Approved participants (existence of the row = approved to bet). pending@ and
--- newbie@ deliberately get NO row. entry_fee within the tournament bounds.
-INSERT INTO public.tournament_participants (user_id, tournament_id, entry_fee, is_player)
-SELECT v.user_id, t.id, v.entry_fee, v.is_player
+-- newbie@ deliberately get NO row. Since Sprint 30 (ADR 0002) each phase has
+-- its own entry, both within the tournament's per-phase bounds.
+INSERT INTO public.tournament_participants
+  (user_id, tournament_id, phase1_entry_fee, phase2_entry_fee, is_player)
+SELECT v.user_id, t.id, v.phase1_entry_fee, v.phase2_entry_fee, v.is_player
 FROM (
   VALUES
-    ('d0000000-0000-4000-8000-000000000001'::uuid, 40, true),  -- admin@ (also bets)
-    ('d0000000-0000-4000-8000-000000000002'::uuid, 30, true),  -- approved@
-    ('d0000000-0000-4000-8000-000000000003'::uuid, 20, false)  -- nonplayer@
-) AS v (user_id, entry_fee, is_player)
+    ('d0000000-0000-4000-8000-000000000001'::uuid, 40, 40, true),  -- admin@ (also bets)
+    ('d0000000-0000-4000-8000-000000000002'::uuid, 30, 30, true),  -- approved@
+    ('d0000000-0000-4000-8000-000000000003'::uuid, 20, 20, false)  -- nonplayer@
+) AS v (user_id, phase1_entry_fee, phase2_entry_fee, is_player)
 CROSS JOIN (SELECT id FROM public.tournaments WHERE year = 2026) AS t
 ON CONFLICT (user_id, tournament_id) DO UPDATE SET
-  entry_fee = EXCLUDED.entry_fee,
-  is_player = EXCLUDED.is_player;
+  phase1_entry_fee = EXCLUDED.phase1_entry_fee,
+  phase2_entry_fee = EXCLUDED.phase2_entry_fee,
+  is_player        = EXCLUDED.is_player;
+
+-- pending@ has asked for an entry (Sprint 30 / PRD §12 A26) and is waiting on
+-- an admin — the state /admin/people prefills the approve form from. One
+-- request per member per tournament; re-running resets it to these numbers.
+INSERT INTO public.entry_requests (tournament_id, user_id, phase1_amount, phase2_amount, is_player)
+SELECT t.id, 'd0000000-0000-4000-8000-000000000004'::uuid, 30, 20, true
+FROM public.tournaments t
+WHERE t.year = 2026
+ON CONFLICT (tournament_id, user_id) DO UPDATE SET
+  phase1_amount = EXCLUDED.phase1_amount,
+  phase2_amount = EXCLUDED.phase2_amount,
+  is_player     = EXCLUDED.is_player;
 
 -- ── Teardown ────────────────────────────────────────────────────────────────
 -- Remove every dummy account (cascades to public.users, participants,
