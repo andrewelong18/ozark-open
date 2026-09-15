@@ -28,28 +28,28 @@ Recorded in full in ADR 0002 and PRD §12 **A25** (money) / **A26** (entry reque
 ### Tasks
 
 - [x] `docs/sprints/sprint-30.md` + ROADMAP rows.
-- [ ] Migration A (`20260914000000_per_phase_entries.sql`): the two entry columns, `min_picks_per_phase`, `max_single_bet`, the view's `phase`/`is_self_pick`, the per-phase `enforce_placement_total()`, the new `enforce_participant_entry()`; `placement-roundtrip` proves the per-phase race and OZ002; `payout-view-roundtrip` proves the columns; grants manifest regenerated.
-- [ ] Migration A2 (`20260914000001_entry_requests.sql`): the table + RLS; `entry-request-roundtrip`; policies manifest regenerated; `db-export.sh` TABLES; `/api/health` check.
-- [ ] `lib/validation.ts` expanded: per-phase `Bettor`, `validatePhaseEntry`, flat `validateMaxSingleBet`, per-phase self and running totals, `phaseStanding()`.
-- [ ] `lib/placements.ts` + `lib/health.ts` read the new columns.
-- [ ] `lib/placement-write.ts`: the phase-entry 403 and the new OZ001 sentence.
-- [ ] `lib/payouts.ts`: `buildPhaseResults()` / `buildCombinedResults()`, the three identities, Pat's $50/$20/$12 example; `lib/standings.ts`, `lib/admin-view.ts`, `lib/settlement.ts` follow (`buildSettlementSummary()` deleted — #210).
-- [ ] `lib/rules.ts` + `/admin/rules`: five parameters.
-- [ ] `lib/my-bets.ts` + `lib/chase.ts`: per-phase banners and chase list.
-- [ ] `lib/roster.ts`, `lib/roster-page.ts`, `lib/collection.ts`: any-phase eligibility, owed = Σ entries, overpaid.
-- [ ] `POST/PATCH /api/admin/participants`: two fees, OZ002 → 400.
-- [ ] `lib/entry-request.ts` + `POST /api/entry-request`.
-- [ ] `components/entry/entry-request-form.tsx`, `/entry`, middleware, the onboarding step.
-- [ ] People console: two fees + player flag, prefilled from the request.
-- [ ] `/bets`: per-phase slip bar, `enteredPhases` gating.
-- [ ] `/my-bets`, dashboard, modules, onboarding/profile/style-guide copy.
-- [ ] `/standings` + `standings-board.tsx` + `standings-toggle.tsx` + nav + `phaseRevealed()`.
-- [ ] `/admin/close` + `/admin/view`.
-- [ ] `lib/import.ts`: Match two-pick refusal; phase change on a wagered bet refused.
-- [ ] Contract: the old rule fields and functions removed; grep proves zero readers.
-- [ ] Migration B (`20260914000002_drop_single_entry_columns.sql`) + every SQL reader of the old columns (export manifest, restore reconciliation, chase SQL, seeds, dry-run, sim).
-- [ ] E2E: the gauntlet per phase, the approval spec, the standings toggle, the entry request, the onboarding skip.
-- [ ] Docs: ADR 0002, PRD, DATA_MODEL, OUTSTANDING_DECISIONS, CLAUDE.md, README, checklist, DATA_SAFETY, DEV_TESTING, ARCHITECTURE, GAMEPLAN note.
+- [x] Migration A (`20260914000000_per_phase_entries.sql`): the two entry columns, `min_picks_per_phase`, `max_single_bet`, the view's `phase`/`is_self_pick`, the per-phase `enforce_placement_total()`, the new `enforce_participant_entry()`; `placement-roundtrip` proves the per-phase race and OZ002; `payout-view-roundtrip` proves the columns; grants manifest regenerated.
+- [x] Migration A2 (`20260914000001_entry_requests.sql`): the table + RLS; `entry-request-roundtrip`; policies manifest regenerated; `db-export.sh` TABLES; `/api/health` check.
+- [x] `lib/validation.ts` expanded: per-phase `Bettor`, `validatePhaseEntry`, flat `validateMaxSingleBet`, per-phase self and running totals, `phaseStanding()`.
+- [x] `lib/placements.ts` + `lib/health.ts` read the new columns.
+- [x] `lib/placement-write.ts`: the phase-entry 403 and the new OZ001 sentence.
+- [x] `lib/payouts.ts`: `buildPhaseResults()` / `buildCombinedResults()`, the three identities, Pat's $50/$20/$12 example; `lib/standings.ts`, `lib/admin-view.ts`, `lib/settlement.ts` follow (`buildSettlementSummary()` deleted — #210).
+- [x] `lib/rules.ts` + `/admin/rules`: five parameters.
+- [x] `lib/my-bets.ts` + `lib/chase.ts`: per-phase banners and chase list.
+- [x] `lib/roster.ts`, `lib/roster-page.ts`, `lib/collection.ts`: any-phase eligibility, owed = Σ entries, overpaid.
+- [x] `POST/PATCH /api/admin/participants`: two fees, OZ002 → 400.
+- [x] `lib/entry-request.ts` + `POST /api/entry-request`.
+- [x] `components/entry/entry-request-form.tsx`, `/entry`, middleware, the onboarding step.
+- [x] People console: two fees + player flag, prefilled from the request.
+- [x] `/bets`: per-phase slip bar, `enteredPhases` gating.
+- [x] `/my-bets`, dashboard, modules, onboarding/profile/style-guide copy.
+- [x] `/standings` + `standings-board.tsx` + `standings-toggle.tsx` + nav + `phaseRevealed()`.
+- [x] `/admin/close` + `/admin/view`.
+- [x] `lib/import.ts`: Match two-pick refusal; phase change on a wagered bet refused.
+- [x] Contract: the old rule fields and functions removed; grep proves zero readers.
+- [x] Migration B (`20260914000002_drop_single_entry_columns.sql`) + every SQL reader of the old columns (export manifest, restore reconciliation, chase SQL, seeds, dry-run, sim).
+- [x] E2E: the gauntlet per phase, the approval spec, the standings toggle, the entry request, the onboarding skip.
+- [x] Docs: ADR 0002, PRD, DATA_MODEL, OUTSTANDING_DECISIONS, CLAUDE.md, README, checklist, DATA_SAFETY, DEV_TESTING, ARCHITECTURE, GAMEPLAN note.
 
 **Done when:** a member entered in Phase 1 only is refused on a Phase 2 pick with a sentence naming the phase; two concurrent wagers cannot exceed a phase entry and the loser reads the OZ001 sentence; an admin cannot lower an entry below what is wagered in that phase; a $50 entry with $20 wagered and $12 on yourself pays out on $5 of it and refunds $30; a $50 entry with nothing wagered forfeits $20 and refunds $30; the slip bar, `/my-bets` and the dashboard all say so while the phase is open; the chase list at each close names everyone entered in that phase who isn't complete; the Leaderboard page toggles Phase 1 / Phase 2 / Combined and shows an open phase's pot only; a member can request an entry exactly once, sees the Venmo link and memo, and the dashboard and `/my-bets` carry a warning until money is added; an upload with a three-pick Match is refused by name; and `npm test` · lint · `tsc` · `npm run build` · `scripts/local-db-verify.sh` · `scripts/dry-run-verify.sh` · `scripts/sim-pool-verify.sh` all pass, with the new per-phase dry-run pool figures recorded below.
 
@@ -62,9 +62,36 @@ Recorded in full in ADR 0002 and PRD §12 **A25** (money) / **A26** (entry reque
 
 ### Rollout
 
-Expand → migrate → contract, per `20260812000000_drop_min_picks_per_phase.sql`'s doctrine:
+Expand → migrate → contract, per `20260812000000_drop_min_picks_per_phase.sql`'s doctrine. Tracked, with the exact SQL, in the production-rollout issue linked from the ROADMAP row.
 
-1. **Before the merge:** apply #222, #229 if still missing, then A and A2, via the Supabase MCP.
-2. **The reset** (data, not schema): `take_snapshot('pre-per-phase-reset')` → delete every 2026 wager → null every entry and zero every recorded payment, keeping the participant rows and names → `take_snapshot('post-per-phase-reset')`.
-3. Merge → deploy → `/api/health` green → members request, admins approve as money lands.
-4. **After the deploy:** apply B, confirm `/api/health`, snapshot.
+1. **Before the merge:** `list_migrations`; apply #222 (`20260911000000`) and #229 (`20260912000001`) if still missing, then **A** and **A2**, via the Supabase MCP. Verify the two entry columns, `entry_requests` and its three policies, and both trigger functions exist.
+2. **The reset** (data, not schema), in this order — wagers first, because OZ002 refuses clearing an entry that still has wagers under it:
+   1. `SELECT public.take_snapshot('manual');` — note the id. (The snapshot `trigger` column only accepts `cron` / `manual` / `pre-import` / `pre-restore`, so a custom label would fail.)
+   2. `DELETE FROM public.bet_placements p USING public.bet_picks pk, public.bets b, public.tournaments t WHERE p.pick_id = pk.id AND pk.bet_id = b.id AND b.tournament_id = t.id AND t.year = 2026;`
+   3. `UPDATE public.tournament_participants tp SET entry_fee = NULL, phase1_entry_fee = NULL, phase2_entry_fee = NULL, paid_amount = 0, paid_at = NULL, paid_note = NULL FROM public.tournaments t WHERE tp.tournament_id = t.id AND t.year = 2026;`
+   4. Verify: 0 wagers for 2026, 0 participants with any entry, and the participant row count and names unchanged.
+   5. `SELECT public.take_snapshot('manual');` — note the id. This is the first save state of the new model.
+3. Merge → Vercel deploy → `/api/health` green (including `entry_requests_read`) → members request, admins approve as money lands.
+4. **After the deploy:** apply **B** (`20260914000002`), confirm `/api/health`, take a manual snapshot.
+
+### Verified locally (Sept 14, 2026)
+
+| Check | Result |
+|---|---|
+| `npm test` | 568 pass, 0 fail (baseline 539 on `origin/main`) |
+| `npm run lint` · `npx tsc --noEmit` · `npm run build` | clean · clean · builds, with `/standings`, `/entry` and `/api/entry-request` |
+| `scripts/local-db-verify.sh` | passes end to end with A, A2 and B applied: both manifests (30 policies, 13 function grants), the WHERE-less DML check, every round trip including the per-phase race, cross-phase independence, six OZ002 cases and the 13-check entry-request RLS trip, and the chase SQL smoke |
+| `scripts/dry-run-verify.sh` | **99 checks, passes end to end.** Both chase lines match `/admin/close` word for word. The three identities hold per pot and combined. Pat's $50 / $20 / $12 example (Mike Vemmer, Phase 2) recognises $5, forfeits $7 and refunds $30; Steve's untouched $50 forfeits $20 and refunds $30 |
+| `scripts/sim-pool-verify.sh` | 32 members, 310 wagers, every one rule-valid; identities hold per pot and combined; Phase 2 under-wagerers forfeit and are refunded |
+| `npm run test:e2e` | 75 passed, 10 failed, 4 skipped, run against an **isolated** local stack (see below). 7 failures are the pre-existing #217 set; the admin-approval spec #217 lists now passes. The other 3 are environmental: two filter chips measure 43px on macOS font metrics, and the mobile menu probe measures mid-animation. The serial results specs stop at #217 failures before the per-phase standings, so those were verified by hand |
+| Manual browser pass | Slip bar, My Bets and the dashboard show Pat's example correctly; `/standings` Phase 1 reconciles to the cent by hand ($58 pool); the Phase 2 tab shows the $90 pot only; the completed dashboard's Combined board reconciles ($118 = $58 + $60); `/admin/view` agrees |
+
+**Dry-run pool figures** (the expected answer for reconciliation, Act 10):
+
+| Pot | Entries | Unwagered, refunded | Voided stakes | Pool |
+|---|---|---|---|---|
+| Phase 1 | $455 | $30 | $24 | **$401** |
+| Phase 2 | $300 | $30 | $37 | **$233** |
+| Combined | $755 | $60 | $61 | **$634** |
+
+**How e2e was run.** The shared local Supabase stack (project `ozark-open`, 9 days old, 22 accounts, migrations behind `origin/main`) belongs to the main checkout, and applying this sprint's destructive migration to it would break that checkout. So the suite ran against a second, throwaway stack (project `ozark-open-s30-e2e`, every port +100) with a Next dev server on :3130, reproducing `scripts/e2e-verify.sh`'s grants and seeds.

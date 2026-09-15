@@ -10,7 +10,7 @@ The database schema for the Ozark Open Sportsbook. This is the most important fi
 2. **Evergreen identity.** A user has one record forever. Tournaments are separate entities. A user joins a tournament via a join table.
 3. **Results attach to picks, not bets or placements.** A pick hits or misses once, globally (`bet_picks.result`). We don't store hit/miss per-placement, and a bet has no outcome of its own — "resolved" is derived from its picks.
 4. **Theoretical payout is computed, never stored.** It's a function of `placement.amount`, `placement.odds_at_placement`, and `pick.result`. A Postgres view derives it on demand. (Odds are snapshotted onto the placement at write time — see §3.7 and PRD §7.1.)
-5. **Constraints in the right place.** Schema enforces things that are always true (a placement must have positive amount). App code enforces things that are contextual (you can't have more than 10 placements in a phase).
+5. **Constraints in the right place.** Schema enforces things that are always true (a placement must have positive amount). App code enforces things that are contextual (you need five picks in each phase you're in). The exception is an aggregate money rule, which a lock-holding trigger enforces too (§3.3, §3.7).
 
 ---
 
@@ -27,6 +27,8 @@ erDiagram
     bets ||--o{ bet_picks : "offers"
     bet_picks ||--o{ bet_placements : "receives"
     users |o--o{ bet_picks : "is_player_of"
+    users ||--o{ entry_requests : "asks"
+    tournaments ||--o{ entry_requests : "receives"
 
     users {
         uuid id PK
@@ -43,8 +45,9 @@ erDiagram
         text status
         int entry_fee_min
         int entry_fee_max
-        int min_picks_per_tournament
-        int max_picks_per_phase
+        int min_picks_per_phase
+        int max_single_bet
+        numeric max_self_bet_pct
         timestamptz phase1_closes_at
         timestamptz phase2_closes_at
         boolean show_countdown
@@ -55,12 +58,23 @@ erDiagram
         uuid id PK
         uuid user_id FK
         uuid tournament_id FK
-        int entry_fee
+        int phase1_entry_fee
+        int phase2_entry_fee
         boolean is_player
         timestamptz revoked_at
         int paid_amount
         timestamptz paid_at
         text paid_note
+    }
+
+    entry_requests {
+        uuid id PK
+        uuid tournament_id FK
+        uuid user_id FK
+        int phase1_amount
+        int phase2_amount
+        boolean is_player
+        timestamptz created_at
     }
 
     tournament_invites {
@@ -118,11 +132,14 @@ erDiagram
     }
 ```
 
-The two columns easiest to misread from the diagram alone:
+The three columns easiest to misread from the diagram alone:
 
 - **`tournament_participants.revoked_at`** — eligibility is "a row exists **and**
   `revoked_at IS NULL`" (A13), never bare row-existence. The row is kept when access is
-  revoked because it carries the `entry_fee`, which is a pool input. See §3.3.
+  revoked because it carries the phase entries, which are pool inputs. See §3.3.
+- **`tournament_participants.phase1_entry_fee` / `phase2_entry_fee`** — NULL means *not
+  entered in that phase*, not zero. Wagering in a phase needs a live row **and** that phase's
+  entry (ADR 0002). See §3.3.
 - **`bet_placements.placed_by_user_id`** — the admin who last wrote the row, not whose wager
   it is. The **bettor** is always `user_id`, and that is what every §7 rule and all pool math
   mean by "whose". See §3.7.
@@ -175,14 +192,13 @@ One row per Ozark Open year. Holds the rule parameters that govern that year's p
 | `name` | `text` NOT NULL | E.g. "Ozark Open 2026" |
 | `year` | `int` NOT NULL UNIQUE | E.g. 2026 |
 | `status` | `text` NOT NULL CHECK IN (`'upcoming'`, `'active'`, `'completed'`) | Controls visibility |
-| `entry_fee_min` | `int` NOT NULL DEFAULT 20 | Lower bound on entry |
-| `entry_fee_max` | `int` NOT NULL DEFAULT 50 | Upper bound on entry |
-| `min_picks_per_tournament` | `int` NOT NULL DEFAULT 5 | Fewest wagered picks **across both phases combined**, due by Phase 2 close (PRD §12 A14, Sprint 22 / #96) |
-| `max_picks_per_phase` | `int` NOT NULL DEFAULT 10 | Most wagered picks **in any one phase**. Renamed from `max_bets_per_round` (ADR 0001 §10) |
-| `max_single_bet_pct` | `numeric(3,2)` NOT NULL DEFAULT 0.50 | Half of entry, by default |
-| `max_single_bet_cap` | `int` NOT NULL DEFAULT 20 | Hard cap regardless of entry size |
-| `max_self_bet_pct` | `numeric(3,2)` NOT NULL DEFAULT 0.25 | Quarter of entry |
-| `max_self_bet_cap` | `int` NOT NULL DEFAULT 10 | Hard cap on self-bets |
+| `entry_fee_min` | `int` NOT NULL DEFAULT 20 | Lower bound on **each phase's** entry — and the floor of an entry that is committed to the pot whether or not it's wagered (ADR 0002) |
+| `entry_fee_max` | `int` NOT NULL DEFAULT 50 | Upper bound on each phase's entry |
+| `min_picks_per_phase` | `int` NOT NULL DEFAULT 5 | Fewest wagered picks **in each phase a member is entered in** — a completeness rule, never blocking (Sprint 30 / A25). No maximum |
+| `max_single_bet` | `int` NOT NULL DEFAULT 10 | The flat per-placement cap in whole dollars, at every entry (Sprint 30 / A25) |
+| `max_self_bet_pct` | `numeric(3,2)` NOT NULL DEFAULT 0.25 | Self-bet cap as a fraction of the **phase entry**, floored, no hard cap. At close only this fraction of what was actually wagered in the phase counts |
+
+*Dropped by `20260914000002` (Sprint 30): `min_picks_per_tournament`, `max_picks_per_phase`, `max_single_bet_pct`, `max_single_bet_cap`, `max_self_bet_cap`.*
 | `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | |
 
 **Why store rule parameters per-tournament:** the original memo's rules might evolve. Storing them on the tournament row means the 2026 rules are preserved exactly even if 2027 changes them.
@@ -198,27 +214,30 @@ Join table connecting users to tournaments. A user is "in" a tournament for a gi
 | `id` | `uuid` PK | |
 | `user_id` | `uuid` NOT NULL FK → `users.id` | |
 | `tournament_id` | `uuid` NOT NULL FK → `tournaments.id` | |
-| `entry_fee` | `int` NOT NULL CHECK (`entry_fee BETWEEN 20 AND 50`) | The participant's chosen entry, $20–$50 |
+| `phase1_entry_fee` | `int` NULL CHECK (`> 0`) | The Phase 1 entry in whole dollars, or NULL = **not entered in Phase 1** (Sprint 30 / A25). A pool input: `min(E, max(W, entry_fee_min))` funds the Phase 1 pot |
+| `phase2_entry_fee` | `int` NULL CHECK (`> 0`) | The Phase 2 entry, same semantics. Recorded by an admin when the money arrives, never assumed |
 | `is_player` | `boolean` NOT NULL DEFAULT `true` | True if they're playing golf, false if they're only betting (rare) |
-| `revoked_at` | `timestamptz` NULL | Non-null = betting access revoked (Sprint 21 / #91). The row and its `entry_fee` are kept so re-approval restores both; see "How access is revoked" below |
-| `paid_amount` | `int` NOT NULL DEFAULT `0` CHECK (`paid_amount >= 0`) | Entry money collected so far, whole dollars, admin-recorded (A17). **Never an input to pool math.** Overpayment is representable; "paid in full" is derived as `paid_amount >= entry_fee` |
+| `revoked_at` | `timestamptz` NULL | Non-null = betting access revoked (Sprint 21 / #91). The row and its entries are kept so re-approval restores both; see "How access is revoked" below |
+| `paid_amount` | `int` NOT NULL DEFAULT `0` CHECK (`paid_amount >= 0`) | Entry money collected so far, whole dollars, admin-recorded (A17). **Never an input to pool math.** Overpayment is representable; "paid in full" is derived as `paid_amount >= phase1_entry_fee + phase2_entry_fee` (NULL counts as 0) |
 | `paid_at` | `timestamptz` NULL | When an admin last recorded an amount — *not* when the money arrived. NULL is "nobody has recorded anything", which is not the same as "they owe"; read it with `paid_amount` |
-| `paid_note` | `text` NULL | Free text for how it came in ("from the deposit", "Venmo 9/2"). The collection **mechanism** is still an open stakeholder call (`OUTSTANDING_DECISIONS.md` §3); this records what happened without prejudging it |
+| `paid_note` | `text` NULL | Free text for how it came in ("Venmo 9/14"). Payment is entirely by Venmo since Sept 14, 2026 (A26) |
 
-**Constraint:** UNIQUE (`user_id`, `tournament_id`) — a user can only join a tournament once. (The `entry_fee` CHECK was relaxed to `> 0` in `20260717000000_bet_pick_rework.sql`; the $20–$50 bounds live on the `tournaments` row and are enforced in app code — DATA_MODEL §6 known inconsistency.)
+**Constraint:** UNIQUE (`user_id`, `tournament_id`) — a user can only join a tournament once. The $20–$50 per-phase bounds live on the `tournaments` row and are enforced in app code (`validateEntryFee()`); the CHECKs keep only what is always true. *`entry_fee` — one entry funding both phases — was dropped by `20260914000002` (Sprint 30).*
+
+**Changing an entry under its wagers is refused** (`enforce_participant_entry()`, `20260914000000`). A `BEFORE INSERT OR UPDATE OF phase1_entry_fee, phase2_entry_fee` trigger raises SQLSTATE `OZ002` — *"Can't set the Phase 1 entry to $10 — they already have $15 wagered in Phase 1. Remove those wagers first."* — when the new value (NULL counting as 0) is below the live wagers in that phase. The admin route's TypeScript check says the same thing first; the trigger is the truth, because an admin PATCH is a read-decide-write with no lock. The UPDATE's own row lock serialises against `enforce_placement_total()`'s `FOR UPDATE` in either order. Bypassed while `ozark.restoring = 'on'`.
 
 **Why `is_player`:** the rules talk about "betting on yourself" — that only matters if the bettor is also a player. Non-playing entrants (if any) are exempt from the self-bet rule.
 
-**How rows are created (Sprint 16 / A12).** A member logging in does **not** create a participant row — they're onboarded but not yet in the pool, so they can view the menu but not bet. An admin approves them on `/admin/people` (Sprint 20; was `/admin/participants`), which sets the entry fee + player flag and **creates the row**. A live row = approved to bet; there is no separate `betting_enabled` flag. Writes stay admin-only (RLS): `POST/PATCH/DELETE /api/admin/participants` re-checks `is_admin` and validates the fee against the `tournaments` row. This replaces the old manual Supabase Studio row-add.
+**How rows are created (Sprint 16 / A12).** A member logging in does **not** create a participant row — they're onboarded but not yet in the pool, so they can view the menu but not bet. An admin approves them on `/admin/people` (Sprint 20; was `/admin/participants`), which sets the phase entries (at least one) + player flag — prefilled from the member's `entry_requests` row when there is one (§3.10) — and **creates the row**. A live row = approved to bet; there is no separate `betting_enabled` flag. Writes stay admin-only (RLS): `POST/PATCH/DELETE /api/admin/participants` re-checks `is_admin` and validates the fee against the `tournaments` row. This replaces the old manual Supabase Studio row-add.
 
-**How access is revoked (Sprint 21 / A13, `20260807000000_participant_soft_revoke.sql`).** Revoking stamps `revoked_at` and **keeps the row**, so eligibility is "a row exists **and** `revoked_at IS NULL`" — a refinement of A11/A12's bare row-exists. It used to be a hard `DELETE`, which took the `entry_fee` with it while the bettor's placements (soft-deleted, never removed) survived: the pool silently shrank and every other bettor's share moved. A revoked bettor now leaves **both** sides of the arithmetic together — their fee stops funding the pool, and `buildResultsTable` (`lib/payouts.ts`) drops the payout rows of anyone not in `participants` from the denominator. Nothing is deleted, so re-approval restores the member, the fee and the wagers exactly. Every read that means "approved" filters `revoked_at IS NULL`; `/admin/people` is the one exception — it selects the column so it can show a **Revoked** row and offer re-approval.
+**How access is revoked (Sprint 21 / A13, `20260807000000_participant_soft_revoke.sql`).** Revoking stamps `revoked_at` and **keeps the row**, so eligibility is "a row exists **and** `revoked_at IS NULL`" — a refinement of A11/A12's bare row-exists. It used to be a hard `DELETE`, which took the entry fee with it while the bettor's placements (soft-deleted, never removed) survived: the pool silently shrank and every other bettor's share moved. A revoked bettor now leaves **both** sides of the arithmetic together — their fee stops funding the pool, and `buildPhaseResults` (`lib/payouts.ts`) drops the payout rows of anyone not in `participants` from the denominator. Nothing is deleted, so re-approval restores the member, the fee and the wagers exactly. Every read that means "approved" filters `revoked_at IS NULL`; `/admin/people` is the one exception — it selects the column so it can show a **Revoked** row and offer re-approval.
 
 **How entry collection is recorded (Sept 2, 2026 / A17, `20260902000000_entry_collection.sql`).** Three columns record what an admin says has come in, edited in the Edit panel on `/admin/people` through `PATCH /api/admin/participants`. Two rules bound them, and both are asserted by `scripts/collection-roundtrip.ts` rather than only written down here:
 
-1. **It records collection; it never decides the mechanism.** Whether the $20 minimum comes out of the house deposit is Pat's call (`OUTSTANDING_DECISIONS.md` §3) and `paid_note` is free text, so these columns are true whichever way it lands.
-2. **It is never an input to pool math.** The pool stays Σ entry fees − Σ voided stakes (ADR 0001 §9) whether or not the money arrived — an unpaid member still funds it on paper, which is exactly why an admin needs to see the gap and exactly why nothing in `lib/payouts.ts` may read these columns. The round trip wipes every payment to zero and asserts `placement_payouts_view` is unchanged.
+1. **It records collection; it never decides the mechanism.** When these columns landed the mechanism was still open; it closed on Sept 14, 2026 as entirely Venmo (A26, `OUTSTANDING_DECISIONS.md` §3), and `paid_note` stays free text either way.
+2. **It is never an input to pool math.** Each phase's pool is built from the phase entries (ADR 0002) whether or not the money arrived — an unpaid member still funds it on paper, which is exactly why an admin needs to see the gap and exactly why nothing in `lib/payouts.ts` may read these columns. The round trip wipes every payment to zero and asserts `placement_payouts_view` is unchanged.
 
-**No new RLS policies**, so `expected-policies.txt` is unmoved: writes to this table are already admin-only and reads are already authenticated-read-all, meaning a member hand-querying PostgREST can see these columns exactly as they can already see everyone's `entry_fee`. That is the existing model rather than a new exposure, and the UI shows them to nobody but admins. Hiding them properly would mean a `SECURITY DEFINER` reader gated on `is_admin()`, on the `admin_auth_activity()` pattern.
+**No new RLS policies**, so `expected-policies.txt` is unmoved: writes to this table are already admin-only and reads are already authenticated-read-all, meaning a member hand-querying PostgREST can see these columns exactly as they can already see everyone's phase entries. That is the existing model rather than a new exposure, and the UI shows them to nobody but admins. Hiding them properly would mean a `SECURITY DEFINER` reader gated on `is_admin()`, on the `admin_auth_activity()` pattern.
 
 People who are *expected* in the tournament but haven't registered are deliberately **not** modeled here — they live in `tournament_invites` (§3.8), precisely so a row in this table keeps meaning "approved to bet".
 
@@ -313,17 +332,18 @@ Each individual wager: one row per (user, pick) pair where money was placed.
 
 **Betting on someone's behalf (Sprint 23 / #101, ADR 0001 §13).** An admin can enter a wager for a member who can't work the magic-link flow, from `/bets?for=<userId>` via `POST/PATCH/DELETE /api/admin/placements`. Two properties hold it together. First, **every PRD §7 rule evaluates against the bettor** — `lib/placement-write.ts` takes `{ bettor_id, actor_id }`, and both routes run that one path, so the entry fee, the running total, the self-bet cap, the opponent block and `requires_admin_review` can never silently key off the acting admin. Second, the member's own "only as yourself" policies were **not loosened**: a separate admin-scoped INSERT/UPDATE pair carries `public.is_admin() AND placed_by_user_id = auth.uid()`, so Postgres itself refuses a forged attribution. Eligibility, the bet's `open` status and the phase deadline all still bind — acting for someone is not permission to break the tournament's rules.
 
-**The entry-fee cap IS enforced at the schema level (Sept 2, 2026 / A18, `20260902000001_placement_total_guard.sql`).** `public.enforce_placement_total()` runs `BEFORE INSERT OR UPDATE`, locks the bettor's `tournament_participants` row `FOR UPDATE`, sums their other live placements in that tournament (`pl.id <> NEW.id`, which serves insert and edit alike) and raises SQLSTATE `OZ001` if the write would exceed `entry_fee`.
+**The entry cap IS enforced at the schema level — per phase** (Sept 2, 2026 / A18, `20260902000001_placement_total_guard.sql`; rewritten per phase by `20260914000000_per_phase_entries.sql`, Sprint 30 / A25). `public.enforce_placement_total()` runs `BEFORE INSERT OR UPDATE`, resolves the bet's phase from `NEW.pick_id`, locks the bettor's `tournament_participants` row `FOR UPDATE`, sums their other live placements **in that phase** (`pl.id <> NEW.id`, which serves insert and edit alike) and raises SQLSTATE `OZ001` — *"Over your $20 Phase 1 entry — that's the most you can wager in Phase 1."* — if the write would exceed that phase's entry. A NULL phase entry passes the trigger: "not entered in this phase" is the app's refusal, with a sentence.
 
-**The lock is the point, not the sum.** `lib/placement-write.ts` reads, validates in TypeScript, then writes — with no lock and no transaction — so two concurrent placements on *different* picks each read a total missing the other's and both land. Re-summing inside a trigger fails identically: under READ COMMITTED neither transaction can see the other's uncommitted row. `SELECT … FOR UPDATE` on the bettor's row is what serialises them. `scripts/placement-roundtrip.ts` runs two genuinely overlapping transactions — two $15 wagers against a $20 entry — and was proven able to fail: with the lock removed, both land at $30.
+**The lock is the point, not the sum.** `lib/placement-write.ts` reads, validates in TypeScript, then writes — with no lock and no transaction — so two concurrent placements on *different* picks each read a total missing the other's and both land. Re-summing inside a trigger fails identically: under READ COMMITTED neither transaction can see the other's uncommitted row. `SELECT … FOR UPDATE` on the bettor's row is what serialises them. `scripts/placement-roundtrip.ts` runs two genuinely overlapping transactions — two $15 Phase 1 wagers against a $20 Phase 1 entry — and was proven able to fail: with the lock removed, both land at $30. It also proves the phases are independent: $15 in Phase 1 and $15 in Phase 2 against $20 / $20 both land.
 
 It skips a soft delete (which only reduces the total) and skips when no live participant row exists — eligibility stays the app's job, with a sentence a member can act on rather than a raw database error. It raises `validateRunningTotal()`'s exact message, which `lib/placement-write.ts` maps back to a 400, so the loser of a race reads what the second-slowest tap would have read. It is bypassed while `ozark.restoring = 'on'` — set by both restore paths, `public.restore_snapshot()` (Sprint 27) and `scripts/restore-snapshot.ts`: a restore reproduces a state that already existed, and a guard that refused to put back an over-cap row would break the undo button on exactly the disaster it exists for. `scripts/snapshot-restore-roundtrip.ts` proves the stand-down by building a save state that holds an over-cap wager and restoring it, and was proven able to fail — remove the stand-down and the restore dies on `OZ001`.
 
-**Constraints NOT enforced at the schema level** (these live in app code because they require cross-row checks; semantics per PRD §7/§12/ADR 0001):
-- Between 5 and 10 pick-placements per user in any phase they bet in — each wagered pick counts individually.
-- The **exact-equal** half of the running total: the cap (≤ entry fee) is the trigger above; "must equal it exactly by Phase 2 close" is a §8.1 phase-close check, never blocking, and stays in app code.
-- Single placement amount ≤ `min(max_single_bet_pct × entry_fee, max_single_bet_cap)` — per placement, either phase.
-- Sum of self-pick placements **across the tournament** ≤ `min(max_self_bet_pct × entry_fee, max_self_bet_cap)`.
+**Constraints NOT enforced at the schema level** (these live in app code because they require cross-row checks; semantics per PRD §7/§12/ADR 0002):
+- An entry for the bet's phase — refused with a sentence (403) in `lib/placement-write.ts`.
+- At least 5 pick-placements in each phase the bettor is entered in — a completeness rule, never blocking; no maximum.
+- The **exact-equal** half of the running total: the cap (≤ the phase entry) is the trigger above; "wager it all by the phase's close" is a §8.1 completeness check whose shortfall costs money at settlement (forfeit / refund, ADR 0002), never a block.
+- Single placement amount ≤ `max_single_bet` ($10 flat).
+- Sum of self-pick placements **in the phase** ≤ `floor(max_self_bet_pct × phase entry)` — players only (Q14).
 - One pick per Match / Group Match bet (`bet_categories.allows_multiple_picks = false`).
 - No placement on an opponent's pick in a Match / Group Match the bettor plays in — hard reject.
 
@@ -376,6 +396,32 @@ The profile copy for the whole roster, **keyed by name rather than by user id** 
 
 ---
 
+### 3.10 `entry_requests`
+
+A member's one-time ask to put money in (Sprint 30 / PRD §12 A26, `20260914000001_entry_requests.sql`). **What the member asked for** — the participant row (§3.3) stays **what an admin recorded**.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` PK | |
+| `tournament_id` | `uuid` NOT NULL FK → `tournaments.id` ON DELETE CASCADE | |
+| `user_id` | `uuid` NOT NULL FK → `users.id` ON DELETE CASCADE | |
+| `phase1_amount` | `int` NOT NULL DEFAULT 0 CHECK (`>= 0`) | $0 = sitting Phase 1 out |
+| `phase2_amount` | `int` NOT NULL DEFAULT 0 CHECK (`>= 0`) | |
+| `is_player` | `boolean` NOT NULL DEFAULT `true` | "I'm playing in the tournament" — prefills the approval's playing-golfer flag |
+| `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | |
+
+**Constraints:** CHECK (`phase1_amount + phase2_amount > 0`) and **UNIQUE (`tournament_id`, `user_id`)** — the second is the whole "one time" promise, paired with the absence of any member UPDATE or DELETE policy. The form's warning is for the member; the database is what keeps it.
+
+**Why a table and not columns on the participant row.** A12 makes the participant row the eligibility record and its existence the approval; members can't write it and mustn't be able to. A request made before approval has nowhere else to live, and it's the audit trail of what someone asked for when the money that arrives on Venmo doesn't match.
+
+**Bounds are app-validated** (`lib/entry-request.ts`: each amount $0 or within `entry_fee_min`/`entry_fee_max`, a closed phase must be $0). A hand-built PostgREST insert can produce an odd *request* — never money, because an admin records what actually arrived.
+
+**RLS:** `"Members request their own entry"` (INSERT, `user_id = auth.uid()`), `"Members read their own request"` (SELECT, own row), `"Admins manage entry requests"` (FOR ALL, `is_admin()` — the house shape, and the admin's way to clear a mistaken request). Asserted by `scripts/entry-request-roundtrip.ts` (insert once, second insert refused, can't write or read someone else's, can't update or delete one's own, admin reads all) and `supabase/expected-policies.txt`.
+
+**Not a money table**, so it is not in `take_snapshot()`; it *is* in `scripts/db-export.sh`'s `TABLES` list. `/api/health` checks the columns (`entry_requests_read`): the dashboard and My Bets read them, and an `anon` caller gets a true schema answer from an RLS-filtered read.
+
+---
+
 ## 4. The Payout View
 
 A read-only Postgres view that computes each placement's theoretical payout. Defined in a migration; queryable like a table.
@@ -409,7 +455,12 @@ SELECT
     CASE
         WHEN pk.result = 'void' THEN p.amount
         ELSE 0
-    END AS refunded_stake
+    END AS refunded_stake,
+    -- Sprint 30 (20260914000000): appended, because a view can only gain
+    -- trailing columns. The phase picks the pot; is_self_pick is what the
+    -- self-bet line at close scales.
+    b.phase AS phase,
+    (pk.player_user_id IS NOT NULL AND pk.player_user_id = p.user_id) AS is_self_pick
 FROM bet_placements p
 JOIN bet_picks pk ON pk.id = p.pick_id
 JOIN bets b       ON b.id  = pk.bet_id
@@ -421,12 +472,18 @@ Notes:
 - Computes from `p.odds_at_placement` (the snapshot taken when the wager was written, PRD §7.1) — never from `pk.american_odds`, which a re-upload may have repriced since — and excludes soft-deleted placements.
 - **Void ≠ push** (ADR 0001 §9): a push credits the stake as theoretical payout; a void contributes 0 to the theoretical total and instead surfaces the stake in `refunded_stake`, so the pool can shrink.
 
-The actual-payout proportional split runs in TypeScript at render time (`lib/payouts.ts`), since it requires summing across all users (one query, then arithmetic):
+The actual-payout proportional split runs in TypeScript at render time (`lib/payouts.ts`, `buildPhaseResults()`), **once per phase** since Sprint 30, because it requires summing across all users (one query, then arithmetic). Per bettor per phase, with `E` the phase entry and `W` their live wagers in it (ADR 0002 §2):
 
 ```
-pool_total   = sum(entry fees) − sum(refunded_stake)
-actual(user) = theoretical(user) / sum(theoretical(all)) × pool_total
+committed    = min(E, max(W, entry_fee_min))
+k            = self stake > 0 ? min(1, floor(max_self_bet_pct × W) / self stake) : 1
+theo'        = theoretical_payout × (is_self_pick ? k : 1)
+refunded'    = refunded_stake     × (is_self_pick ? k : 1)
+pool(phase)  = sum(committed) − sum(refunded')
+actual(user) = theo'(user) / sum(theo'(all in the phase)) × pool(phase)
 ```
+
+The combined standings are the per-person sum of the two phase rows (`buildCombinedResults()`), never a split of a merged pot.
 
 ---
 
@@ -458,11 +515,11 @@ Two refusals are built in, both raising rather than returning:
 
 Policies live inline in each table's migration file under `supabase/migrations/` (e.g., `20260507000000_users_table.sql`, `20260507000001_tournaments.sql`, `20260507000002_bets.sql`).
 
-**The full set is asserted, not just described** (#154). `supabase/expected-policies.txt` lists all 26 policies — table, command, name, roles — and `scripts/policy-manifest.ts` diffs the live set against it on every `local-db-verify.sh` run. Adding, removing or re-scoping a policy fails the build until the manifest is regenerated in the same commit (`POLICY_MANIFEST_WRITE=1 bash scripts/local-db-verify.sh`). This exists because **a missing policy is invisible at runtime**: an `UPDATE` with no policy matches zero rows and returns success, which is indistinguishable from a write that had nothing to do. That is how the #99 display-name edit ran inert in production. Behaviour tests only cover cases someone thought to write; the manifest covers the ones nobody did.
+**The full set is asserted, not just described** (#154). `supabase/expected-policies.txt` lists all 30 policies — table, command, name, roles — and `scripts/policy-manifest.ts` diffs the live set against it on every `local-db-verify.sh` run. Adding, removing or re-scoping a policy fails the build until the manifest is regenerated in the same commit (`POLICY_MANIFEST_WRITE=1 bash scripts/local-db-verify.sh`). This exists because **a missing policy is invisible at runtime**: an `UPDATE` with no policy matches zero rows and returns success, which is indistinguishable from a write that had nothing to do. That is how the #99 display-name edit ran inert in production. Behaviour tests only cover cases someone thought to write; the manifest covers the ones nobody did.
 
 **Function `EXECUTE` grants are asserted the same way** (#205). `scripts/policy-manifest.ts` reads `pg_policy` only, so until Sept 8, 2026 the project had **no drift check on function grants at all** — a migration adding `GRANT EXECUTE ON FUNCTION public.restore_snapshot(uuid) TO anon` passed every check in the repo. `supabase/expected-function-grants.txt` now lists every function in `public` with the roles holding `EXECUTE`, regenerated by the same `POLICY_MANIFEST_WRITE=1` mechanism. It matters most for the `SECURITY DEFINER` functions, which deliberately bypass RLS and where the `REVOKE ALL … FROM PUBLIC, anon` is the **entire** boundary: `take_snapshot()` returns every open wager in the tournament, and `restore_snapshot()` replaces the contents of all five money tables.
 
-Two values in the roles column are opposites and must not be read alike: **`none`** means an ACL exists and grants `EXECUTE` to nobody, while **`PUBLIC (default)`** means `proacl IS NULL` — the built-in default of `EXECUTE TO PUBLIC`, never touched by a migration. Five entries currently read `PUBLIC (default)`: four are trigger functions (`enforce_placement_total`, `guard_users_self_update`, `handle_new_user`, `touch_updated_at`), which PostgREST does not expose as RPC and which raise if called outside a trigger. The fifth is **`is_admin()`**, which is `SECURITY DEFINER` and callable — see #213.
+Two values in the roles column are opposites and must not be read alike: **`none`** means an ACL exists and grants `EXECUTE` to nobody, while **`PUBLIC (default)`** means `proacl IS NULL` — the built-in default of `EXECUTE TO PUBLIC`, never touched by a migration. Seven entries currently read `PUBLIC (default)`: six are trigger functions (`apply_player_profile_seed`, `enforce_participant_entry`, `enforce_placement_total`, `guard_users_self_update`, `handle_new_user`, `touch_updated_at`), which PostgREST does not expose as RPC and which raise if called outside a trigger. The seventh is **`is_admin()`**, which is `SECURITY DEFINER` and callable — see #213.
 
 **One structural note worth keeping.** Every admin-writable table except `users` grants admin write through a single `FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin())`, which covers INSERT/UPDATE/DELETE in one statement and **cannot** develop the `users` gap. `public.users` is the only table whose policies were assembled per-command, across four migrations — which is exactly why it was the only one missing an admin write path. When adding a table, prefer the `FOR ALL` shape.
 
@@ -472,6 +529,7 @@ Summary:
 - **`bet_picks`**: readable whenever the parent bet is readable (not `hidden`). Write: admins only (the import route).
 - **`bet_placements`**: a user can `SELECT` / `INSERT` / `UPDATE` / soft-delete their own rows while the parent bet is `open`. Other users' placements are visible only when the bet is `closed`. Admins can read all, and (Sprint 23 / #101) can `INSERT` / `UPDATE` rows for **another** bettor through a separate admin-scoped pair that requires `public.is_admin() AND placed_by_user_id = auth.uid()` — the member's own-rows policies are unchanged, and the attribution clause means the database refuses an admin who claims someone else entered the wager. No `DELETE` policy for anyone, admins included — removals through the app are soft. The import sweep's hard delete does **not** get one either; it goes through `public.sweep_bets()`, a `SECURITY DEFINER` function whose `REVOKE` is the boundary (§4.2). Granting an admin `DELETE` on the money table to serve one importer path would be a far wider grant than the job needs, and a write RLS filters to zero rows comes back as success with `error === null`.
 - **`tournament_participants`**: anyone authenticated can `SELECT`. Only admins can `INSERT` / `UPDATE`.
+- **`entry_requests`** (Sprint 30): a member can `INSERT` and `SELECT` their own row, once — no member `UPDATE` or `DELETE`; admins manage all rows (§3.10).
 - **`bet_categories`, `tournaments`**: read by all authenticated users; write by admins only.
 - **`users`**: readable by all authenticated users (`20260717000002_users_read_all.sql` — closed-bet views and payouts show everyone's `display_name`, PRD §12 Q12; fine for a private pool behind login). Writes: an own-row `UPDATE` for members (narrowed by the guard trigger) plus `"Admins can update any user"` (`20260814000000`, Sprint 23 / #124) — the latter is what makes the #99 display-name edit actually land; before it, admin name corrections were a silent no-op (see §3.1).
 - **`tournament_invites`**: admins only, read *and* write — unlike `users`, these are the email addresses of people who aren't in the app yet, and the admin people console is the only consumer.
@@ -530,7 +588,9 @@ Summary:
 - `20260911000000_restore_snapshot_where_clause.sql` — Sprint 27 defect fix: `WHERE true` on the restore's six deletes, because pg-safeupdate is preloaded on `authenticator` and rejects WHERE-less DML at parse time
 - `20260912000000_snapshot_live_counts.sql` — `snapshot_index()` reports live wagers and active participants beside the raw row counts
 - `20260912000001_import_sweep.sql` — Sprint 29: `sweep_bets()`, the import's delete half (§4.2, A24)
+- `20260914000000_per_phase_entries.sql` — Sprint 30 (expand): `phase1_entry_fee` / `phase2_entry_fee`, `min_picks_per_phase`, `max_single_bet`, the view's `phase` / `is_self_pick`, the per-phase `enforce_placement_total()` and the new `enforce_participant_entry()` (A25)
+- `20260914000001_entry_requests.sql` — Sprint 30 (expand): `entry_requests` + its three policies (§3.10, A26)
+- `20260914000002_drop_single_entry_columns.sql` — Sprint 30 (contract, **after** the deploy): drops `entry_fee` and the five retired rule columns (A25)
 
 **Still to come** (see `ROADMAP.md`): nothing scheduled.
 
-**Known inconsistency to fix in the rework migration:** `tournament_participants.entry_fee` currently has a hardcoded `CHECK (entry_fee BETWEEN 20 AND 50)`, but the entry-fee bounds are supposed to live on the `tournaments` row (`entry_fee_min` / `entry_fee_max`) per the "rules are data, not constants" convention. Fix: drop the hardcoded CHECK (keep `entry_fee > 0`) and enforce the per-tournament bounds in `lib/validation.ts` / at participant creation instead.

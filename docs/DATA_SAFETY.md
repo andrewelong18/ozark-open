@@ -2,7 +2,7 @@
 
 **The free Supabase tier has no automated backups.** There is no daily snapshot, no
 point-in-time recovery, and no support ticket that gets your data back. What's in that database is
-32 people's entry fees, every wager they placed, and every result Pat uploaded — money data, with a
+32 people's entries (one per phase since Sprint 30), every wager they placed, and every result Pat uploaded — money data, with a
 Venmo settlement hanging off it.
 
 So the backup is a thing a human runs, at two named moments, and Sprint 9 made it one command.
@@ -185,7 +185,7 @@ Sept 12, 2026 — five wagers removed, a save state taken, and not one number on
   and **Menu picks**. `bet_placements` is the only table holding what members submitted.
 - **A removed wager keeps its row.** Removal stamps `deleted_at`; there is no `DELETE` policy
   on `bet_placements` for anyone. Revoking a member is the same — `revoked_at`, because the
-  row carries the entry fee. Both are captured deliberately, and a count of rows therefore
+  row carries the phase entries. Both are captured deliberately, and a count of rows therefore
   only ever goes up.
 
 So `snapshot_index()` reports each payload **twice**: the five row counts, which are what a
@@ -271,9 +271,27 @@ nothing is half-applied.
 
 In practice this does not come up — **accounts are not deleted in this app.** There is no delete
 control anywhere in the admin surface; revoking a member soft-stamps `revoked_at` on their
-participant row (Sprint 21) precisely because the entry fee is a pool input. Widening the payload
+participant row (Sprint 21) precisely because the entries are pool inputs. Widening the payload
 to include `users` is a Sprint 11 decision to revisit **outside** a tournament week, and it was
 deliberately not done in Sprint 27.
+
+### A save state from before per-phase entries (Sprint 30)
+
+`take_snapshot()` dumps whole rows with `to_jsonb`, so the payload follows the schema of the day
+it was taken. A save state from **before `20260914000000`** carries `tournament_participants.entry_fee`
+and no `phase1_entry_fee` / `phase2_entry_fee`; once `20260914000002` has dropped `entry_fee`,
+restoring it brings every participant back **with no entries** — `jsonb_populate_recordset`
+quietly ignores a key the table no longer has. Wagers, bets and results come back intact.
+
+So: don't restore a pre-Sprint-30 save state into the per-phase schema. The rollout takes a
+manual save state on either side of the reset (`docs/sprints/sprint-30.md` § Rollout), and the
+**second** is the first that belongs to the new model. If an old one ever has to come back, restore
+it and then re-enter the entries on `/admin/people` — the old `entry_fee` is readable in the
+snapshot's payload (`/admin/snapshots`, or `SELECT payload -> 'tournament_participants' FROM
+public.snapshots WHERE id = …`).
+
+`entry_requests` (Sprint 30) is **not** in the payload: it is a record of what members asked for,
+not money. It is in `scripts/db-export.sh`'s table list, so the export — the fire escape — has it.
 
 ### Checking it worked
 
