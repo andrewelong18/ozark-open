@@ -16,6 +16,8 @@ import {
   normalizeAdminRows,
   type AdminViewQueryRow,
 } from "@/lib/admin-view"
+import type { ResultsParticipant } from "@/lib/payouts"
+import { toPhaseEntry, toTournamentRules, TOURNAMENT_RULE_COLUMNS } from "@/lib/placements"
 
 // The admin "view all" page (Sprint 7): everyone's placements and payouts in
 // one table, still-open phases included — the app's replica of the workbook's
@@ -38,7 +40,9 @@ type UserJoin = {
 }
 type ParticipantRow = {
   user_id: string
-  entry_fee: number
+  phase1_entry_fee: unknown
+  phase2_entry_fee: unknown
+  is_player: boolean
   users: UserJoin | UserJoin[] | null
 }
 
@@ -49,7 +53,7 @@ export default async function AdminViewPage() {
   // lifecycle, from chasing stragglers to reading final numbers.
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournaments")
-    .select("id, name, status")
+    .select(`id, name, status, ${TOURNAMENT_RULE_COLUMNS}`)
     .order("year", { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -76,12 +80,15 @@ export default async function AdminViewPage() {
     )
   }
   const t = tournament as { id: string; name: string; status: string }
+  const rules = toTournamentRules(tournament as unknown as Record<string, unknown>)
 
   const [{ data: participantData }, { data: placementData }] =
     await Promise.all([
       supabase
         .from("tournament_participants")
-        .select("user_id, entry_fee, users ( display_name, nickname, avatar_url )")
+        .select(
+          "user_id, phase1_entry_fee, phase2_entry_fee, is_player, users ( display_name, nickname, avatar_url )"
+        )
         .eq("tournament_id", t.id)
         .is("revoked_at", null),
       supabase
@@ -91,28 +98,32 @@ export default async function AdminViewPage() {
           // second bet_placements → users relationship, so a bare `users` is
           // ambiguous and PostgREST rejects the request (PGRST201). This is the
           // bettor's row, never the admin who typed it in.
-          "id, user_id, pick_id, amount, odds_at_placement, requires_admin_review, placed_by_user_id, users!bet_placements_user_id_fkey ( display_name, nickname, avatar_url ), bet_picks ( label, sheet_pick_id, result, bets ( title, phase, round, status, sheet_bet_id, tournament_id ) )"
+          // `player_user_id` on the pick: the live fact the self-bet share is
+          // computed from (Sprint 30), beside the snapshotted review flag.
+          "id, user_id, pick_id, amount, odds_at_placement, requires_admin_review, placed_by_user_id, users!bet_placements_user_id_fkey ( display_name, nickname, avatar_url ), bet_picks ( label, sheet_pick_id, result, player_user_id, bets ( title, phase, round, status, sheet_bet_id, tournament_id ) )"
         )
         .is("deleted_at", null),
     ])
 
-  const participants = ((participantData ?? []) as ParticipantRow[]).map(
-    (p) => {
-      const joined = Array.isArray(p.users) ? p.users[0] : p.users
-      return {
-        user_id: p.user_id,
-        display_name: joined?.display_name ?? "Unknown bettor",
-        nickname: joined?.nickname ?? null,
-        avatar_url: joined?.avatar_url ?? null,
-        entry_fee: Number(p.entry_fee),
-      }
+  const participants: ResultsParticipant[] = (
+    (participantData ?? []) as ParticipantRow[]
+  ).map((p) => {
+    const joined = Array.isArray(p.users) ? p.users[0] : p.users
+    return {
+      user_id: p.user_id,
+      display_name: joined?.display_name ?? "Unknown bettor",
+      nickname: joined?.nickname ?? null,
+      avatar_url: joined?.avatar_url ?? null,
+      is_player: p.is_player,
+      phase1_entry_fee: toPhaseEntry(p.phase1_entry_fee),
+      phase2_entry_fee: toPhaseEntry(p.phase2_entry_fee),
     }
-  )
+  })
   const rows = normalizeAdminRows(
     (placementData ?? []) as unknown as AdminViewQueryRow[],
     t.id
   )
-  const view = buildAdminView(participants, rows)
+  const view = buildAdminView(participants, rows, rules)
 
   // Who entered each wager (Sprint 23 / #101). Resolved with a second small
   // query rather than a second embed of `users`: PostgREST needs the FK
@@ -155,13 +166,36 @@ export default async function AdminViewPage() {
         </p>
       </div>
 
+      {/* One pot per phase (Sprint 30 / ADR 0002): committed entries minus
+          voided stakes, each split on its own. The combined figure is the
+          two added together, never a merged split. */}
       <div className="grid grid-cols-2 gap-3">
         <StatCard
-          label="Pool"
-          value={view.pool}
+          label="Phase 1 Pool"
+          value={view.pools[1]}
           money
+          cents={!Number.isInteger(view.pools[1])}
           feature
-          caption="Entry fees − voided stakes"
+          caption="Committed entries − voided stakes"
+        />
+        <StatCard
+          label="Phase 2 Pool"
+          value={view.pools[2]}
+          money
+          cents={!Number.isInteger(view.pools[2])}
+          feature
+          caption="Committed entries − voided stakes"
+        />
+        <StatCard
+          label="Both Pots"
+          value={view.pools.combined}
+          money
+          cents={!Number.isInteger(view.pools.combined)}
+          caption={
+            view.dropped_placements > 0
+              ? `${view.dropped_placements} placement${view.dropped_placements === 1 ? "" : "s"} outside any pot`
+              : "Phase 1 + Phase 2"
+          }
         />
         <StatCard
           label="Sum Theoretical"
@@ -175,6 +209,32 @@ export default async function AdminViewPage() {
           }
         />
       </div>
+
+      {/* Placements with no pot to belong to — a bettor with no entry for
+          that phase, or a revoked one. Never member-facing; it means a hand
+          edit somewhere, and it's money that the standings are ignoring. */}
+      {view.dropped_placements > 0 && (
+        <Card className="border-caution-border bg-caution-surface p-4 text-sm text-caution-strong">
+          <span className="font-semibold">
+            {view.dropped_placements} placement
+            {view.dropped_placements === 1 ? " is" : "s are"} outside any pot.
+          </span>{" "}
+          A wager in a phase the bettor has no entry for, or from a revoked
+          member — the standings leave it out. Record the entry on the people
+          console or remove the wager.
+        </Card>
+      )}
+
+      {/* Approved, no money in either phase: they can't bet, and if they've
+          requested an entry it's waiting on the people console. */}
+      {view.unentered.length > 0 && (
+        <Card className="p-4 text-sm text-text-body">
+          <span className="font-semibold text-text-strong">
+            No entry yet ({view.unentered.length}):
+          </span>{" "}
+          {view.unentered.map((p) => p.display_name).join(", ")}
+        </Card>
+      )}
 
       {view.bettors.length === 0 ? (
         <EmptyState
@@ -211,14 +271,7 @@ export default async function AdminViewPage() {
                 )}
               </h2>
               <span className="tabular text-xs text-text-muted">
-                Wagered{" "}
-                <MoneyDisplay
-                  value={bettor.wagered}
-                  size="xs"
-                  weight="semibold"
-                  className="text-inherit"
-                />{" "}
-                of ${bettor.entry_fee} · Theo{" "}
+                Theo{" "}
                 <MoneyDisplay
                   value={bettor.theoretical}
                   cents
@@ -234,12 +287,13 @@ export default async function AdminViewPage() {
                   weight="semibold"
                   className="text-inherit"
                 />
-                {bettor.refunded > 0 && (
+                {bettor.refunded + bettor.refund_unwagered > 0 && (
                   <>
                     {" "}
                     · Refunded{" "}
                     <MoneyDisplay
-                      value={bettor.refunded}
+                      value={bettor.refunded + bettor.refund_unwagered}
+                      cents
                       size="xs"
                       weight="semibold"
                       className="text-inherit"
@@ -247,6 +301,33 @@ export default async function AdminViewPage() {
                   </>
                 )}
               </span>
+            </div>
+            {/* One line per phase they're in: wagered against that phase's
+                entry, the pick count, and what the standing says the money
+                does at close. `over entry` is only reachable by a hand edit
+                (the trigger refuses it), so it's badged rather than styled. */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
+              {bettor.phases.map((line) => (
+                <span key={line.phase} className="tabular">
+                  <span className="font-semibold text-text-body">Phase {line.phase}</span>{" "}
+                  ${line.wagered} of ${line.entry} · {line.pick_count} pick
+                  {line.pick_count === 1 ? "" : "s"}
+                  {line.forfeit > 0 && ` · $${line.forfeit} forfeits`}
+                  {line.refund > 0 && ` · $${line.refund} back`}
+                  {line.self_forfeit > 0 && ` · $${line.self_forfeit} on self not counted`}
+                  {line.complete && " · ✓"}
+                  {line.over_entry && (
+                    <Badge variant="amber" className="ml-1.5 align-middle">
+                      over entry
+                    </Badge>
+                  )}
+                </span>
+              ))}
+              {bettor.phases.length < 2 && (
+                <span>
+                  Phase {bettor.phases.some((l) => l.phase === 1) ? 2 : 1} · not entered
+                </span>
+              )}
             </div>
             {bettor.entries.length === 0 ? (
               <Card className="p-4 text-sm text-text-muted">
@@ -332,7 +413,8 @@ export default async function AdminViewPage() {
       )}
 
       <p className="text-center text-xs text-text-muted">
-        Actual = theoretical ÷ everyone&apos;s theoretical × the pool. Numbers
+        Per phase: actual = recognised theoretical ÷ everyone&apos;s × that
+        phase&apos;s pool; a bettor&apos;s row is their two phases added. Numbers
         are as-they-stand until every pick resolves.
       </p>
     </div>

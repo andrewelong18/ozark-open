@@ -69,7 +69,7 @@ export function entryOwed(
 }
 
 /** Whole dollars, and never negative — a missing column reads as unpaid. */
-function paid(participant: CollectionParticipant): number {
+function paid(participant: Pick<CollectionParticipant, "paid_amount">): number {
   const raw = Number(participant.paid_amount ?? 0)
   if (!Number.isFinite(raw) || raw < 0) return 0
   return raw
