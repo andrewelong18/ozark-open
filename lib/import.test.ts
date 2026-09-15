@@ -15,6 +15,7 @@ import {
   unlandedWrite,
   clockStaleOpenWarnings,
   parseSheet,
+  phaseMoveRefusals,
   planSweep,
   sweepIsEmpty,
   validateSheet,
@@ -458,12 +459,150 @@ test("a category outside the five rejects the file and names all five", async ()
 
 test("each of the five is accepted, case-insensitively", async () => {
   for (const [i, name] of CATEGORIES.entries()) {
+    // Two picks per bet: a Match needs exactly two (Sprint 30), and two is a
+    // legal count for every other category too.
     const result = await validate([
       { pickId: 1, betId: i + 1, category: name.toUpperCase() },
+      { pickId: 2, betId: i + 1, category: name.toUpperCase() },
     ])
     assert.equal(result.ok, true, `${name} was rejected`)
     if (result.ok) assert.equal(result.rows[0].category, name)
   }
+})
+
+// ---------------------------------------------------------------------------
+// A Match has exactly two picks (Sprint 30) — Pat: "That's usually a mistake
+// on my end."
+// ---------------------------------------------------------------------------
+
+test("a Match with one pick rejects the file, naming the bet and its row", async () => {
+  const result = await validate([
+    { pickId: 1, betId: 7, category: "Match", title: "Jake v Pat" },
+  ])
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.deepEqual(result.errors, [
+    'bet_id 7 ("Jake v Pat") is a Match with 1 pick (rows 2) — a Match has exactly two.',
+  ])
+})
+
+test("a Match with three picks rejects the WHOLE file", async () => {
+  const result = await validate([
+    { pickId: 1, betId: 1 },
+    { pickId: 2, betId: 1 },
+    { pickId: 3, betId: 7, category: "Match", title: "Jake v Pat" },
+    { pickId: 4, betId: 7, category: "Match", title: "Jake v Pat" },
+    { pickId: 5, betId: 7, category: "Match", title: "Jake v Pat" },
+  ])
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.ok(!("rows" in result))
+  assert.deepEqual(result.errors, [
+    'bet_id 7 ("Jake v Pat") is a Match with 3 picks (rows 4, 5, 6) — a Match has exactly two.',
+  ])
+})
+
+test("a Match with two picks imports", async () => {
+  const result = await validate([
+    { pickId: 1, betId: 7, category: "Match" },
+    { pickId: 2, betId: 7, category: "Match" },
+  ])
+  assert.equal(result.ok, true)
+})
+
+test("a Group Match is not pick-counted — three picks import (an open question for Pat)", async () => {
+  const result = await validate([
+    { pickId: 1, betId: 8, category: "Group Match" },
+    { pickId: 2, betId: 8, category: "Group Match" },
+    { pickId: 3, betId: 8, category: "Group Match" },
+  ])
+  assert.equal(result.ok, true)
+})
+
+test("a category conflict on a Match-ish bet is reported once, as the conflict", async () => {
+  const result = await validate([
+    { pickId: 1, betId: 9, category: "Match" },
+    { pickId: 2, betId: 9, category: "Group Match" },
+    { pickId: 3, betId: 9, category: "Match" },
+  ])
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.errors.length, 1)
+  assert.match(result.errors[0], /conflicting category values/)
+})
+
+// ---------------------------------------------------------------------------
+// phaseMoveRefusals — a wager can't change pots (Sprint 30 / ADR 0002)
+// ---------------------------------------------------------------------------
+
+test("phase move: a wagered bet moved to the other phase is refused, once per bet", async () => {
+  const validation = await validate([
+    { pickId: 1, betId: 1, phase: 2, title: "Low round" },
+    { pickId: 2, betId: 1, phase: 2, title: "Low round" },
+  ])
+  assert.ok(validation.ok)
+  const bets = [sweepBet(1, 1)]
+  const picks = [sweepPick(1, 1), sweepPick(2, 1)]
+  const refusals = phaseMoveRefusals(validation.rows, bets, picks, [
+    { pick_id: "pick-uuid-1" },
+    { pick_id: "pick-uuid-2" },
+    { pick_id: "pick-uuid-2" },
+  ])
+  assert.deepEqual(refusals, [
+    'bet_id 1 ("Low round") moves to Phase 2 from Phase 1, but 3 wagers are on it — each phase is its own pot, so a wager can\'t change phases. Put it back in Phase 1, or remove the wagers first.',
+  ])
+})
+
+test("phase move: an unwagered bet moves freely", async () => {
+  const validation = await validate([{ pickId: 1, betId: 1, phase: 2 }])
+  assert.ok(validation.ok)
+  assert.deepEqual(
+    phaseMoveRefusals(validation.rows, [sweepBet(1, 1)], [sweepPick(1, 1)], []),
+    []
+  )
+})
+
+test("phase move: a wager on a DIFFERENT pick of the bet doesn't block this pick's move", async () => {
+  // Pick 2 carries the wager; only pick 1's row appears (moved under a new
+  // phase-2 bet). The wagered pick isn't moving, so nothing changes pots.
+  const validation = await validate([
+    { pickId: 1, betId: 5, phase: 2 },
+    { pickId: 2, betId: 1, phase: 1 },
+  ])
+  assert.ok(validation.ok)
+  assert.deepEqual(
+    phaseMoveRefusals(
+      validation.rows,
+      [sweepBet(1, 1)],
+      [sweepPick(1, 1), sweepPick(2, 1)],
+      [{ pick_id: "pick-uuid-2" }]
+    ),
+    []
+  )
+})
+
+test("phase move: a wagered pick moved under a bet in the other phase is refused", async () => {
+  const validation = await validate([{ pickId: 1, betId: 5, phase: 2, title: "Phase 2 bet" }])
+  assert.ok(validation.ok)
+  const refusals = phaseMoveRefusals(
+    validation.rows,
+    [sweepBet(1, 1)],
+    [sweepPick(1, 1)],
+    [{ pick_id: "pick-uuid-1" }]
+  )
+  assert.equal(refusals.length, 1)
+  assert.match(refusals[0], /^bet_id 5 \("Phase 2 bet"\) moves to Phase 2 from Phase 1, but 1 wager is on it/)
+})
+
+test("phase move: same phase is no move, wagers or not", async () => {
+  const validation = await validate([{ pickId: 1, betId: 1, phase: 1 }])
+  assert.ok(validation.ok)
+  assert.deepEqual(
+    phaseMoveRefusals(validation.rows, [sweepBet(1, 1)], [sweepPick(1, 1)], [
+      { pick_id: "pick-uuid-1" },
+    ]),
+    []
+  )
 })
 
 test("a bad category rejects the WHOLE file, not just its row (PRD §8.2)", async () => {
