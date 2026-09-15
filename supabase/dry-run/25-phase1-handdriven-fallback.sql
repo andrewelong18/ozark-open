@@ -16,8 +16,8 @@
 --     (scripts/dry-run-verify.sh does exactly that).
 --
 -- It also performs, in SQL, the two identity changes Acts 1 and 2 make by
--- hand — the newbie account onboarding as "Mike Yenzer", and Pat moving from
--- a $20 to a $30 entry — because the wagers below depend on both.
+-- hand — the newbie account onboarding as "Mike Yenzer", and Pat moving his
+-- Phase 1 entry from $20 to $30 — because the wagers below depend on both.
 --
 -- Run AFTER 20-phase1-placements.sql.
 
@@ -33,15 +33,17 @@ UPDATE public.users
    SET display_name = 'Mike Yenzer', onboarded_at = COALESCE(onboarded_at, now())
  WHERE email = 'newbie@dryrun.ozark.test';
 
-INSERT INTO public.tournament_participants (user_id, tournament_id, entry_fee, is_player)
-SELECT u.id, t.id, 20, true
+INSERT INTO public.tournament_participants
+  (user_id, tournament_id, phase1_entry_fee, phase2_entry_fee, is_player)
+SELECT u.id, t.id, 20, 20, true
   FROM public.users u
  CROSS JOIN (SELECT id FROM public.tournaments WHERE year = 2026) t
  WHERE u.email = 'newbie@dryrun.ozark.test'
-    ON CONFLICT (user_id, tournament_id) DO UPDATE SET entry_fee = 20, is_player = true;
+    ON CONFLICT (user_id, tournament_id) DO UPDATE
+   SET phase1_entry_fee = 20, phase2_entry_fee = 20, is_player = true;
 
--- Act 2 raises Pat from the $20 he was seeded with to $30.
-UPDATE public.tournament_participants tp SET entry_fee = 30
+-- Act 2 raises Pat's Phase 1 entry from the $20 he was seeded with to $30.
+UPDATE public.tournament_participants tp SET phase1_entry_fee = 30
   FROM public.users u
  WHERE tp.user_id = u.id AND u.email = 'pleicht17@gmail.com';
 
@@ -78,44 +80,43 @@ WITH bettor AS (
 ),
 slate (email, sheet_pick_id, amount) AS (
   VALUES
-    -- Dan Mercer · $40 · max single $20 · self cap $10 (he is the favourite,
-    -- so his self-picks are the ones that hit the cap first)
+    -- Dan Mercer · Phase 1 $40 · max single $10 · self cap $10 (he is the
+    -- favourite, so his self-picks are the ones that hit the cap first)
     ('dan.mercer@dryrun.ozark.test',      1, 6),   -- self · Win Tournament
     ('dan.mercer@dryrun.ozark.test',     23, 4),   -- self · Medalist R1 → $10, at the cap
-    ('dan.mercer@dryrun.ozark.test',     13, 5),
-    ('dan.mercer@dryrun.ozark.test',     39, 3),
-    ('dan.mercer@dryrun.ozark.test',     49, 4),
-    ('dan.mercer@dryrun.ozark.test',     56, 3),   -- $25 of $40
+    ('dan.mercer@dryrun.ozark.test',     13, 10),  -- the flat $10 max, exactly
+    ('dan.mercer@dryrun.ozark.test',     39, 7),
+    ('dan.mercer@dryrun.ozark.test',     49, 7),
+    ('dan.mercer@dryrun.ozark.test',     56, 6),   -- $40 of $40 ✓
 
-    -- Jake Kohne · $25 · max single $12 (the FLOOR case) · self cap $6
+    -- Jake Kohne · Phase 1 $25 · self cap $6 (the FLOOR case: 25% of 25 is 6.25)
     ('jake.kohne@dryrun.ozark.test',     10, 2),   -- self · Win Tournament
     ('jake.kohne@dryrun.ozark.test',     43, 4),   -- self via "Jake Kohne (E)" → $6, at the cap
-    ('jake.kohne@dryrun.ozark.test',      1, 3),
-    ('jake.kohne@dryrun.ozark.test',     24, 3),
-    ('jake.kohne@dryrun.ozark.test',     49, 3),   -- $15 of $25
+    ('jake.kohne@dryrun.ozark.test',      1, 7),
+    ('jake.kohne@dryrun.ozark.test',     24, 6),
+    ('jake.kohne@dryrun.ozark.test',     49, 6),   -- $25 of $25 ✓
 
-    -- Casey Sideline · $50 NON-PLAYER · max single $20 (the CAP case) ·
-    -- exempt from the self-bet rule, and subject to no stricter limit today
-    -- (OUTSTANDING_DECISIONS #2 — this slate is the one that raises it)
+    -- Casey Sideline · Phase 1 $50 NON-PLAYER · exempt from the self-bet rule
+    -- (Q14), and held to the same flat $10 max single bet as everyone
     ('casey.sideline@dryrun.ozark.test',  1, 10),
-    ('casey.sideline@dryrun.ozark.test', 24, 8),
-    ('casey.sideline@dryrun.ozark.test', 36, 5),
-    ('casey.sideline@dryrun.ozark.test', 39, 5),
-    ('casey.sideline@dryrun.ozark.test', 49, 2),   -- $30 of $50
+    ('casey.sideline@dryrun.ozark.test', 24, 10),
+    ('casey.sideline@dryrun.ozark.test', 36, 10),
+    ('casey.sideline@dryrun.ozark.test', 39, 10),
+    ('casey.sideline@dryrun.ozark.test', 49, 10),  -- $50 of $50 ✓
 
-    -- Pat Leicht · $30 · max single $15 · self cap $7
+    -- Pat Leicht · Phase 1 $30 · self cap $7
     ('pleicht17@gmail.com',               6, 3),   -- self · Win Tournament
     ('pleicht17@gmail.com',              40, 4),   -- self · his own Group Match pick → $7, at the cap
-    ('pleicht17@gmail.com',               1, 5),
-    ('pleicht17@gmail.com',              24, 4),
-    ('pleicht17@gmail.com',              49, 2),   -- $18 of $30
+    ('pleicht17@gmail.com',               1, 9),
+    ('pleicht17@gmail.com',              24, 8),
+    ('pleicht17@gmail.com',              49, 6),   -- $30 of $30 ✓
 
-    -- Mike Yenzer · $20 · the account that onboarded during Act 1
+    -- Mike Yenzer · Phase 1 $20 · the account that onboarded during Act 1
     ('newbie@dryrun.ozark.test',         45, 3),   -- self via "Mike Yenzer (-10)"
-    ('newbie@dryrun.ozark.test',          1, 3),
-    ('newbie@dryrun.ozark.test',         24, 3),
-    ('newbie@dryrun.ozark.test',         13, 2),
-    ('newbie@dryrun.ozark.test',         49, 2)    -- $13 of $20
+    ('newbie@dryrun.ozark.test',          1, 5),
+    ('newbie@dryrun.ozark.test',         24, 5),
+    ('newbie@dryrun.ozark.test',         13, 4),
+    ('newbie@dryrun.ozark.test',         49, 3)    -- $20 of $20 ✓
 ),
 resolved AS (
   SELECT b.user_id, pk.id AS pick_id, s.amount, pk.american_odds AS odds_at_placement,

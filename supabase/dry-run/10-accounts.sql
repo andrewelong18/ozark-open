@@ -26,15 +26,21 @@
 --
 -- ── WHY THE ENTRY FEES ARE ALL DIFFERENT ───────────────────────────────────
 --
--- maxSingleBet() floors, never rounds (lib/validation.ts:87). The spread of
--- fees below picks out every interesting boundary:
+-- Since Sprint 30 (ADR 0002) every member has an entry PER PHASE, and each
+-- phase is its own pot. The max single bet is a flat $10 at every entry; what
+-- still varies with the entry is the self-bet cap, a quarter of the phase
+-- entry, floored, with no hard cap (lib/validation.ts maxSelfBet). The
+-- spread of Phase 1 entries below picks out the boundaries:
 --
---   $20 entry → max single $10   (pct binds)
---   $25 entry → max single $12   ← the floor test: 50% of 25 is 12.5 → $12
---   $30 entry → max single $15
---   $35 entry → max single $17   ← floors again
---   $40 entry → max single $20   (pct and cap meet exactly)
---   $50 entry → max single $20   ← the hard cap binds, not the percentage
+--   $20 entry → max on yourself $5
+--   $25 entry → max on yourself $6    ← the floor test: 25% of 25 is 6.25 → $6
+--   $30 entry → max on yourself $7    ← floors again
+--   $35 entry → max on yourself $8
+--   $40 entry → max on yourself $10
+--   $50 entry → max on yourself $12   ← no $10 hard cap any more
+--
+-- Phase 2 entries are mostly the $20 minimum, with Dan at $30 and Mike Vemmer
+-- at $50 — Mike is Pat's own worked example in Phase 2 (see 30-).
 --
 -- ── SAFETY ─────────────────────────────────────────────────────────────────
 --
@@ -50,21 +56,22 @@ BEGIN;
 DO $$
 DECLARE
   -- onboarded=false leaves the account un-onboarded so the middleware forces
-  -- it through /onboarding. fee=null means NO participant row → the account
-  -- can browse but not bet (that row's existence is the betting gate, A12).
+  -- it through /onboarding. fee1 and fee2 both null means NO participant row
+  -- → the account can browse but not bet (that row's existence is the
+  -- betting gate, A12). fee1/fee2 are the Phase 1 and Phase 2 entries.
   accounts CONSTANT jsonb := '[
-    {"email":"dan.mercer@dryrun.ozark.test",     "id":"f0000000-0000-4000-8000-000000000001", "onboarded":true,  "name":"Dan Mercer",      "fee":40, "player":true},
-    {"email":"jake.kohne@dryrun.ozark.test",     "id":"f0000000-0000-4000-8000-000000000002", "onboarded":true,  "name":"Jake Kohne",      "fee":25, "player":true},
-    {"email":"casey.sideline@dryrun.ozark.test", "id":"f0000000-0000-4000-8000-000000000003", "onboarded":true,  "name":"Casey Sideline",  "fee":50, "player":false},
-    {"email":"newbie@dryrun.ozark.test",         "id":"f0000000-0000-4000-8000-000000000004", "onboarded":false, "name":null,              "fee":null, "player":true},
-    {"email":"pending@dryrun.ozark.test",        "id":"f0000000-0000-4000-8000-000000000005", "onboarded":true,  "name":"Parker Pending",  "fee":null, "player":true},
-    {"email":"garrett.klenke@dryrun.ozark.test", "id":"f0000000-0000-4000-8000-000000000006", "onboarded":true,  "name":"Garrett Klenke",  "fee":20, "player":true},
-    {"email":"ethan.kipping@dryrun.ozark.test",  "id":"f0000000-0000-4000-8000-000000000007", "onboarded":true,  "name":"Ethan Kipping",   "fee":30, "player":true},
-    {"email":"alex.leslie@dryrun.ozark.test",    "id":"f0000000-0000-4000-8000-000000000008", "onboarded":true,  "name":"Alex Leslie",     "fee":40, "player":true},
-    {"email":"devin.arand@dryrun.ozark.test",    "id":"f0000000-0000-4000-8000-000000000009", "onboarded":true,  "name":"Devin Arand",     "fee":20, "player":true},
-    {"email":"dustin.scheller@dryrun.ozark.test","id":"f0000000-0000-4000-8000-00000000000a", "onboarded":true,  "name":"Dustin Scheller", "fee":35, "player":true},
-    {"email":"mike.vemmer@dryrun.ozark.test",    "id":"f0000000-0000-4000-8000-00000000000b", "onboarded":true,  "name":"Mike Vemmer",     "fee":50, "player":true},
-    {"email":"rob.vemmer@dryrun.ozark.test",     "id":"f0000000-0000-4000-8000-00000000000c", "onboarded":true,  "name":"Rob Vemmer",      "fee":25, "player":true}
+    {"email":"dan.mercer@dryrun.ozark.test",     "id":"f0000000-0000-4000-8000-000000000001", "onboarded":true,  "name":"Dan Mercer",      "fee1":40, "fee2":30, "player":true},
+    {"email":"jake.kohne@dryrun.ozark.test",     "id":"f0000000-0000-4000-8000-000000000002", "onboarded":true,  "name":"Jake Kohne",      "fee1":25, "fee2":20, "player":true},
+    {"email":"casey.sideline@dryrun.ozark.test", "id":"f0000000-0000-4000-8000-000000000003", "onboarded":true,  "name":"Casey Sideline",  "fee1":50, "fee2":20, "player":false},
+    {"email":"newbie@dryrun.ozark.test",         "id":"f0000000-0000-4000-8000-000000000004", "onboarded":false, "name":null,              "fee1":null, "fee2":null, "player":true},
+    {"email":"pending@dryrun.ozark.test",        "id":"f0000000-0000-4000-8000-000000000005", "onboarded":true,  "name":"Parker Pending",  "fee1":null, "fee2":null, "player":true},
+    {"email":"garrett.klenke@dryrun.ozark.test", "id":"f0000000-0000-4000-8000-000000000006", "onboarded":true,  "name":"Garrett Klenke",  "fee1":20, "fee2":20, "player":true},
+    {"email":"ethan.kipping@dryrun.ozark.test",  "id":"f0000000-0000-4000-8000-000000000007", "onboarded":true,  "name":"Ethan Kipping",   "fee1":30, "fee2":20, "player":true},
+    {"email":"alex.leslie@dryrun.ozark.test",    "id":"f0000000-0000-4000-8000-000000000008", "onboarded":true,  "name":"Alex Leslie",     "fee1":40, "fee2":20, "player":true},
+    {"email":"devin.arand@dryrun.ozark.test",    "id":"f0000000-0000-4000-8000-000000000009", "onboarded":true,  "name":"Devin Arand",     "fee1":20, "fee2":20, "player":true},
+    {"email":"dustin.scheller@dryrun.ozark.test","id":"f0000000-0000-4000-8000-00000000000a", "onboarded":true,  "name":"Dustin Scheller", "fee1":35, "fee2":20, "player":true},
+    {"email":"mike.vemmer@dryrun.ozark.test",    "id":"f0000000-0000-4000-8000-00000000000b", "onboarded":true,  "name":"Mike Vemmer",     "fee1":50, "fee2":50, "player":true},
+    {"email":"rob.vemmer@dryrun.ozark.test",     "id":"f0000000-0000-4000-8000-00000000000c", "onboarded":true,  "name":"Rob Vemmer",      "fee1":25, "fee2":20, "player":true}
   ]'::jsonb;
   acct jsonb;
   uid uuid;
@@ -119,24 +126,38 @@ BEGIN
 
     -- A participant row existing = approved to bet (ADR 0001 A12). newbie@
     -- and pending@ deliberately get none — they are the funnel demo.
-    IF acct->>'fee' IS NOT NULL THEN
-      INSERT INTO public.tournament_participants (user_id, tournament_id, entry_fee, is_player)
-      VALUES (uid, t_id, (acct->>'fee')::int, (acct->>'player')::boolean)
+    IF acct->>'fee1' IS NOT NULL OR acct->>'fee2' IS NOT NULL THEN
+      INSERT INTO public.tournament_participants
+        (user_id, tournament_id, phase1_entry_fee, phase2_entry_fee, is_player)
+      VALUES (uid, t_id, (acct->>'fee1')::int, (acct->>'fee2')::int, (acct->>'player')::boolean)
       ON CONFLICT (user_id, tournament_id) DO UPDATE
-        SET entry_fee = EXCLUDED.entry_fee, is_player = EXCLUDED.is_player;
+        SET phase1_entry_fee = EXCLUDED.phase1_entry_fee,
+            phase2_entry_fee = EXCLUDED.phase2_entry_fee,
+            is_player        = EXCLUDED.is_player;
     END IF;
   END LOOP;
 END $$;
 
--- The three real accounts. Pat is left at $20 on purpose so Act 2 can edit
--- him to $30 and prove the approve/edit path works on a live human. Steve is
--- the deliberate "paid the entry, never placed a wager" control — he should
--- surface on /results with $0 theoretical and a full-entry loss.
+-- The three real accounts. Pat is left at $20 / $20 on purpose so Act 2 can
+-- edit his Phase 1 entry to $30 and prove the approve/edit path works on a
+-- live human. Andrew is $20 in each phase.
 UPDATE public.tournament_participants tp
-   SET entry_fee = 20, is_player = true
+   SET phase1_entry_fee = 20, phase2_entry_fee = 20, is_player = true
   FROM public.users u
  WHERE tp.user_id = u.id
-   AND u.email IN ('andrewelong18@gmail.com', 'esswein93@gmail.com', 'pleicht17@gmail.com');
+   AND u.email IN ('andrewelong18@gmail.com', 'pleicht17@gmail.com');
+
+-- Steve is the deliberate "paid the entry, never placed a wager" control, now
+-- with money on it (ADR 0002): $50 in Phase 1 and nothing in Phase 2. At the
+-- Phase 1 close the first $20 of it forfeits to the pot and $30 comes back,
+-- so he surfaces in the standings with $0 theoretical, $30 refunded and a
+-- $20 loss — and at the Phase 2 close he is the one approved member with no
+-- Phase 2 entry.
+UPDATE public.tournament_participants tp
+   SET phase1_entry_fee = 50, phase2_entry_fee = NULL, is_player = true
+  FROM public.users u
+ WHERE tp.user_id = u.id
+   AND u.email = 'esswein93@gmail.com';
 
 COMMIT;
 
@@ -146,7 +167,8 @@ SELECT
   u.display_name,
   u.email,
   u.onboarded_at IS NOT NULL AS onboarded,
-  tp.entry_fee,
+  tp.phase1_entry_fee,
+  tp.phase2_entry_fee,
   tp.is_player,
   CASE WHEN tp.user_id IS NULL THEN 'browse-only' ELSE 'approved' END AS access
 FROM public.users u

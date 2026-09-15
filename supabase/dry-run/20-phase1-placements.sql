@@ -26,13 +26,19 @@
 -- test of the rules engine.
 --
 -- Every row below is nonetheless rule-valid, so the compliance views read
--- like a real Thursday morning. Two deliberate exceptions:
+-- like a real Thursday morning. Since Sprint 30 (ADR 0002) each phase is its
+-- own entry and its own pot, so every bulk bettor below lands on EXACTLY
+-- their Phase 1 entry with at least 5 picks — complete for Phase 1 — with
+-- two deliberate exceptions:
 --
---   · Devin Arand has only THREE Phase 1 picks and $8 of a $20 entry — he is
---     the straggler Act 6's chase list must catch.
+--   · Devin Arand has only THREE Phase 1 picks and $8 of a $20 Phase 1 entry
+--     — he is the straggler Act 6's chase list must catch. At the close $12
+--     of his entry forfeits to the pot (the first $20 is committed either
+--     way), and only $2 of his $5 on himself counts: the self-bet line at
+--     close is a quarter of what he actually wagered.
 --   · Steve Esswein gets NO placements at all — the "paid the entry, never
---     wagered" control. He should surface on /results with $0 theoretical and
---     a full-entry loss, which is worth showing Pat.
+--     wagered" control, entered for $50 in Phase 1 only. $20 forfeits, $30
+--     comes back. He is on the Phase 1 chase line too, by design.
 --
 -- Idempotent: clears these bettors' PHASE 1 rows first, in its own statement.
 -- (Sprint 21 / #95 — it used to do that in a CTE alongside the INSERT, where
@@ -67,71 +73,70 @@ BEGIN;
 -- Step 0: the slate, materialised — the single source of truth for both the
 -- DELETE and the INSERT below.
 -- (email, sheet_pick_id, amount). Cross-checked against lib/validation.ts:
--- whole dollars ≥ $1 · amount ≤ maxSingleBet(entry) · at most 10 picks in a
--- phase · at least 5 picks ACROSS BOTH PHASES, due only by Phase 2 close
--- (Devin lands there via Phase 2 — see 30-phase2-placements.sql) · self-pick
--- total ≤ maxSelfBet(entry) · running total ≤ entry fee · one pick per
--- Match/Group Match · never on an opponent.
+-- whole dollars ≥ $1 · amount ≤ the flat $10 max single bet · running Phase 1
+-- total ≤ the Phase 1 entry · self-pick total in Phase 1 ≤ a quarter of the
+-- Phase 1 entry, floored · one pick per Match/Group Match · never on an
+-- opponent. At least 5 picks in the phase, due by its close.
 CREATE TEMP TABLE slate (email text, sheet_pick_id int, amount int) ON COMMIT DROP;
 
 INSERT INTO slate (email, sheet_pick_id, amount) VALUES
-    -- Garrett Klenke · $20 entry · max single $10 · self cap $5
-    ('garrett.klenke@dryrun.ozark.test',  13, 3),
+    -- Garrett Klenke · Phase 1 $20 · self cap $5
+    ('garrett.klenke@dryrun.ozark.test',  13, 5),
     ('garrett.klenke@dryrun.ozark.test',  24, 2),   -- self
-    ('garrett.klenke@dryrun.ozark.test',  36, 2),   -- self, and his own Match 4 pick
-    ('garrett.klenke@dryrun.ozark.test',  39, 2),
-    ('garrett.klenke@dryrun.ozark.test',  49, 3),   -- $12 of $20, self $4/$5
+    ('garrett.klenke@dryrun.ozark.test',  36, 3),   -- self, and his own Match 4 pick
+    ('garrett.klenke@dryrun.ozark.test',  39, 4),
+    ('garrett.klenke@dryrun.ozark.test',  49, 6),   -- $20 of $20 ✓, self $5/$5 (at cap)
 
-    -- Ethan Kipping · $30 entry · max single $15 · self cap $7
+    -- Ethan Kipping · Phase 1 $30 · self cap $7
     ('ethan.kipping@dryrun.ozark.test',   13, 4),   -- self
     ('ethan.kipping@dryrun.ozark.test',   37, 3),   -- self, his own Group Match 5 pick
-    ('ethan.kipping@dryrun.ozark.test',    1, 4),
-    ('ethan.kipping@dryrun.ozark.test',   24, 3),
-    ('ethan.kipping@dryrun.ozark.test',   41, 2),
-    ('ethan.kipping@dryrun.ozark.test',   46, 2),   -- $18 of $30, self $7/$7 (at cap)
+    ('ethan.kipping@dryrun.ozark.test',    1, 7),
+    ('ethan.kipping@dryrun.ozark.test',   24, 6),
+    ('ethan.kipping@dryrun.ozark.test',   41, 5),
+    ('ethan.kipping@dryrun.ozark.test',   46, 5),   -- $30 of $30 ✓, self $7/$7 (at cap)
 
-    -- Alex Leslie · $40 entry · max single $20 · self cap $10
+    -- Alex Leslie · Phase 1 $40 · self cap $10
     ('alex.leslie@dryrun.ozark.test',     14, 6),   -- self
     ('alex.leslie@dryrun.ozark.test',     38, 4),   -- self, his own Group Match 5 pick
-    ('alex.leslie@dryrun.ozark.test',      1, 5),
-    ('alex.leslie@dryrun.ozark.test',     36, 4),
-    ('alex.leslie@dryrun.ozark.test',     43, 3),
-    ('alex.leslie@dryrun.ozark.test',     49, 2),   -- $24 of $40, self $10/$10 (at cap)
+    ('alex.leslie@dryrun.ozark.test',      1, 8),
+    ('alex.leslie@dryrun.ozark.test',     36, 7),
+    ('alex.leslie@dryrun.ozark.test',     43, 8),
+    ('alex.leslie@dryrun.ozark.test',     49, 7),   -- $40 of $40 ✓, self $10/$10 (at cap)
 
-    -- Devin Arand · $20 entry · THE STRAGGLER: 3 picks, $8 of $20
+    -- Devin Arand · Phase 1 $20 · THE STRAGGLER: 3 picks, $8 of $20
     ('devin.arand@dryrun.ozark.test',     15, 4),   -- self
     ('devin.arand@dryrun.ozark.test',     39, 1),   -- self, his own Group Match 5 pick
     ('devin.arand@dryrun.ozark.test',     26, 3),
 
-    -- Dustin Scheller · $35 entry · max single $17 · self cap $8
+    -- Dustin Scheller · Phase 1 $35 · self cap $8
     ('dustin.scheller@dryrun.ozark.test', 19, 5),   -- self
     ('dustin.scheller@dryrun.ozark.test', 29, 3),   -- self
-    ('dustin.scheller@dryrun.ozark.test',  2, 4),
-    ('dustin.scheller@dryrun.ozark.test', 35, 3),
-    ('dustin.scheller@dryrun.ozark.test', 42, 3),
-    ('dustin.scheller@dryrun.ozark.test', 47, 3),   -- $21 of $35, self $8/$8 (at cap)
+    ('dustin.scheller@dryrun.ozark.test',  2, 8),
+    ('dustin.scheller@dryrun.ozark.test', 35, 7),
+    ('dustin.scheller@dryrun.ozark.test', 42, 6),
+    ('dustin.scheller@dryrun.ozark.test', 47, 6),   -- $35 of $35 ✓, self $8/$8 (at cap)
 
-    -- Mike Vemmer · $50 entry · max single $20 (the CAP binds, not the pct)
+    -- Mike Vemmer · Phase 1 $50 · self cap $12 (no hard cap any more)
     ('mike.vemmer@dryrun.ozark.test',     17, 5),   -- self
     ('mike.vemmer@dryrun.ozark.test',     41, 5),   -- self, his own Match 6 pick
-    ('mike.vemmer@dryrun.ozark.test',      1, 6),
-    ('mike.vemmer@dryrun.ozark.test',     24, 5),
-    ('mike.vemmer@dryrun.ozark.test',     46, 4),
-    ('mike.vemmer@dryrun.ozark.test',     52, 5),   -- $30 of $50, self $10/$10 (at cap)
+    ('mike.vemmer@dryrun.ozark.test',      1, 10),  -- the flat $10 max, exactly
+    ('mike.vemmer@dryrun.ozark.test',     24, 10),
+    ('mike.vemmer@dryrun.ozark.test',     46, 10),
+    ('mike.vemmer@dryrun.ozark.test',     52, 10),  -- $50 of $50 ✓, self $10/$12
 
-    -- Rob Vemmer · $25 entry · max single $12 (floor of 12.5) · self cap $6
+    -- Rob Vemmer · Phase 1 $25 · self cap $6 (floor of 6.25)
     ('rob.vemmer@dryrun.ozark.test',      18, 4),   -- self
     ('rob.vemmer@dryrun.ozark.test',      42, 2),   -- self, his own Match 6 pick
-    ('rob.vemmer@dryrun.ozark.test',       1, 3),
-    ('rob.vemmer@dryrun.ozark.test',      36, 3),
-    ('rob.vemmer@dryrun.ozark.test',      44, 3),   -- $15 of $25, self $6/$6 (at cap)
+    ('rob.vemmer@dryrun.ozark.test',       1, 7),
+    ('rob.vemmer@dryrun.ozark.test',      36, 6),
+    ('rob.vemmer@dryrun.ozark.test',      44, 6),   -- $25 of $25 ✓, self $6/$6 (at cap)
 
-    -- Andrew Long · $20 entry · no player link, so no self-picks possible
-    ('andrewelong18@gmail.com',            1, 4),
-    ('andrewelong18@gmail.com',           24, 3),
-    ('andrewelong18@gmail.com',           39, 3),
-    ('andrewelong18@gmail.com',           46, 2),
-    ('andrewelong18@gmail.com',           49, 2);   -- $14 of $20
+    -- Andrew Long · Phase 1 $20 · no player link, so no self-picks possible
+    ('andrewelong18@gmail.com',            1, 5),
+    ('andrewelong18@gmail.com',           24, 4),
+    ('andrewelong18@gmail.com',           39, 4),
+    ('andrewelong18@gmail.com',           46, 3),
+    ('andrewelong18@gmail.com',           49, 4);   -- $20 of $20 ✓
 
 -- Step 1: clear, as its own statement so the INSERT below can see it happen,
 -- and scoped to exactly the bettors in the slate — never the hand-driven four.
@@ -171,22 +176,27 @@ SELECT user_id, pick_id, amount, odds_at_placement, requires_admin_review FROM r
 COMMIT;
 
 -- ── Verify ──────────────────────────────────────────────────────────────────
--- Expect 8 bettors / 42 placements. Devin Arand must show 3 picks and $8;
--- everyone else 5–6 picks and under their entry fee with room left for
--- Phase 2. over_cap and over_entry must both be 0 everywhere.
+-- Expect 8 bettors / 42 placements. Devin Arand must show 3 picks and $8 of
+-- $20; everyone else 5–6 picks at exactly their Phase 1 entry. over_single,
+-- over_self and over_entry must all be 0 everywhere.
 SELECT
   u.display_name,
-  tp.entry_fee,
-  count(*)                                          AS picks,
-  sum(p.amount)                                     AS wagered,
-  tp.entry_fee - sum(p.amount)                      AS left_for_phase_2,
-  sum(p.amount) FILTER (WHERE p.requires_admin_review) AS on_self,
-  LEAST(tp.entry_fee / 4, 10)                       AS self_cap,
-  count(*) FILTER (WHERE p.amount > LEAST(tp.entry_fee / 2, 20)) AS over_cap,
-  (sum(p.amount) > tp.entry_fee)::int               AS over_entry
+  tp.phase1_entry_fee                                         AS entry,
+  count(*)                                                    AS picks,
+  sum(p.amount)                                               AS wagered,
+  tp.phase1_entry_fee - sum(p.amount)                         AS short,
+  sum(p.amount) FILTER (WHERE p.requires_admin_review)        AS on_self,
+  floor(tp.phase1_entry_fee * t.max_self_bet_pct)::int        AS self_cap,
+  count(*) FILTER (WHERE p.amount > t.max_single_bet)         AS over_single,
+  (coalesce(sum(p.amount) FILTER (WHERE p.requires_admin_review), 0)
+     > floor(tp.phase1_entry_fee * t.max_self_bet_pct))::int  AS over_self,
+  (sum(p.amount) > tp.phase1_entry_fee)::int                  AS over_entry
 FROM public.bet_placements p
-JOIN public.users u  ON u.id = p.user_id
-JOIN public.tournament_participants tp ON tp.user_id = u.id
+JOIN public.bet_picks pk ON pk.id = p.pick_id
+JOIN public.bets b       ON b.id = pk.bet_id AND b.phase = 1
+JOIN public.tournaments t ON t.id = b.tournament_id
+JOIN public.users u      ON u.id = p.user_id
+JOIN public.tournament_participants tp ON tp.user_id = u.id AND tp.tournament_id = t.id
 WHERE p.deleted_at IS NULL
-GROUP BY u.display_name, tp.entry_fee
+GROUP BY u.display_name, tp.phase1_entry_fee, t.max_self_bet_pct, t.max_single_bet
 ORDER BY u.display_name;
