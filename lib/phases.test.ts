@@ -11,6 +11,7 @@ import {
   formatDeadline,
   nextDeadline,
   phaseClosedByClock,
+  phaseRevealed,
   phaseState,
   wageringOpen,
   type PhaseBet,
@@ -198,6 +199,32 @@ test("nextDeadline walks the phases in order and skips ones already passed", () 
   })
   assert.equal(nextDeadline(CLOCK, AFTER_P2), null)
   assert.equal(nextDeadline(NO_CLOCK, BEFORE_P1), null)
+})
+
+test("phaseRevealed: only once every published bet in the phase is closed — the clock doesn't count", () => {
+  assert.equal(phaseRevealed(1, []), false)
+  assert.equal(phaseRevealed(1, [{ phase: 1, status: "hidden" }]), false)
+  assert.equal(
+    phaseRevealed(1, [
+      { phase: 1, status: "closed" },
+      { phase: 1, status: "open" },
+    ]),
+    false
+  )
+  assert.equal(
+    phaseRevealed(1, [
+      { phase: 1, status: "closed" },
+      { phase: 1, status: "hidden" },
+    ]),
+    true
+  )
+  // Each phase on its own bets.
+  const split = [
+    { phase: 1, status: "closed" },
+    { phase: 2, status: "open" },
+  ]
+  assert.equal(phaseRevealed(1, split), true)
+  assert.equal(phaseRevealed(2, split), false)
 })
 
 test("formatDeadline renders in the tournament's timezone, not the reader's", () => {

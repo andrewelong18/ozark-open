@@ -282,17 +282,43 @@ export function StandingsTable({
                       size="sm"
                       weight="bold"
                     />
-                    {row.refunded > 0 && (
+                    {/* Sprint 30: refunds are voided stakes PLUS unwagered
+                        entry above the minimum (both out of band, both
+                        inside the Payout figure); forfeits are committed
+                        money with no wager behind it plus self-bet stake
+                        over the line — in the pot, earning nothing. Named
+                        here so a row reconciles across without a calculator. */}
+                    {(row.refunded + row.refund_unwagered > 0 ||
+                      row.forfeit_unwagered + row.forfeit_self > 0) && (
                       <span className="block text-[11px] font-normal text-text-muted">
-                        incl.{" "}
-                        <MoneyDisplay
-                          value={row.refunded}
-                          cents
-                          size="xs"
-                          weight="regular"
-                          className="text-text-muted"
-                        />{" "}
-                        refunded
+                        {row.refunded + row.refund_unwagered > 0 && (
+                          <>
+                            incl.{" "}
+                            <MoneyDisplay
+                              value={row.refunded + row.refund_unwagered}
+                              cents
+                              size="xs"
+                              weight="regular"
+                              className="text-text-muted"
+                            />{" "}
+                            refunded
+                          </>
+                        )}
+                        {row.refunded + row.refund_unwagered > 0 &&
+                          row.forfeit_unwagered + row.forfeit_self > 0 &&
+                          " · "}
+                        {row.forfeit_unwagered + row.forfeit_self > 0 && (
+                          <>
+                            <MoneyDisplay
+                              value={row.forfeit_unwagered + row.forfeit_self}
+                              cents
+                              size="xs"
+                              weight="regular"
+                              className="text-text-muted"
+                            />{" "}
+                            forfeited
+                          </>
+                        )}
                       </span>
                     )}
                   </MoneyCell>

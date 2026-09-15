@@ -100,6 +100,21 @@ export function phaseState(
 }
 
 /**
+ * Whether a phase's standings can be shown to everyone (Sprint 30 / ADR 0002
+ * §7). RLS reveals other people's placements only on CLOSED bets, so a
+ * phase's split is right money only once every published bet in it is
+ * closed — the clock alone is not enough: a bet the deadline closed but the
+ * sheet still calls `open` keeps its rows hidden, and a pot built from the
+ * rows a viewer happens to be allowed to see is wrong money. Before that the
+ * board shows the pot (Σ entries, readable by all) and nothing else. A phase
+ * with nothing published is not revealed either.
+ */
+export function phaseRevealed(phase: Phase, bets: PhaseBet[]): boolean {
+  const visible = bets.filter((b) => b.phase === phase && b.status !== "hidden")
+  return visible.length > 0 && visible.every((b) => b.status === "closed")
+}
+
+/**
  * Whether a wager can be placed on a bet right now — the one rule, in one
  * place, so the API and the UI cannot disagree about it.
  */
