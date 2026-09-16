@@ -125,10 +125,13 @@ test("a new member requests once during onboarding, is sent to Venmo, and can't 
   await expect(page.getByTestId("entry-playing")).toBeChecked()
   await submit.click()
 
-  // The two-tap confirm says out loud that this is the only chance.
+  // The two-tap confirm is just a confirm (Sept 16, 2026): the amount, the
+  // split, and the button. "You can only do this once" is said on the edit
+  // stage, where it can still change the ask.
   const confirm = page.getByTestId("entry-confirm")
-  await expect(confirm).toContainText("Request $60 — Phase 1 $30 · Phase 2 $30?")
-  await expect(confirm).toContainText("This is your one chance")
+  await expect(confirm).toContainText("Request $60?")
+  await expect(confirm).toContainText("Phase 1 $30 · Phase 2 $30")
+  await expect(confirm).not.toContainText("one chance")
   await page.getByTestId("entry-confirm-button").click()
 
   // Venmo, the amount, and the memo.

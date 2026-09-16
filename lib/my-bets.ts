@@ -230,9 +230,20 @@ export function toBettor(userId: string, participant: ParticipantEntries): Betto
   }
 }
 
-/** Every phase the bettor is in, with the entry. Empty = no money added. */
-export function enteredPhases(bettor: Bettor): { phase: Phase; entry: number }[] {
+/**
+ * Every phase the bettor is in, with the entry. Empty = no money added.
+ *
+ * `only` narrows it to one phase — the current one (PRD §12 A27). Note the
+ * result can then be EMPTY for someone whose money IS in, just not in this
+ * phase; callers deciding "has this member added money at all" must ask
+ * without `only`.
+ */
+export function enteredPhases(
+  bettor: Bettor,
+  only?: Phase
+): { phase: Phase; entry: number }[] {
   return ([1, 2] as const).flatMap((phase) => {
+    if (only !== undefined && phase !== only) return []
     const entry = phaseEntry(bettor, phase)
     return entry === null ? [] : [{ phase, entry }]
   })
@@ -259,11 +270,16 @@ export type RulesModel = {
   phases: PhaseRulesModel[]
 }
 
-export function buildRulesModel(bettor: Bettor, rules: TournamentRules): RulesModel {
+export function buildRulesModel(
+  bettor: Bettor,
+  rules: TournamentRules,
+  /** Restrict the per-phase rows to the current phase (PRD §12 A27). */
+  only?: Phase
+): RulesModel {
   return {
     max_single_bet: maxSingleBet(rules),
     min_picks_per_phase: rules.min_picks_per_phase,
-    phases: enteredPhases(bettor).map(({ phase, entry }) => ({
+    phases: enteredPhases(bettor, only).map(({ phase, entry }) => ({
       phase,
       entry_fee: entry,
       max_self_bet: bettor.is_player ? maxSelfBet(entry, rules) : null,
@@ -333,17 +349,6 @@ export function standingHeadline(s: PhaseStanding): {
   }
 }
 
-/** The compact line for the phase the slip bar is NOT leading with. */
-export function standingAside(s: PhaseStanding, closed: boolean): string {
-  if (closed) {
-    const costs: string[] = []
-    if (s.forfeit > 0) costs.push(`$${s.forfeit} forfeited`)
-    if (s.refund > 0) costs.push(`$${s.refund} back`)
-    return `Phase ${s.phase} closed` + (costs.length > 0 ? ` · ${costs.join(", ")}` : " · locked in")
-  }
-  return `Phase ${s.phase} · $${s.wagered} of $${s.entry}${s.complete ? " ✓" : ""}`
-}
-
 /** The closed-phase sentence: what happened, in the past tense. */
 function finalSentence(s: PhaseStanding): string {
   const costs: string[] = []
@@ -374,15 +379,22 @@ function finalSentence(s: PhaseStanding): string {
  *
  * A bettor entered in neither phase gets nothing here: that is the entry
  * request's job (lib/entry-request.ts), not a compliance matter.
+ *
+ * `options.only` narrows this to the current phase (PRD §12 A27). Before it,
+ * a member entered in both phases read "$20 forfeits unless you wager it" in
+ * Phase 2 all the way through Phase 1 — about a phase whose bets were still
+ * hidden and which they could do nothing about. Nothing else changes: the
+ * closed-phase past-tense branch still fires for the phase that IS current,
+ * which is what a member sees between a close and the results.
  */
 export function buildComplianceSummary(
   existing: ExistingPlacement[],
   bettor: Bettor,
   rules: TournamentRules,
-  options: { closed?: Partial<Record<Phase, boolean>> } = {}
+  options: { closed?: Partial<Record<Phase, boolean>>; only?: Phase } = {}
 ): ComplianceItem[] {
   const items: ComplianceItem[] = []
-  for (const { phase, entry } of enteredPhases(bettor)) {
+  for (const { phase, entry } of enteredPhases(bettor, options.only)) {
     const s = phaseStanding(existing, entry, phase, rules, {
       is_player: bettor.is_player,
       bettor_user_id: bettor.user_id,

@@ -7,6 +7,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import {
   bettingBadge,
+  currentPhase,
   deadlineFor,
   formatDeadline,
   nextDeadline,
@@ -234,4 +235,43 @@ test("formatDeadline renders in the tournament's timezone, not the reader's", ()
   assert.match(text, /Sep 24/)
   assert.match(text, /11:00/)
   assert.match(text, /CDT/)
+})
+
+// ---------------------------------------------------------------------------
+// currentPhase — the one "which phase is it" answer (PRD §12 A27)
+// ---------------------------------------------------------------------------
+
+test("currentPhase: a hidden Phase 2 still means we're in Phase 1", () => {
+  assert.equal(
+    currentPhase([
+      { phase: 1, status: "open" },
+      { phase: 2, status: "hidden" },
+    ]),
+    1
+  )
+  // Phase 1 closed but Phase 2 not published yet is still Phase 1: there is
+  // nothing else a member can be shown a balance for.
+  assert.equal(
+    currentPhase([
+      { phase: 1, status: "closed" },
+      { phase: 2, status: "hidden" },
+    ]),
+    1
+  )
+})
+
+test("currentPhase: flips the moment any Phase 2 bet is published", () => {
+  assert.equal(currentPhase([{ phase: 2, status: "open" }]), 2)
+  assert.equal(currentPhase([{ phase: 2, status: "closed" }]), 2)
+  assert.equal(
+    currentPhase([
+      { phase: 1, status: "closed" },
+      { phase: 2, status: "open" },
+    ]),
+    2
+  )
+})
+
+test("currentPhase: an empty menu is Phase 1, never undefined", () => {
+  assert.equal(currentPhase([]), 1)
 })

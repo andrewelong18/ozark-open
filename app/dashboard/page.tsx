@@ -15,6 +15,7 @@ import Link from "next/link"
 import { TriangleAlert } from "lucide-react"
 import {
   bettingBadge,
+  currentPhase,
   formatDeadline,
   nextDeadline,
   phaseClosedByClock,
@@ -102,19 +103,19 @@ export default async function DashboardPage() {
 
   const tournament = tournamentData as unknown as Tournament
 
-  // THE SWAP (Sprint 28 / #197). Once the book is closed this page stops being
-  // a betting console and becomes the settlement surface: standings, the
-  // copyable payout text, the feed. An EARLY RETURN rather than conditionals
-  // threaded through the 300 lines below, which also means none of the live
-  // reads — pool, participant, placements, phase bets — runs post-finalize.
-  if (tournament.status === "completed") {
-    return (
-      <StandingsBoard
-        tournamentRow={tournamentData as unknown as Record<string, unknown>}
-        viewerUserId={user?.id ?? null}
-      />
-    )
-  }
+  // THE SWAP (Sprint 28 / #197, re-shaped Sept 16, 2026). Once the book is
+  // closed this page stops being a betting console and becomes the settlement
+  // surface — but it keeps its own shell: the header, the badge, and the rail
+  // with the feed and the ads. The standings board REPLACES the pool/place-bets
+  // content in the middle, rather than replacing the whole page (which is what
+  // the previous early return did, and which is why the board had to grow a
+  // feed and an ad rail of its own).
+  //
+  // The early return's other job stands: none of the PER-MEMBER money reads —
+  // participant, entry request, placements — runs post-finalize. They are
+  // guarded below, so `bettor` is null and nothing downstream computes a
+  // balance for a tournament that has already been split.
+  const completed = tournament.status === "completed"
 
   const rules = toTournamentRules(
     tournamentData as unknown as Record<string, unknown>
@@ -158,8 +159,9 @@ export default async function DashboardPage() {
   const pot2 = pot(2)
   const playerCount = poolRows.length
 
-  // This user's registration.
-  const { data: participantData, error: participantError } = user
+  // This user's registration. Skipped once the tournament is finalized —
+  // there is no balance left to compute.
+  const { data: participantData, error: participantError } = user && !completed
     ? await supabase
         .from("tournament_participants")
         .select(PARTICIPANT_ENTRY_COLUMNS)
@@ -184,7 +186,7 @@ export default async function DashboardPage() {
   // Their entry request, if any (own row under RLS). Decides what the entry
   // tile says and whether it carries the warning icon. A failed read degrades
   // to "no request" — the cautious reading, since it shows the warning.
-  const { data: requestData, error: requestError } = user
+  const { data: requestData, error: requestError } = user && !completed
     ? await supabase
         .from("entry_requests")
         .select("id, phase1_amount, phase2_amount")
@@ -200,7 +202,7 @@ export default async function DashboardPage() {
 
   // This user's live wagers, joined through picks (placements reference
   // bet_picks, not bets — ADR 0001) and scoped in normalization.
-  const { data: placementData, error: placementError } = user
+  const { data: placementData, error: placementError } = user && !completed
     ? await supabase
         .from("bet_placements")
         .select(
@@ -272,7 +274,14 @@ export default async function DashboardPage() {
     phaseBets,
     now
   )
-  const myRules = bettor ? buildRulesModel(bettor, rules) : null
+  // The phase the app is in. Every balance and warning below is about this
+  // one and no other (PRD §12 A27) — a Phase 2 forfeit warning during Phase 1
+  // named money a member could do nothing about.
+  const phase = currentPhase(phaseBets)
+  const myRules = bettor ? buildRulesModel(bettor, rules, phase) : null
+  // UNFILTERED on purpose: this answers "has this member's money arrived at
+  // all", which decides the entry tile and the "No money in yet" banner. A
+  // member entered only in the phase that isn't current still has money in.
   const myEntries = bettor ? enteredPhases(bettor) : []
   const entryTotal = myEntries.reduce((sum, e) => sum + e.entry, 0)
   const requestTotal = request ? request.phase1_amount + request.phase2_amount : 0
@@ -289,6 +298,7 @@ export default async function DashboardPage() {
           1: phaseClosedByClock(1, clock, now),
           2: phaseClosedByClock(2, clock, now),
         },
+        only: phase,
       })
     : []
   const alertCount = alerts.filter((a) => a.tone === "warning").length
@@ -328,158 +338,170 @@ export default async function DashboardPage() {
         </Badge>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard
-          label="Phase 1 Pot"
-          value={pot1.sum}
-          money
-          feature
-          caption={`${pot1.count} ${pot1.count === 1 ? "entry" : "entries"}`}
+      {completed ? (
+        // The finalized page: the leaderboard stands where the pots, the entry
+        // tile, the Place Bets button, the alerts and the house rules were.
+        // heading={false} because the dashboard already printed the tournament
+        // name above, and two <h1>s on one page is one too many.
+        <StandingsBoard
+          tournamentRow={tournamentData as unknown as Record<string, unknown>}
+          viewerUserId={user?.id ?? null}
+          heading={false}
         />
-        <StatCard
-          label="Phase 2 Pot"
-          value={pot2.sum}
-          money
-          feature
-          caption={`${pot2.count} ${pot2.count === 1 ? "entry" : "entries"}`}
-        />
-        {/* The way in to the entry request. The tile is the link — "click in on
-            the dashboard where it says their entry amount" — and it carries
-            the warning icon until money has been asked for or recorded. */}
-        <Link
-          href="/entry"
-          data-testid="entry-tile"
-          aria-label={
-            status === "none"
-              ? "Your entry — no money added yet. Request your entry."
-              : "Your entry"
-          }
-          className="block rounded-xl transition-transform hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-        >
-          <StatCard
-            label="Your Entry"
-            value={
-              status === "entered"
-                ? entryTotal
-                : status === "requested"
-                  ? requestTotal
-                  : "—"
-            }
-            money={status !== "none"}
-            caption={entryCaption}
-            badge={
-              status === "none" ? (
-                <TriangleAlert
-                  className="size-3.5 text-caution-strong"
-                  aria-hidden
-                  data-testid="entry-warning"
-                />
-              ) : undefined
-            }
-            className="h-full"
-          />
-        </Link>
-        <StatCard label="Bets Placed" value={betCount} caption="This tournament" />
-      </div>
-
-      {participant && myRules ? (
-        <>
-          {/* The budget bars moved to /my-bets (where the wagers they summarise
-              actually live), so this is the dashboard's route to the bet menu. */}
-          <Button
-            variant="gold"
-            size="lg"
-            className="w-full"
-            render={<Link href="/bets" />}
-          >
-            Place Bets →
-          </Button>
-
-          {/* Approved, but no money in either phase: the menu is read-only
-              for them until an entry is recorded, and the one thing to do is
-              the request. */}
-          {myEntries.length === 0 && (
-            <ComplianceBanner tone="warning" title="No money in yet">
-              {status === "requested" ? (
-                <>
-                  Your entry is requested — pay it on Venmo if you haven&apos;t,
-                  and your budget appears once an admin records it.{" "}
-                  <Link href="/entry" className="font-semibold underline underline-offset-2">
-                    See your request
-                  </Link>
-                </>
-              ) : (
-                <>
-                  Nothing on the menu can be wagered on until your entry is in.{" "}
-                  <Link href="/entry" className="font-semibold underline underline-offset-2">
-                    Request your entry
-                  </Link>{" "}
-                  — it&apos;s a one-time form.
-                </>
-              )}
-            </ComplianceBanner>
-          )}
-
-          {/* Alerts, collapsed, with the count on the header. The banners
-              themselves are unchanged and still say the whole thing when
-              opened — what changed is that two standing warnings no longer
-              push the rest of the dashboard below the fold all weekend.
-              Tone follows the contents: nothing to fix reads as balanced, not
-              as "Alerts 0". */}
-          {alerts.length > 0 && (
-            <AccordionSection
-              title={
-                alertCount > 0
-                  ? "Alerts"
-                  : balanced
-                    ? "You're balanced"
-                    : soloInfo
-                      ? alerts[0].title
-                      : "Where you stand"
-              }
-              glyph={alertCount > 0 ? "⚠️" : balanced ? "✓" : "ℹ️"}
-              count={alertCount > 0 ? alertCount : undefined}
-              tone={alertCount > 0 ? "caution" : balanced ? "win" : "indigo"}
-              bodyClassName="flex flex-col gap-2 p-3"
-            >
-              {alerts.map((item) => (
-                <ComplianceBanner
-                  key={`${item.phase}-${item.title}`}
-                  tone={item.tone}
-                  title={soloInfo ? undefined : item.title}
-                >
-                  {item.message}
-                </ComplianceBanner>
-              ))}
-            </AccordionSection>
-          )}
-
-          <RulesCard
-            maxSingle={myRules.max_single_bet}
-            minPicks={myRules.min_picks_per_phase}
-            phases={myRules.phases.map((p) => ({
-              phase: p.phase,
-              entryFee: p.entry_fee,
-              maxSelf: p.max_self_bet,
-            }))}
-          />
-        </>
       ) : (
-        <EmptyState
-          glyph="🏌️"
-          title="Approval pending"
-          message={
-            status === "none"
-              ? "You're registered — request your entry above, pay it on Venmo, and an admin approves you to place bets. You can browse the full bet menu in the meantime."
-              : "You're registered — an admin just needs to approve you to place bets. You can browse the full bet menu in the meantime."
-          }
-        />
-      )}
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard
+              label="Phase 1 Pot"
+              value={pot1.sum}
+              money
+              feature
+              caption={`${pot1.count} ${pot1.count === 1 ? "entry" : "entries"}`}
+            />
+            <StatCard
+              label="Phase 2 Pot"
+              value={pot2.sum}
+              money
+              feature
+              caption={`${pot2.count} ${pot2.count === 1 ? "entry" : "entries"}`}
+            />
+            {/* The way in to the entry request. The tile is the link — "click in on
+                the dashboard where it says their entry amount" — and it carries
+                the warning icon until money has been asked for or recorded. */}
+            <Link
+              href="/entry"
+              data-testid="entry-tile"
+              aria-label={
+                status === "none"
+                  ? "Your entry — no money added yet. Request your entry."
+                  : "Your entry"
+              }
+              className="block rounded-xl transition-transform hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            >
+              <StatCard
+                label="Your Entry"
+                value={
+                  status === "entered"
+                    ? entryTotal
+                    : status === "requested"
+                      ? requestTotal
+                      : "—"
+                }
+                money={status !== "none"}
+                caption={entryCaption}
+                badge={
+                  status === "none" ? (
+                    <TriangleAlert
+                      className="size-3.5 text-caution-strong"
+                      aria-hidden
+                      data-testid="entry-warning"
+                    />
+                  ) : undefined
+                }
+                className="h-full"
+              />
+            </Link>
+            <StatCard label="Bets Placed" value={betCount} caption="This tournament" />
+          </div>
 
-      <HowItWorksLauncher
-        minPicks={rules.min_picks_per_phase}
-        entryFeeMin={rules.entry_fee_min}
-      />
+          {participant && myRules ? (
+            <>
+              {/* The budget bars moved to /my-bets (where the wagers they summarise
+                  actually live), so this is the dashboard's route to the bet menu. */}
+              <Button
+                variant="gold"
+                size="lg"
+                className="w-full"
+                render={<Link href="/bets" />}
+              >
+                Place Bets →
+              </Button>
+
+              {/* Approved, but no money in either phase: the menu is read-only
+                  for them until an entry is recorded, and the one thing to do is
+                  the request. */}
+              {myEntries.length === 0 && (
+                <ComplianceBanner tone="warning" title="No money in yet">
+                  {status === "requested" ? (
+                    <>
+                      Your entry is requested — pay it on Venmo if you haven&apos;t,
+                      and your budget appears once an admin records it.{" "}
+                      <Link href="/entry" className="font-semibold underline underline-offset-2">
+                        See your request
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      Nothing on the menu can be wagered on until your entry is in.{" "}
+                      <Link href="/entry" className="font-semibold underline underline-offset-2">
+                        Request your entry
+                      </Link>{" "}
+                      — it&apos;s a one-time form.
+                    </>
+                  )}
+                </ComplianceBanner>
+              )}
+
+              {/* Alerts, collapsed, with the count on the header. The banners
+                  themselves are unchanged and still say the whole thing when
+                  opened — what changed is that two standing warnings no longer
+                  push the rest of the dashboard below the fold all weekend.
+                  Tone follows the contents: nothing to fix reads as balanced, not
+                  as "Alerts 0". */}
+              {alerts.length > 0 && (
+                <AccordionSection
+                  title={
+                    alertCount > 0
+                      ? "Alerts"
+                      : balanced
+                        ? "You're balanced"
+                        : soloInfo
+                          ? alerts[0].title
+                          : "Where you stand"
+                  }
+                  glyph={alertCount > 0 ? "⚠️" : balanced ? "✓" : "ℹ️"}
+                  count={alertCount > 0 ? alertCount : undefined}
+                  tone={alertCount > 0 ? "caution" : balanced ? "win" : "indigo"}
+                  bodyClassName="flex flex-col gap-2 p-3"
+                >
+                  {alerts.map((item) => (
+                    <ComplianceBanner
+                      key={`${item.phase}-${item.title}`}
+                      tone={item.tone}
+                      title={soloInfo ? undefined : item.title}
+                    >
+                      {item.message}
+                    </ComplianceBanner>
+                  ))}
+                </AccordionSection>
+              )}
+
+              <RulesCard
+                maxSingle={myRules.max_single_bet}
+                minPicks={myRules.min_picks_per_phase}
+                entryFeeMin={rules.entry_fee_min}
+                phases={myRules.phases.map((p) => ({
+                  phase: p.phase,
+                  entryFee: p.entry_fee,
+                  maxSelf: p.max_self_bet,
+                }))}
+              />
+            </>
+          ) : (
+            <EmptyState
+              glyph="🏌️"
+              title="Approval pending"
+              message={
+                status === "none"
+                  ? "You're registered — request your entry above, pay it on Venmo, and an admin approves you to place bets. You can browse the full bet menu in the meantime."
+                  : "You're registered — an admin just needs to approve you to place bets. You can browse the full bet menu in the meantime."
+              }
+            />
+          )}
+
+          <HowItWorksLauncher rules={rules} />
+        </>
+      )}
       </div>
 
       {/* Activity feed — the right rail on desktop, stacked below on mobile.
@@ -491,8 +513,12 @@ export default async function DashboardPage() {
               countdown switched on (#106); otherwise the opening ceremony, as
               before. Same low-key component either way — the brand rule is no
               countdown-timer anxiety, and that holds even now that the thing
-              it counts to is a deadline. */}
-          {upcoming ? (
+              it counts to is a deadline.
+
+              Nothing at all once the tournament is finalized: there is no
+              deadline left, and the fallback counts to a fixed date that is by
+              then in the past. */}
+          {completed ? null : upcoming ? (
             <Card>
               <CardContent className="flex flex-col gap-3">
                 <div>

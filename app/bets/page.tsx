@@ -3,8 +3,8 @@ import { notFound } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { requireAdminPage } from "@/lib/admin-gate"
 import { createClient } from "@/lib/supabase/server"
-import { closingPhase } from "@/lib/chase"
 import { BetSlipSummary } from "@/components/betting/bet-slip-summary"
+import { ComplianceBanner } from "@/components/modules/compliance-banner"
 import { EmptyState } from "@/components/modules/empty-state"
 import { LoadError } from "@/components/modules/load-error"
 import {
@@ -28,12 +28,17 @@ import {
   TOURNAMENT_CLOCK_COLUMNS,
   TOURNAMENT_RULE_COLUMNS,
 } from "@/lib/placements"
-import { phaseClosedByClock, phaseState, wageringOpen, type Phase, type PhaseState } from "@/lib/phases"
+import {
+  currentPhase,
+  phaseState,
+  wageringOpen,
+  type Phase,
+  type PhaseState,
+} from "@/lib/phases"
 import { sortPicks } from "@/lib/pick-order"
 import { categoryRank, roundRank } from "@/lib/bet-taxonomy"
 import {
   normalizeMyBets,
-  standingAside,
   standingHeadline,
   toBettor,
   type MyBetsQueryRow,
@@ -320,7 +325,7 @@ export default async function BetsPage({
   // Each phase's own state, and the tab to open on. Both are computed here
   // rather than in the client because they need things the menu tree doesn't
   // carry: `phaseState` needs the phase CLOCK (a phase closes on the deadline as
-  // well as on its bets' statuses — ADR 0001 §5a), and `closingPhase` needs the
+  // well as on its bets' statuses — ADR 0001 §5a), and `currentPhase` needs the
   // bets' phase numbers, which FilterableBet deliberately doesn't hold.
   //
   // Same `now` as the wagering_open stamp above, so a bet and the badge over it
@@ -329,24 +334,15 @@ export default async function BetsPage({
     1: phaseState(1, clock, bets, now),
     2: phaseState(2, clock, bets, now),
   }
-  const defaultPhase = closingPhase(bets)
+  const defaultPhase = currentPhase(bets)
 
-  // The slip bar leads with ONE phase (Sprint 30 / ADR 0002): the open phase
-  // the bettor is in — Phase 1 if both are open — else the phase the
-  // tournament is closing. The other entered phase gets a compact line.
-  const enteredList = ([1, 2] as const).filter((p) => standings[p] !== undefined)
-  const leadPhase: Phase | null =
-    enteredList.find((p) => phaseStates[p] === "open") ??
-    (enteredList.includes(defaultPhase) ? defaultPhase : (enteredList[0] ?? null))
-  const lead = leadPhase !== null ? standings[leadPhase] : undefined
-  let aside: string | null = null
-  if (lead && isParticipant) {
-    const other: Phase = lead.phase === 1 ? 2 : 1
-    const otherStanding = standings[other]
-    aside = otherStanding
-      ? standingAside(otherStanding, phaseClosedByClock(other, clock, now))
-      : `Phase ${other} · not entered`
-  }
+  // The slip bar is about the CURRENT phase and nothing else (A27). It used to
+  // lead with one phase and print a compact line for the other underneath —
+  // a second dollar figure directly below the running total, on the screen
+  // where the next tap lives. A member not entered in the current phase gets
+  // no bar at all, which is right: there is nothing for them to run a total
+  // against yet.
+  const lead = standings[defaultPhase]
 
   return (
     <div
@@ -415,14 +411,12 @@ export default async function BetsPage({
       )}
 
       {!onBehalfOf && viewer && isParticipant && !enteredPhases[1] && !enteredPhases[2] && (
-        <p className="mb-4 rounded-lg border border-caution-border bg-caution-surface px-4 py-3 text-sm text-caution-strong">
-          No money in yet — nothing on this menu can be wagered on until your
-          entry is recorded.{" "}
-          <Link href="/entry" className="underline underline-offset-2">
+        <ComplianceBanner tone="warning" title="No money in yet" className="mb-4">
+          Nothing on this menu can be wagered on until your entry is recorded.{" "}
+          <Link href="/entry" className="font-semibold underline underline-offset-2">
             Request your entry
           </Link>
-          .
-        </p>
+        </ComplianceBanner>
       )}
 
       <div className="mt-3">
@@ -453,7 +447,6 @@ export default async function BetsPage({
           totalWagered={lead.wagered}
           pickCount={lead.pick_count}
           headline={standingHeadline(lead)}
-          aside={aside}
         />
       )}
     </div>

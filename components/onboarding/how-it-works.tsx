@@ -6,6 +6,7 @@ import { Coins, Layers, Scale, Eye } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import type { TournamentRules } from "@/lib/validation"
 
 // "How this pool works" — the Sprint 16 first-run explainer (Competitive
 // Analysis §1.2), reused two ways: inline as an onboarding step, and as a
@@ -13,6 +14,12 @@ import { Card, CardContent } from "@/components/ui/card"
 // (PRD §7 / lib/validation.ts, per phase since Sprint 30) so nobody's taught
 // a rule the app doesn't keep. The numbers are passed in from the
 // tournaments row — never hardcoded.
+
+/** The rule parameters the copy interpolates — all off the tournaments row. */
+export type HowItWorksRules = Pick<
+  TournamentRules,
+  "min_picks_per_phase" | "entry_fee_min" | "entry_fee_max"
+>
 
 export type HowItWorksCard = {
   icon: typeof Coins
@@ -24,55 +31,58 @@ export type HowItWorksCard = {
   photo: string
 }
 
-// The explainer content, shared by the carousel below and the profile
-// "How it works" tab (which renders these statically).
-export function howItWorksCards(
-  minPicks: number,
-  entryFeeMin: number
-): HowItWorksCard[] {
+// The explainer content, shared by the carousel below and anything else that
+// wants the four steps statically.
+//
+// Kept to four short steps on purpose (Sept 16, 2026): the point a member has
+// to leave with is that Phase 1 money and Phase 2 money are separate, and that
+// each phase needs its own five picks. The self-bet line is deliberately NOT
+// here — it lives on the House Rules card, on the entry form's playing
+// checkbox, in the compliance warnings, and is hard-blocked at placement
+// (lib/validation.ts), so nobody can act on not knowing it.
+export function howItWorksCards(rules: HowItWorksRules): HowItWorksCard[] {
+  const { min_picks_per_phase: minPicks, entry_fee_min: min, entry_fee_max: max } = rules
   return [
     {
       icon: Coins,
       title: "Two pots, no house",
-      body: "The Ozark Open is pari-mutuel. Each phase's entries make that phase's pot — there's no house and no rake. At the end each pot pays itself back out in proportion to everyone's theoretical winnings in it.",
+      body: "Phase 1 and Phase 2 each have their own pot, made from everyone's entries. At the end each pot is split among the winners in that phase. No house, no rake.",
       photo: "/onboarding/jake-step-1.jpg",
     },
     {
       icon: Layers,
-      title: "Each phase is its own entry",
-      body: `You enter Phase 1 and Phase 2 separately — $${entryFeeMin} to $50 each, either one or both. Place at least ${minPicks} picks in every phase you're in, and spread that phase's entry across the bets you like.`,
+      title: "Separate money for each phase",
+      body: `Enter each phase for $${min}–$${max} — one, the other, or both. Your Phase 1 money can only be bet in Phase 1, and your Phase 2 money only in Phase 2.`,
       photo: "/onboarding/jake-step-2.png",
     },
     {
       icon: Scale,
-      title: "Wager the whole entry",
-      body: `Your wagers in a phase should add up to your entry for it. The first $${entryFeeMin} stays in the pot whether or not you wager it; anything above that you don't wager comes back to you. Self-bets count only up to a quarter of what you actually wager.`,
+      title: `${minPicks} picks minimum, and wager it all`,
+      body: `In every phase you enter, place at least ${minPicks} picks and wager the whole entry. Leave money unwagered and the first $${min} stays in the pot — the rest comes back.`,
       photo: "/onboarding/jake-step-3.jpg",
     },
     {
       icon: Eye,
-      title: "Everything reveals at close",
-      body: "While a bet is open, nobody can see who you took or how much. The moment it closes, everyone's picks and amounts go public. Around here, that's a feature.",
+      title: "Everything shows at close",
+      body: "Nobody can see your picks while a bet is open. The moment it closes, everyone's picks and amounts go public. Around here, that's a feature.",
       photo: "/onboarding/jake-step-4.jpg",
     },
   ]
 }
 
 export function HowItWorks({
-  minPicks,
-  entryFeeMin,
+  rules,
   onDone,
   doneLabel = "Got it",
   bare = false,
 }: {
-  minPicks: number
-  entryFeeMin: number
+  rules: HowItWorksRules
   onDone: () => void
   doneLabel?: string
   /** Drop the card chrome — for when something else already supplies a frame. */
   bare?: boolean
 }) {
-  const specs = howItWorksCards(minPicks, entryFeeMin)
+  const specs = howItWorksCards(rules)
   const [index, setIndex] = useState(0)
   const spec = specs[index]
   const isLast = index === specs.length - 1

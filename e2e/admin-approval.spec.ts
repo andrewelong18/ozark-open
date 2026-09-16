@@ -58,16 +58,20 @@ test("an admin approves a member from their entry request, who can then bet", as
   ).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Place stake" }).first()).toBeVisible()
 
-  // The budgets are the entries the admin typed, one bar per phase — not the
-  // request, and not a default. (This used to assert "of your $25 entry", copy
-  // that stopped existing when the budget bar moved; #217.)
+  // The budget is the entry the admin typed — not the request, and not a
+  // default. (This used to assert "of your $25 entry", copy that stopped
+  // existing when the budget bar moved; #217.)
+  //
+  // ONE bar, not two: the fixtures publish Phase 1 and keep Phase 2 hidden, so
+  // Phase 1 is the current phase and the Phase 2 bar is deliberately absent
+  // (Sept 16, 2026 / PRD §12 A27). Their $20 Phase 2 entry is still recorded —
+  // the dashboard tile below asserts it — there is just nothing to wager it on
+  // yet, and a budget bar you cannot move is a warning about nothing.
   await page.goto("/my-bets")
   await expect(
     page.getByTestId("budget-phase-1").getByTestId("budget-summary")
   ).toHaveText("$0 of $25")
-  await expect(
-    page.getByTestId("budget-phase-2").getByTestId("budget-summary")
-  ).toHaveText("$0 of $20")
+  await expect(page.getByTestId("budget-phase-2")).toHaveCount(0)
 
   // Money is in, so the "no money added" warning is gone from both surfaces.
   await expect(page.getByRole("link", { name: /No money added yet/ })).toHaveCount(0)

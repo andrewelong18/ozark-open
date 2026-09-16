@@ -123,8 +123,7 @@ export default async function EntryPage() {
           <div>
             <div className="font-heading text-2xl text-text-strong">Your entry is in</div>
             <p className="mt-1 text-sm leading-normal text-text-muted">
-              Recorded by an admin. Each phase is its own pot — wager the full
-              amount in every phase you&apos;re in.
+              Wager the full amount in each phase.
             </p>
           </div>
           <ul className="flex flex-col gap-1 text-sm text-text-body">
@@ -157,8 +156,8 @@ export default async function EntryPage() {
             </div>
             <p className="mt-1 text-sm leading-normal text-text-muted">
               {describeRequest(request)}
-              {request.is_player ? "" : " · not playing"}. Waiting on an admin to
-              record the money — pay it on Venmo if you haven&apos;t yet, memo{" "}
+              {request.is_player ? "" : " · not playing"}. Waiting on an admin.
+              Pay on Venmo if you haven&apos;t — memo{" "}
               <strong className="text-text-strong">{VENMO_MEMO}</strong>.
             </p>
           </div>
@@ -171,8 +170,7 @@ export default async function EntryPage() {
             Open Venmo <ExternalLink className="size-4" aria-hidden />
           </Button>
           <p className="text-xs text-text-muted">
-            A request can&apos;t be changed in the app. If something&apos;s
-            wrong, tell an admin.
+            Something wrong? Tell an admin.
           </p>
         </CardContent>
       </Card>

@@ -36,7 +36,7 @@ test("a new member is forced through onboarding and lands view-only", async ({ p
     await page.getByRole("button", { name: "Next", exact: true }).click()
     await expect(page.getByText(`${step} of 4`)).toBeVisible()
   }
-  await expect(page.getByText("Everything reveals at close")).toBeVisible()
+  await expect(page.getByText("Everything shows at close")).toBeVisible()
 
   // Sprint 30: the entry request follows the walkthrough, and it can wait.
   // Skipping is the path under test here — e2e/entry-request.spec.ts submits.
