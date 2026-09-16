@@ -15,7 +15,6 @@ import {
   normalizeMyBets,
   payoutSummary,
   picksLine,
-  standingAside,
   standingHeadline,
   toBettor,
   type MyBetEntry,
@@ -398,7 +397,7 @@ test("compliance: a closed complete phase is locked in", () => {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// standingHeadline / standingAside — the /bets slip bar's two lines
+// standingHeadline — the /bets slip bar's one line about the current phase
 // ---------------------------------------------------------------------------
 
 function standingOf(
@@ -457,16 +456,6 @@ test("standingHeadline: Pat's example leads with the self-bet line", () => {
   })
 })
 
-test("standingAside: the other phase in one line, open or closed", () => {
-  const open = standingOf([placement(1, 20, 1)])
-  assert.equal(standingAside(open, false), "Phase 1 · $20 of $40")
-  const done = standingOf([1, 2, 3, 4, 5].map((n) => placement(1, 8, n)))
-  assert.equal(standingAside(done, false), "Phase 1 · $40 of $40 ✓")
-  assert.equal(standingAside(done, true), "Phase 1 closed · locked in")
-  const short = standingOf([1, 2, 3, 4, 5].map((n) => placement(1, 3, n)))
-  assert.equal(standingAside(short, true), "Phase 1 closed · $5 forfeited, $20 back")
-})
-
 test("normalizeMyBets carries the pick's result (unknown strings → pending)", () => {
   const [hit] = normalizeMyBets([row({ pick_id: "p-1", amount: 5, result: "hit" })], T)
   assert.equal(hit.result, "hit")
@@ -508,4 +497,65 @@ test("payoutSummary: pushes count, voids show as refunded, pendings counted", ()
     refunded: 7,
     pending: 1,
   })
+})
+
+// ---------------------------------------------------------------------------
+// `only` — the current-phase filter (PRD §12 A27)
+// ---------------------------------------------------------------------------
+
+test("compliance: `only` reports the current phase and says nothing about the other", () => {
+  const both: Bettor = { ...FORTY, phase2_entry_fee: 20 }
+  const existing = [...[1, 2, 3, 4, 5].map((n) => placement(1, 8, n)), placement(2, 4, 1)]
+  // Without it, a Phase 2 entry is warned about all the way through Phase 1 —
+  // money the member cannot act on, because Phase 2 isn't published.
+  const p1 = buildComplianceSummary(existing, both, RULES, { only: 1 })
+  assert.deepEqual(
+    p1.map((i) => [i.phase, i.tone, i.title]),
+    [[1, "success", "Phase 1 is balanced"]]
+  )
+  const p2 = buildComplianceSummary(existing, both, RULES, { only: 2 })
+  assert.equal(
+    p2.every((i) => i.phase === 2),
+    true
+  )
+  assert.equal(p2.length > 0, true)
+})
+
+test("compliance: `only` still gives the current phase its past-tense line when closed", () => {
+  const existing = [1, 2, 3, 4, 5].map((n) => placement(1, 3, n))
+  const items = buildComplianceSummary(existing, FORTY, RULES, {
+    closed: { 1: true },
+    only: 1,
+  })
+  assert.deepEqual(
+    items.map((i) => [i.phase, i.tone, i.title]),
+    [[1, "info", "Phase 1 is closed"]]
+  )
+})
+
+test("compliance: `only` on a phase the bettor isn't in yields nothing", () => {
+  // FORTY has no Phase 2 entry. Callers asking "has money arrived at all"
+  // must therefore ask WITHOUT `only` — see enteredPhases' doc comment.
+  assert.deepEqual(buildComplianceSummary([], FORTY, RULES, { only: 2 }), [])
+})
+
+test("enteredPhases: `only` narrows, and can be empty for someone who has paid", () => {
+  const both: Bettor = { ...FORTY, phase2_entry_fee: 20 }
+  assert.deepEqual(enteredPhases(both), [
+    { phase: 1, entry: 40 },
+    { phase: 2, entry: 20 },
+  ])
+  assert.deepEqual(enteredPhases(both, 2), [{ phase: 2, entry: 20 }])
+  assert.deepEqual(enteredPhases(FORTY, 2), [])
+})
+
+test("buildRulesModel: `only` lists the current phase's rows alone", () => {
+  const model = buildRulesModel(ME, RULES, 2)
+  assert.deepEqual(
+    model.phases.map((p) => p.phase),
+    [2]
+  )
+  // The flat rules are unchanged — they are the same in every phase.
+  assert.equal(model.max_single_bet, RULES.max_single_bet)
+  assert.equal(model.min_picks_per_phase, RULES.min_picks_per_phase)
 })

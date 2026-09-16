@@ -8,24 +8,23 @@ import { BET_FOOTER_TOAST_SLOT } from "@/components/betting/bet-footer"
 // answered the whole time — not just at the end of the page. The
 // review-at-the-moment-of-placing surface, not a draft bet slip.
 //
-// Since Sprint 30 (ADR 0002) the bar is about ONE phase at a time — the one
-// that is open, which the server picks (standingHeadline / standingAside in
-// lib/my-bets.ts compute every string here from the same phaseStanding the
-// rules enforce with, so the bar can never disagree with the API). The other
-// phase, if the member is in it, gets one compact line underneath.
+// Since Sprint 30 (ADR 0002) the bar is about ONE phase at a time — the
+// current one, which the server picks (standingHeadline in lib/my-bets.ts
+// computes every string here from the same phaseStanding the rules enforce
+// with, so the bar can never disagree with the API). It carries NOTHING about
+// the other phase: a second dollar figure under the tally read as part of the
+// running total on the screen where the next tap lives (Sept 16, 2026 / A27).
 //
 // Server component: it re-renders on the router.refresh() each placement
 // already fires.
 
 export type BetSlipSummaryProps = {
-  /** The phase the bar leads with. */
+  /** The current phase — the only one this bar talks about. */
   phase: 1 | 2
   entryFee: number
   totalWagered: number
   pickCount: number
   headline: { tone: "warning" | "success" | "info"; text: string }
-  /** One compact line about the other phase, or nothing. */
-  aside: string | null
 }
 
 type Tone = "warning" | "success" | "info"
@@ -47,7 +46,6 @@ export function BetSlipSummary({
   totalWagered,
   pickCount,
   headline,
-  aside,
 }: BetSlipSummaryProps) {
   return (
     // The whole bottom-of-screen furniture, in one column: the menu's error
@@ -90,9 +88,6 @@ export function BetSlipSummary({
               {headline.text}
             </span>
           </div>
-          {aside && (
-            <div className="mt-0.5 truncate text-xs text-text-muted">{aside}</div>
-          )}
         </div>
         <Link
           href="/my-bets"

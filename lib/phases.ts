@@ -100,6 +100,23 @@ export function phaseState(
 }
 
 /**
+ * The phase the app is IN — what a member's balance and warnings are about
+ * (Sept 16, 2026 / PRD §12 A27).
+ *
+ * Phase 2 ships hidden and is published only once Phase 1 has closed (PRD §8),
+ * so any non-hidden Phase 2 bet means we are at or past that point. Derived
+ * from the menu rather than the clock on purpose: a deadline that has passed
+ * with nothing published yet is still Phase 1 as far as a member is concerned.
+ *
+ * This is the ONE definition — lib/chase.ts's closingPhase() delegates to it,
+ * so the /bets default tab, the /admin/close target and the member surfaces
+ * can never disagree about which phase it is.
+ */
+export function currentPhase(bets: PhaseBet[]): Phase {
+  return bets.some((b) => b.phase === 2 && b.status !== "hidden") ? 2 : 1
+}
+
+/**
  * Whether a phase's standings can be shown to everyone (Sprint 30 / ADR 0002
  * §7). RLS reveals other people's placements only on CLOSED bets, so a
  * phase's split is right money only once every published bet in it is

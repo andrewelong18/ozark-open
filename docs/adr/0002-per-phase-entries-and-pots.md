@@ -84,6 +84,8 @@ There is **no pick maximum** any more. `min_picks_per_phase` (5) is a completene
 
 `phaseStanding()` is the one source of truth for where a bettor stands in a phase — wagered, pick count, committed, forfeit, refund, the self-bet line, and an ordered list of issues. The `/bets` slip bar, `/my-bets` banners, the dashboard alerts, the chase list (`lib/chase.ts`, mirrored by `docs/admin/phase-compliance.sql`) and the payout split all read it.
 
+> **Amended Sept 16, 2026 (PRD §12 A27).** *Which* phases a member surface reads is now filtered to the one the app is in — `currentPhase()` in `lib/phases.ts`, which `closingPhase()` delegates to. This ADR assumed both phases are worth showing at once; in practice a Phase 2 forfeit warning during Phase 1 names money the member cannot act on, because Phase 2's bets are still `hidden`. The standing itself is unchanged, and the admin chase list still reads every phase.
+
 ### 4. Two triggers, both locked
 
 A18's lesson stands: an aggregate rule enforced by read-sum-write is a race. Migration `20260914000000` rewrites `enforce_placement_total()` to re-sum **per phase** under the same `FOR UPDATE` lock on the participant row, raising `OZ001`: *"Over your $N Phase P entry — that's the most you can wager in Phase P."* — the exact sentence `validateRunningTotal()` returns.
@@ -103,6 +105,8 @@ The request is its **own table**, `entry_requests`, not columns on the participa
 ### 6. Where the standings live
 
 **`/standings`, labelled "Leaderboard" in the nav**, between My Bets and Roster. The route is not `/leaderboard`: that is the Google-Sheets golf board, kept deliberately (`OUTSTANDING_DECISIONS.md` §2b.4), and reusing it would reverse that call silently. The page and the completed dashboard (A20) render the **same** board, with a Phase 1 / Phase 2 / Combined toggle.
+
+> **Amended Sept 16, 2026 (PRD §12 A27).** The completed dashboard no longer *early-returns* the board — it **embeds** it where its pot tiles and Place Bets button sat, keeping its own header, badge and rail. The two mounts differ only by `heading`. That early return is why the board had grown furniture of its own: an admin entry-collection block, an activity feed and a sponsor carousel, all of which came off it. The board is the standings and nothing else; collection moved to `/admin/people` alone, taking `lib/admin-gate.ts`'s `viewerIsAdmin()` and `components/results/settlement-summary.tsx` with it.
 
 **A phase's standings render only once every published bet in it is closed** (`phaseRevealed()`). RLS hides other members' open-bet rows (Q11), so a split computed before then is computed from the rows a viewer happens to be allowed to see — wrong money. Until then the tab shows the pot (Σ entries, readable by everyone) and says when the standings arrive.
 

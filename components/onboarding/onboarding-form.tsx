@@ -152,8 +152,7 @@ export function OnboardingForm({
           How the Sportsbook Works
         </h1>
         <HowItWorks
-          minPicks={rules.min_picks_per_phase}
-          entryFeeMin={rules.entry_fee_min}
+          rules={rules}
           doneLabel={showEntryStep ? "Next" : "Start betting"}
           onDone={() => (showEntryStep ? setStep("entry") : enterTheApp())}
         />

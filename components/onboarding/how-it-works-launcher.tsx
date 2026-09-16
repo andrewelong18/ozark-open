@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 
-import { HowItWorks } from "@/components/onboarding/how-it-works"
+import { HowItWorks, type HowItWorksRules } from "@/components/onboarding/how-it-works"
 import { AccordionSection } from "@/components/ui/accordion-section"
 
 // The persistent re-open entry point for the Sprint 16 walkthrough. Drops
@@ -14,13 +14,7 @@ import { AccordionSection } from "@/components/ui/accordion-section"
 // open rather than one button among two open reference cards. The carousel
 // behind it is unchanged — Jake, the four steps, the dots — minus its own card
 // frame, which the accordion now supplies.
-export function HowItWorksLauncher({
-  minPicks,
-  entryFeeMin,
-}: {
-  minPicks: number
-  entryFeeMin: number
-}) {
+export function HowItWorksLauncher({ rules }: { rules: HowItWorksRules }) {
   // Owned here rather than inside AccordionSection: "Close" on the last step
   // has to collapse the section, and the section's own state is private.
   const [open, setOpen] = useState(false)
@@ -35,8 +29,7 @@ export function HowItWorksLauncher({
     >
       <HowItWorks
         bare
-        minPicks={minPicks}
-        entryFeeMin={entryFeeMin}
+        rules={rules}
         doneLabel="Close"
         onDone={() => setOpen(false)}
       />

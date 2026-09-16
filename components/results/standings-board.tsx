@@ -1,14 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { LoadError } from "@/components/modules/load-error"
-import { SettlementSummary } from "@/components/results/settlement-summary"
 import { StandingsToggle, type ScopeView } from "@/components/results/standings-toggle"
-import { ActivityFeed } from "@/components/modules/activity-feed"
-import { AdCarousel } from "@/components/ads/ad-carousel"
-import { ads } from "@/lib/ads"
-import { loadActivityFeed } from "@/lib/activity-source"
-import type { FeedBet } from "@/lib/activity"
-import { toPhaseClock, toPhaseEntry, toTournamentRules } from "@/lib/placements"
-import { phaseRevealed } from "@/lib/phases"
+import { toPhaseEntry, toTournamentRules } from "@/lib/placements"
+import { phaseRevealed, type PhaseBet } from "@/lib/phases"
 import {
   buildResultsTables,
   normalizePayoutRows,
@@ -16,18 +10,22 @@ import {
   type ResultsParticipant,
   type ResultsScope,
 } from "@/lib/payouts"
-import { buildCollectionSummary } from "@/lib/settlement"
-import { collectionStanding, type CollectionParticipant } from "@/lib/collection"
-import { viewerIsAdmin } from "@/lib/admin-gate"
 
 // The standings board (Sprint 30 / ADR 0002) — one component, two mounts.
 //
-// /standings (the nav's "Leaderboard") renders it all tournament long; the
-// dashboard EARLY RETURNS it once tournaments.status flips to 'completed'
-// (Sprint 28 / #197 — Pat's swap: "replace the pool total, entry, bets placed,
-// place bets, house rules, alerts, how the pool works sections within the
-// dashboard with a clear leaderboard ranking of who won the most money. Also
-// clear out the countdown.").
+// /standings (the nav's "Leaderboard") renders it as a page of its own; the
+// dashboard EMBEDS it once tournaments.status flips to 'completed' (Sprint 28
+// / #197 — Pat's swap: "replace the pool total, entry, bets placed, place
+// bets, house rules, alerts, how the pool works sections within the dashboard
+// with a clear leaderboard ranking of who won the most money. Also clear out
+// the countdown."), keeping the dashboard's own header and rail. `heading`
+// is what tells the two apart.
+//
+// IT IS THE STANDINGS AND NOTHING ELSE (Sept 16, 2026). The admin entry
+// collection block, the activity feed and the sponsor carousel came off it:
+// collection is on /admin/people, where the money is actually reconciled, and
+// the feed and the ads belong to the dashboard, which supplies its own rail
+// around this component when it embeds it.
 //
 // Each phase is its own pot with its own pari-mutuel split, plus a Combined
 // view that adds a person's two rows. A phase's standings are shown only
@@ -45,12 +43,15 @@ import { viewerIsAdmin } from "@/lib/admin-gate"
 export async function StandingsBoard({
   tournamentRow,
   viewerUserId,
+  heading = true,
 }: {
   /** The row the page already read, passed down rather than re-fetched — it
-   *  carries the rule columns the split needs and the clock columns the
-   *  activity feed needs. */
+   *  carries the rule columns the split needs. */
   tournamentRow: Record<string, unknown>
   viewerUserId: string | null
+  /** false → the mount supplies its own page header (the finalized dashboard,
+   *  which already prints the tournament name above its own rail). */
+  heading?: boolean
 }) {
   const supabase = await createClient()
   const tournamentId = String(tournamentRow.id)
@@ -78,10 +79,9 @@ export async function StandingsBoard({
         "placement_id, user_id, amount, result, theoretical_payout, refunded_stake, phase, is_self_pick"
       )
       .eq("tournament_id", tournamentId),
-    // `phase, status` — the reveal gate AND the feed's phase events. The gate
-    // is why a failure here stops the page: without the bet statuses the
-    // board can't know which pot is safe to show, and guessing is how wrong
-    // money gets on a screen.
+    // `phase, status` — the reveal gate. A failure here stops the page:
+    // without the bet statuses the board can't know which pot is safe to
+    // show, and guessing is how wrong money gets on a screen.
     supabase.from("bets").select("phase, status").eq("tournament_id", tournamentId),
   ])
 
@@ -129,7 +129,7 @@ export async function StandingsBoard({
   const rows = normalizePayoutRows((payoutData ?? []) as unknown as PayoutViewQueryRow[])
   const tables = buildResultsTables(participants, rows, rules)
 
-  const phaseBets = (phaseBetsData ?? []) as FeedBet[]
+  const phaseBets = (phaseBetsData ?? []) as PhaseBet[]
   const revealed = { 1: phaseRevealed(1, phaseBets), 2: phaseRevealed(2, phaseBets) }
   const entrants = (phase: 1 | 2) =>
     participants.filter((p) => (phase === 1 ? p.phase1_entry_fee : p.phase2_entry_fee) !== null)
@@ -150,61 +150,12 @@ export async function StandingsBoard({
   // one table that exists beats opening on "not yet".
   const defaultScope: ResultsScope = revealed[1] && !revealed[2] ? 1 : "combined"
 
-  const now = new Date()
-  const activity = await loadActivityFeed(
-    supabase,
-    tournamentId,
-    toPhaseClock(tournamentRow),
-    phaseBets,
-    now
-  )
-
-  // Entry collection, for an admin only. THREE things about this read are
-  // deliberate:
-  //
-  //   1. It is its OWN read rather than paid_amount added to the participants
-  //      select above. That select is the page: a database that hasn't had
-  //      the collection migration applied would fail it and every member
-  //      would get an error card where the payouts should be — the exact
-  //      shape of the Aug 31 outage. Here, the same failure costs the admin
-  //      one block.
-  //   2. It runs only for an admin, so a member's page does no extra work.
-  //   3. `collection` stays null on any failure, which renders nothing. The
-  //      block is a convenience beside the money; it may not become a reason
-  //      the standings break.
-  const isAdmin = await viewerIsAdmin(supabase)
-  let collection = null
-  if (isAdmin) {
-    const { data: paidData, error: paidError } = await supabase
-      .from("tournament_participants")
-      .select("phase1_entry_fee, phase2_entry_fee, paid_amount, users ( display_name )")
-      .eq("tournament_id", tournamentId)
-      .is("revoked_at", null)
-    if (paidError) {
-      console.error("[standings] collection read failed:", paidError.message)
-    } else {
-      type PaidRow = {
-        phase1_entry_fee: number | string | null
-        phase2_entry_fee: number | string | null
-        paid_amount: number | string | null
-        users: { display_name: string } | { display_name: string }[] | null
-      }
-      const forStanding: CollectionParticipant[] = ((paidData ?? []) as PaidRow[]).map((p) => {
-        const joined = Array.isArray(p.users) ? p.users[0] : p.users
-        return {
-          display_name: joined?.display_name ?? "Unknown bettor",
-          phase1_entry_fee: p.phase1_entry_fee,
-          phase2_entry_fee: p.phase2_entry_fee,
-          paid_amount: Number(p.paid_amount) || 0,
-        }
-      })
-      collection = collectionStanding(forStanding)
-    }
-  }
-
   return (
-    <div className="mx-auto grid max-w-[var(--container-max,1120px)] grid-cols-1 gap-4 px-4 py-6 lg:grid-cols-3 lg:gap-6">
-      <div data-enter-stagger className="flex flex-col gap-4 lg:col-span-2">
+    <div
+      data-enter-stagger
+      className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6"
+    >
+      {heading && (
         <div>
           <h1 className="font-heading text-3xl leading-tight text-text-strong">
             {tournamentName}
@@ -215,39 +166,14 @@ export async function StandingsBoard({
               : "Pari-mutuel shares as they stand, one pot per phase · no house, no rake"}
           </p>
         </div>
+      )}
 
-        <StandingsToggle
-          views={views}
-          completed={completed}
-          viewerUserId={viewerUserId}
-          defaultScope={defaultScope}
-        />
-
-        {/* The ADMIN block: it answers a different question ("who still
-            owes"), it is gated on viewerIsAdmin(), and it is a separate
-            string for exactly that reason — never a section inside anything
-            a member could paste onward. Since Sprint 30 it also lists who
-            paid more than their entries, for the refunds. */}
-        {collection && (
-          <SettlementSummary
-            text={buildCollectionSummary(collection, tournamentName)}
-            title="Entry collection (admins only)"
-            hint="Who has handed their entries over, and who is owed one back. Nobody else sees this block, and none of it moves the pots — the splits above already count every entry."
-          />
-        )}
-      </div>
-
-      {/* The weekend's memory, and the ads. No countdown here: on the
-          completed dashboard there is nothing left to count down to, and the
-          live dashboard's fallback branch counts to a fixed date that would
-          by then be in the past. */}
-      <aside className="flex flex-col gap-4 lg:col-span-1">
-        <section className="flex flex-col gap-3">
-          <h2 className="font-heading text-lg text-text-strong">Activity</h2>
-          <ActivityFeed initialEvents={activity} serverNow={now.toISOString()} />
-        </section>
-        <AdCarousel ads={ads} className="mx-auto" />
-      </aside>
+      <StandingsToggle
+        views={views}
+        completed={completed}
+        viewerUserId={viewerUserId}
+        defaultScope={defaultScope}
+      />
     </div>
   )
 }

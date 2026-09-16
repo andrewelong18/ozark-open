@@ -20,13 +20,14 @@ import type { TournamentRules } from "@/lib/validation"
 
 // The one-time entry request (Sprint 30 / PRD §12 A26). A total, a slider
 // that splits it between the phases — snapping to the splits the per-phase
-// bounds allow — the "I'm playing" checkbox, a two-tap confirm that says out
-// loud this can't be changed, and then the Venmo hand-off with the memo.
+// bounds allow — the "I'm playing" checkbox, a two-tap confirm, and then the
+// Venmo hand-off with the memo.
 //
 // Everything the slider snaps to comes from lib/entry-request.ts, which is
 // also what the API validates with, so the form can never offer a split the
 // server refuses. The "one time" promise itself is the database's (UNIQUE +
-// no member UPDATE) — the copy here just makes sure nobody is surprised by it.
+// no member UPDATE); the edit stage says it once, where it can still change
+// the ask, and the confirm stage is just a confirm.
 
 export type EntryRequestFormProps = {
   rules: TournamentRules
@@ -123,9 +124,8 @@ export function EntryRequestForm({
               Now pay ${total} on Venmo
             </div>
             <p className="mt-1 text-sm leading-normal text-text-muted">
-              Put <strong className="text-text-strong">{VENMO_MEMO}</strong> in
-              the memo — that&apos;s how the admins match it to you. An admin
-              approves your entry once it lands.
+              Memo: <strong className="text-text-strong">{VENMO_MEMO}</strong>.
+              An admin approves your entry once it lands.
             </p>
           </div>
           <Button
@@ -138,9 +138,8 @@ export function EntryRequestForm({
             Open Venmo <ExternalLink className="size-4" aria-hidden />
           </Button>
           <p className="text-sm text-text-body">
-            Your request: <span className="font-semibold">{splitLabel(p1, p2)}</span>
-            {isPlayer ? "" : " · not playing"}. It&apos;s recorded once, so if
-            something&apos;s wrong, tell an admin rather than trying again.
+            <span className="font-semibold">{splitLabel(p1, p2)}</span>
+            {isPlayer ? "" : " · not playing"}. Something wrong? Tell an admin.
           </p>
           {onDone ? (
             <Button size="lg" className="w-full" onClick={onDone}>
@@ -162,11 +161,13 @@ export function EntryRequestForm({
         <CardContent className="flex flex-col gap-5">
           <div>
             <div className="font-heading text-2xl text-text-strong">
-              Request ${total} — {splitLabel(p1, p2)}?
+              Request ${total}?
             </div>
-            <p className="mt-1 text-sm leading-normal text-caution-strong">
-              This is your one chance: you can&apos;t add to it or change it
-              later in the app.
+            {/* The "once only" promise is stated on the edit stage, where it
+                can still change the ask. At the moment of commitment this is
+                just a confirm — the split, and the two buttons. */}
+            <p className="mt-1 text-sm leading-normal text-text-muted">
+              {splitLabel(p1, p2)}
             </p>
           </div>
           <div className="flex items-center justify-between gap-3">
@@ -193,8 +194,8 @@ export function EntryRequestForm({
         <div>
           <div className="font-heading text-2xl text-text-strong">Put your money in</div>
           <p className="mt-1 text-sm leading-normal text-text-muted">
-            Each phase is its own pot with its own entry. Ask for a total, then
-            split it — or sit one phase out. You can only do this once.
+            Phase 1 and Phase 2 are separate money. Pick a total, then split it.
+            You can only do this once.
           </p>
         </div>
 
@@ -229,7 +230,7 @@ export function EntryRequestForm({
             {!valid && totalRaw.trim() !== "" && (
               <p className="text-xs text-loss-strong" role="alert">
                 {bothOpen
-                  ? `Totals run from $${bounds.min} to $${bounds.max}: up to $${rules.entry_fee_max} fits in one phase, and anything over needs $${rules.entry_fee_min} to $${rules.entry_fee_max} in each.`
+                  ? `$${bounds.min}–$${bounds.max}. Up to $${rules.entry_fee_max} fits in one phase; over that needs $${rules.entry_fee_min}–$${rules.entry_fee_max} in each.`
                   : `Phase 2 takes $${rules.entry_fee_min} to $${rules.entry_fee_max}.`}
               </p>
             )}
@@ -275,17 +276,19 @@ export function EntryRequestForm({
             <ul className="mt-1 flex flex-col gap-0.5 text-xs text-text-muted">
               {p1 > 0 && (
                 <li>
-                  Phase 1: wager the full ${p1} across {rules.min_picks_per_phase}+ picks.
+                  Phase 1: ${p1} across {rules.min_picks_per_phase}+ picks
                 </li>
               )}
               {p2 > 0 && (
                 <li>
-                  Phase 2: wager the full ${p2} across {rules.min_picks_per_phase}+ picks.
+                  Phase 2: ${p2} across {rules.min_picks_per_phase}+ picks
                 </li>
               )}
+              {/* The one rule that costs money if you ignore it, kept at the
+                  moment the amount is being chosen (ADR 0002 §2). */}
               <li>
-                Max single bet ${rules.max_single_bet}. The first ${rules.entry_fee_min} of
-                each entry stays in the pot whether or not you wager it.
+                The first ${rules.entry_fee_min} of each entry stays in the pot
+                whether or not you wager it.
               </li>
             </ul>
           </div>
@@ -301,8 +304,7 @@ export function EntryRequestForm({
             <span>
               I&apos;m playing in the tournament
               <span className="block text-xs text-text-muted">
-                Players can put at most a quarter of a phase&apos;s entry on
-                themselves. Uncheck if you&apos;re only betting.
+                Uncheck if you&apos;re only betting, not playing.
               </span>
             </span>
           </label>

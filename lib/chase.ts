@@ -28,7 +28,7 @@ import {
   type PhaseStanding,
   type TournamentRules,
 } from "./validation.ts"
-import type { Phase } from "./phases.ts"
+import { currentPhase, type Phase } from "./phases.ts"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -87,7 +87,7 @@ export type ChaseList = {
  * that point. Mirrors the CASE in phase-compliance.sql.
  */
 export function closingPhase(bets: { phase: number; status: string }[]): Phase {
-  return bets.some((b) => b.phase === 2 && b.status !== "hidden") ? 2 : 1
+  return currentPhase(bets)
 }
 
 // ---------------------------------------------------------------------------

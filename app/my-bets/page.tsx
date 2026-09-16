@@ -18,7 +18,7 @@ import {
   TOURNAMENT_CLOCK_COLUMNS,
   TOURNAMENT_RULE_COLUMNS,
 } from "@/lib/placements"
-import { phaseClosedByClock } from "@/lib/phases"
+import { currentPhase, phaseClosedByClock, type Phase } from "@/lib/phases"
 import { entryStatus } from "@/lib/entry-request"
 import { RulesCard } from "@/components/modules/rules-card"
 import { ComplianceBanner } from "@/components/modules/compliance-banner"
@@ -136,6 +136,25 @@ export default async function MyBetsPage() {
   }
   const status = entryStatus(participant, requestData ?? null)
 
+  // Which phase the app is in, so the budget bar and the banners are about
+  // that one and no other (PRD §12 A27). The placement join can't answer it —
+  // it only carries bets this member already wagered on — so it needs its own
+  // read of the menu's phase/status.
+  //
+  // A FAILED READ FALLS BACK TO BOTH PHASES, not to a guess. Hiding a budget
+  // bar because a read failed would quietly tell someone their money isn't
+  // theirs; showing one phase too many is the harmless direction.
+  const { data: phaseBetsData, error: phaseBetsError } = await supabase
+    .from("bets")
+    .select("phase, status")
+    .eq("tournament_id", tournament.id)
+  if (phaseBetsError) {
+    console.error("[my-bets] phase bets read failed:", phaseBetsError.message)
+  }
+  const phase: Phase | undefined = phaseBetsError
+    ? undefined
+    : currentPhase((phaseBetsData ?? []) as { phase: number; status: string }[])
+
   // Own live placements across the tournament, flattened for display.
   const { data: placementData, error: placementError } = await supabase
     .from("bet_placements")
@@ -162,9 +181,19 @@ export default async function MyBetsPage() {
   )
   const phases = groupByPhase(entries)
   const standings = phaseStandings(entries, bettor, rules)
-  const enteredPhases = ([1, 2] as const).filter((p) => standings[p] !== undefined)
-  const myRules = buildRulesModel(bettor, rules)
-  const compliance = buildComplianceSummary(entries, bettor, rules, { closed })
+  // Two lists, deliberately. `allEntered` answers "has this member's money
+  // arrived at all" — the question the "No money in yet" banner and the empty
+  // state ask, and the one a current-phase filter must never be allowed to
+  // answer wrongly for someone entered only in the OTHER phase. `entered` is
+  // what actually renders a budget bar (A27).
+  const allEntered = ([1, 2] as const).filter((p) => standings[p] !== undefined)
+  const entered =
+    phase === undefined ? allEntered : allEntered.filter((p) => p === phase)
+  const myRules = buildRulesModel(bettor, rules, phase)
+  const compliance = buildComplianceSummary(entries, bettor, rules, {
+    closed,
+    only: phase,
+  })
 
   // Theoretical payout rollup — shown once any pick has a result. Pushes
   // count inside the total; voids contribute 0 and surface as refunded.
@@ -211,36 +240,59 @@ export default async function MyBetsPage() {
               Place Bets →
             </Button>
           </div>
-          {enteredPhases.length === 0 ? (
-            <p className="text-sm text-text-body">
+          {allEntered.length === 0 ? (
+            <ComplianceBanner tone="warning" title="No money in yet">
               {status === "requested" ? (
                 <>
-                  Your entry is requested and waiting on an admin — pay it on
-                  Venmo if you haven&apos;t, and your budget appears here once
-                  it&apos;s recorded.{" "}
-                  <Link href="/entry" className="font-semibold text-indigo-700 underline-offset-4 hover:underline">
+                  Your entry is requested — pay it on Venmo if you haven&apos;t,
+                  and your budget appears here once an admin records it.{" "}
+                  <Link href="/entry" className="font-semibold underline underline-offset-2">
                     See your request
                   </Link>
                 </>
               ) : (
                 <>
-                  No money in yet.{" "}
-                  <Link href="/entry" className="font-semibold text-indigo-700 underline-offset-4 hover:underline">
+                  Nothing can be wagered until your entry is recorded.{" "}
+                  <Link href="/entry" className="font-semibold underline underline-offset-2">
                     Request your entry
                   </Link>{" "}
-                  — you can only do it once, so pick your split with care.
+                  — it&apos;s a one-time form.
                 </>
+              )}
+            </ComplianceBanner>
+          ) : entered.length === 0 ? (
+            // Money IS in — just not in the phase the app is in. Saying "no
+            // money in yet" here would be a lie, and a budget bar for a phase
+            // with nothing on the menu is a total you cannot move. Which way
+            // it misses matters: a phase behind the current one has closed and
+            // its money is settled, one ahead simply hasn't opened.
+            <p className="text-sm text-text-body" data-testid="budget-other-phase">
+              You&apos;re in Phase {allEntered[0]} —{" "}
+              <span className="font-semibold">${standings[allEntered[0]]!.entry}</span>.{" "}
+              {phase !== undefined && allEntered[0] < phase ? (
+                <>
+                  That phase has closed; where it finished is on the{" "}
+                  <Link
+                    href="/standings"
+                    className="font-semibold text-indigo-700 underline-offset-4 hover:underline"
+                  >
+                    Leaderboard
+                  </Link>
+                  .
+                </>
+              ) : (
+                `Phase ${allEntered[0]} bets aren't open yet — your budget appears here when they are.`
               )}
             </p>
           ) : (
-            enteredPhases.map((phase) => {
-              const s = standings[phase]!
+            entered.map((p) => {
+              const s = standings[p]!
               return (
                 // The wrapper names the phase for tests: the module's own
                 // testids repeat once per bar.
-                <div key={phase} data-testid={`budget-phase-${phase}`}>
+                <div key={p} data-testid={`budget-phase-${p}`}>
                   <BudgetModule
-                    label={`Phase ${phase}`}
+                    label={`Phase ${p}`}
                     wagered={s.wagered}
                     entryFee={s.entry}
                     picksLine={`${s.pick_count} ${s.pick_count === 1 ? "pick" : "picks"} · ${rules.min_picks_per_phase} min`}
@@ -273,7 +325,7 @@ export default async function MyBetsPage() {
         <EmptyState
           title="No bets placed yet"
           message={
-            enteredPhases.length === 0
+            allEntered.length === 0
               ? "Once your entry is recorded the bet menu is yours."
               : `Each phase you're in needs at least ${rules.min_picks_per_phase} picks totalling your entry for that phase — the first $${rules.entry_fee_min} of an entry stays in the pot whether or not you wager it.`
           }
@@ -382,6 +434,7 @@ export default async function MyBetsPage() {
       <RulesCard
         maxSingle={myRules.max_single_bet}
         minPicks={myRules.min_picks_per_phase}
+        entryFeeMin={rules.entry_fee_min}
         phases={myRules.phases.map((p) => ({
           phase: p.phase,
           entryFee: p.entry_fee,
