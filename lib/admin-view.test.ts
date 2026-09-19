@@ -192,14 +192,16 @@ test("buildAdminView money columns match the per-phase split", () => {
   )
   const view = buildAdminView(PARTICIPANTS, rows, RULES)
   // Phase 1: Ann committed 20 (W = 5), Bo committed 20 (W = 9) − 7 voided = 33.
-  // Phase 2: Ann committed 20 (W = 0). Combined 53.
-  assert.deepEqual(view.pools, { 1: 33, 2: 20, combined: 53 })
+  // Phase 2: Ann wagered nothing, so she committed nothing and her $20 comes
+  // back whole (A28) — that pot is empty. Combined 33.
+  assert.deepEqual(view.pools, { 1: 33, 2: 0, combined: 33 })
   assert.equal(view.sum_theoretical, 10.5)
   assert.equal(view.pending, 1)
   const ann = view.bettors[0]
   assert.equal(ann.theoretical, 10.5)
   assert.equal(ann.actual, 33) // sole theoretical holder takes Phase 1's whole pot
-  assert.equal(ann.refund_unwagered, 20) // Phase 1: 40 − 20 committed
+  // Phase 1: 40 − 20 committed. Phase 2: the untouched $20 entry, all of it.
+  assert.equal(ann.refund_unwagered, 40)
   const bo = view.bettors[1]
   assert.equal(bo.refunded, 7)
   assert.equal(bo.actual, 0)
@@ -208,16 +210,25 @@ test("buildAdminView money columns match the per-phase split", () => {
 })
 
 test("buildAdminView keeps entered participants with no placements (the chase list)", () => {
+  // They stay listed — an admin still has to chase them — but since A28 an
+  // entry with nothing wagered against it forfeits nothing and funds nothing,
+  // so both pots are empty and every dollar is refundable.
   const view = buildAdminView(PARTICIPANTS, [], RULES)
   assert.equal(view.bettors.length, 2)
   assert.deepEqual(
-    view.bettors.map((b) => [b.display_name, b.wagered, b.entries.length, b.forfeit_unwagered]),
+    view.bettors.map((b) => [
+      b.display_name,
+      b.wagered,
+      b.entries.length,
+      b.forfeit_unwagered,
+      b.refund_unwagered,
+    ]),
     [
-      ["Ann", 0, 0, 40],
-      ["Bo", 0, 0, 20],
+      ["Ann", 0, 0, 0, 60],
+      ["Bo", 0, 0, 0, 30],
     ]
   )
-  assert.deepEqual(view.pools, { 1: 40, 2: 20, combined: 60 })
+  assert.deepEqual(view.pools, { 1: 0, 2: 0, combined: 0 })
 })
 
 test("buildAdminView counts self-pick review flags per bettor and drops orphaned rows", () => {

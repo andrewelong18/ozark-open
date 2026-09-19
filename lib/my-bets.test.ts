@@ -291,19 +291,21 @@ function placement(phase: 1 | 2, amount: number, n: number, player: string | nul
 
 const FORTY: Bettor = { user_id: "me", is_player: true, phase1_entry_fee: 40, phase2_entry_fee: null }
 
-test("compliance: entered and nothing placed says what it will cost, as warnings", () => {
-  // The zero-wager blind spot (Sept 2, 2026), now with real money behind it:
-  // under two pots the first $20 of an entry forfeits at this phase's close.
+test("compliance: entered and nothing placed is a pick problem, not a money one", () => {
+  // The zero-wager blind spot (Sept 2, 2026). Since A28 an entry with nothing
+  // wagered against it forfeits nothing — the whole $40 comes back — so the
+  // money line is the info-toned refund, and the picks warning carries the
+  // urgency. Nothing here may claim they are about to lose money.
   const items = buildComplianceSummary([], FORTY, RULES)
   assert.deepEqual(
     items.map((i) => [i.tone, i.title]),
     [
       ["warning", "Not enough picks in Phase 1"],
-      ["warning", "Money on the table in Phase 1"],
+      ["info", "Phase 1 refund"],
     ]
   )
   assert.equal(items[0].message, "5 more picks needed in Phase 1 (0 of 5).")
-  assert.match(items[1].message, /\$20 forfeits to the Phase 1 pot/)
+  assert.equal(items[1].message, "$40 of your Phase 1 entry comes back unless you wager it.")
   assert.ok(items.every((i) => i.phase === 1))
 })
 
