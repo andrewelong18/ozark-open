@@ -15,8 +15,9 @@ export type RulesCardProps = {
   maxSingle?: number
   /** Fewest picks in each phase you are entered in. */
   minPicks?: number
-  /** The per-phase floor — the part of an entry that is committed either way
-   * (ADR 0002 §2). A rule parameter, so it comes off the tournaments row. */
+  /** The per-phase floor — the part of an entry that is committed once the
+   * bettor has wagered anything at all (ADR 0002 §2, amended by A28). A rule
+   * parameter, so it comes off the tournaments row. */
   entryFeeMin?: number
   /** One block per phase the bettor is entered in. */
   phases?: RulesCardPhase[]
@@ -89,9 +90,10 @@ export function RulesCard({
         </div>
       ))}
       <p className="border-t border-border px-4 py-2.5 text-xs text-text-muted">
-        Each phase is its own pot. Wager less than your entry and the first{" "}
-        {`$${entryFeeMin}`} stays in the pot; the rest comes back. Self-bets
-        count only up to a quarter of what you actually wager.
+        Each phase is its own pot. Wager some of your entry but less than all
+        of it and the first {`$${entryFeeMin}`} stays in the pot; the rest comes
+        back. Wager none of it and the whole entry comes back. Self-bets count
+        only up to a quarter of what you actually wager.
       </p>
     </AccordionSection>
   )

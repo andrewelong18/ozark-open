@@ -327,7 +327,7 @@ export default async function MyBetsPage() {
           message={
             allEntered.length === 0
               ? "Once your entry is recorded the bet menu is yours."
-              : `Each phase you're in needs at least ${rules.min_picks_per_phase} picks totalling your entry for that phase — the first $${rules.entry_fee_min} of an entry stays in the pot whether or not you wager it.`
+              : `Each phase you're in needs at least ${rules.min_picks_per_phase} picks totalling your entry for that phase — once you've wagered anything, the first $${rules.entry_fee_min} of an entry stays in the pot whether or not you wager that much. Wager nothing at all and the whole entry comes back.`
           }
           action={
             <Button variant="gold" size="sm" render={<Link href="/bets" />}>

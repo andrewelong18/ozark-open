@@ -200,9 +200,9 @@ function ParticipantFields({
       </p>
       {closedPhases[1] && phase1.trim() !== "" && (
         <p className="text-xs text-caution-strong">
-          Phase 1 has closed. An entry recorded now has nothing to wager on —
-          the first ${entryFeeMin} of it forfeits to the Phase 1 pot at
-          settlement.
+          Phase 1 has closed. An entry recorded now has nothing to wager on,
+          so all of it comes back at settlement — it forfeits nothing and funds
+          no part of the Phase 1 pot.
         </p>
       )}
       {closedPhases[2] && phase2.trim() !== "" && (

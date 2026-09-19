@@ -287,8 +287,9 @@ export function EntryRequestForm({
               {/* The one rule that costs money if you ignore it, kept at the
                   moment the amount is being chosen (ADR 0002 §2). */}
               <li>
-                The first ${rules.entry_fee_min} of each entry stays in the pot
-                whether or not you wager it.
+                Wager some of an entry and the first ${rules.entry_fee_min} of it
+                stays in the pot whether or not you wager that much. Wager none
+                of it and the whole entry comes back.
               </li>
             </ul>
           </div>
