@@ -578,7 +578,10 @@ async function main() {
   // entered in Phase 1 whose Phase 1 standing isn't complete gets a text,
   // because the shortfall is money at THIS close. The board is built so that
   // is exactly two people — Devin (the straggler) and Steve (paid $50, never
-  // wagered) — and the line has to say what it costs each of them.
+  // wagered) — and the line has to say what happens to each of them. Since
+  // A28 those are two different things: Devin forfeits $12, Steve forfeits
+  // nothing and gets all $50 back. He is chased anyway — the pick minimum is
+  // still unmet, and this is the last moment he can do anything about it.
   const compliance = runSqlFile(path.join(ROOT, "docs/admin/phase-compliance.sql"))
   const chaseLine = (phase: Phase, text: string) =>
     text
@@ -597,7 +600,7 @@ async function main() {
   )
   check(
     "it names Steve Esswein, who paid $50 and never wagered",
-    phase1Line.includes("Steve Esswein ($0 of $50, 0 of 5 picks → $20 forfeits, $30 comes back)"),
+    phase1Line.includes("Steve Esswein ($0 of $50, 0 of 5 picks → $50 comes back)"),
     phase1Line
   )
   check(
@@ -845,12 +848,12 @@ async function main() {
   const row = (table: ResultsTable, name: string) => table.rows.find((r) => r.display_name === name)
   const steve = row(tables[1], "Steve Esswein")
   check(
-    "Steve (paid $50, never wagered): $20 forfeits, $30 comes back, $20 down",
+    "Steve (paid $50, never wagered): nothing forfeits, the whole $50 comes back, P/L $0",
     steve !== undefined &&
       steve.actual === 0 &&
-      steve.forfeit_unwagered === 20 &&
-      steve.refund_unwagered === 30 &&
-      steve.profit_loss === -20,
+      steve.forfeit_unwagered === 0 &&
+      steve.refund_unwagered === 50 &&
+      steve.profit_loss === 0,
     steve ? `forfeit $${steve.forfeit_unwagered}, refund $${steve.refund_unwagered}, P/L ${steve.profit_loss}` : "missing"
   )
   check("Steve isn't in the Phase 2 pot at all", row(tables[2], "Steve Esswein") === undefined)
