@@ -35,7 +35,8 @@ Each phase has its own pari-mutuel split. There is no combined split: the **Comb
 ```
 E        the phase entry (NULL → not in pot p)
 W        Σ live placement amounts in p, voids included
-C        min(E, max(W, entry_fee_min))       committed — funds the pot
+C        W = 0 ? 0 : min(E, max(W, entry_fee_min))   committed — funds the pot
+         (the W = 0 case is PRD §12 A28, Sept 19, 2026 — see §2's amendment note)
 R        E − C                               refunded, unwagered (out of band)
 F        max(0, C − W)                       forfeited — in the pot, no wager behind it
 S        Σ live self-pick amounts in p       (0 for a non-player, Q14/A15)
@@ -56,11 +57,11 @@ Three identities hold per pot **and** combined, and `lib/payouts.test.ts`, `scri
 2. `Σ actual = pool` whenever `Σ theo' > 0` — every dollar in the pool is paid out.
 3. `E + P/L = cash` on every row.
 
-Pat's worked example is the model's acceptance test: a **$50 entry, $20 wagered, $12 on yourself** commits $20, refunds $30, recognises $5 of the self-bets (a quarter of $20) and forfeits $7 of them to the pot. A **$50 entry with nothing wagered** forfeits $20 and refunds $30.
+Pat's worked example is the model's acceptance test: a **$50 entry, $20 wagered, $12 on yourself** commits $20, refunds $30, recognises $5 of the self-bets (a quarter of $20) and forfeits $7 of them to the pot. A **$50 entry with nothing wagered** refunds the whole $50 and forfeits nothing — *amended Sept 19, 2026 by PRD §12 A28; as this ADR shipped it forfeited $20 and refunded $30.*
 
 Edge rulings (Andrew, Sept 14):
 
-- **The $20 floor is committed either way.** Money under it left unwagered forfeits; money above it comes back. This is Andrew's reading of "left on the table below the minimum" — the first `entry_fee_min` of an entry is in the pot the moment it's entered.
+- **The $20 floor is committed either way — once there is a wager behind it.** *(Amended Sept 19, 2026 — PRD §12 A28. As written here the floor was committed unconditionally: "the first `entry_fee_min` of an entry is in the pot the moment it's entered.")* For anyone who wagered at all, money under the floor left unwagered forfeits and money above it comes back, unchanged. A member who wagered **nothing** in the phase never entered it as far as the money is concerned: `C = 0`, `F = 0`, `R = E`. The resulting cliff at the first dollar is deliberate — see A28 for why pro-rating the floor was rejected.
 - **The self-bet line at close is a quarter of what was actually wagered**, not of the entry — "if that total entry is fully submitted" read as: the full quarter-of-entry only counts once the entry is fully wagered. Under $20 wagered it is still 25 % of wagered.
 - **Placement-time self cap is a quarter of the phase entry, floored, with no hard cap** ($20 → $5, $25 → $6, $40 → $10, $50 → $12). `max_self_bet_cap` is dropped. A bettor can therefore place self-bets that don't fully count until they wager the rest; the slip bar, `/my-bets` and the chase list all say so.
 - **Several self picks are scaled pro-rata** by `k`. Theoretical payout is linear in stake, so scaling each self pick's theoretical and void refund by `k` is exact. A void on a scaled self pick refunds `amount × k`: the forfeit is fixed at close and results never reopen it (Q7's spirit).

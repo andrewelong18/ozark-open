@@ -223,27 +223,31 @@ function main() {
   // --- 3. The math, against SQL ground truth -------------------------------
   console.log("What the console and the settlement block report:")
 
-  // The read /results does: live participants only, revoked excluded.
+  // The read the console does since A28: every participant row, with the
+  // revoked ones carried in as in_pot: false. Revoked used to be filtered out
+  // in SQL, which is exactly how a revoked member's $40 became invisible
+  // instead of becoming a refund owed.
   const rowsCsv = runSql(`
     SELECT u.display_name || '|' || coalesce(tp.phase1_entry_fee::text, '') || '|'
-        || coalesce(tp.phase2_entry_fee::text, '') || '|' || tp.paid_amount
+        || coalesce(tp.phase2_entry_fee::text, '') || '|' || tp.paid_amount || '|'
+        || (tp.revoked_at IS NULL)::text
       FROM public.tournament_participants tp
       JOIN public.users u ON u.id = tp.user_id
      WHERE tp.tournament_id = '${tournamentId}'
-       AND tp.revoked_at IS NULL
-       AND tp.user_id IN ('${PAID}', '${HALF}', '${NONE}')
+       AND tp.user_id IN ('${PAID}', '${HALF}', '${NONE}', '${GONE}')
      ORDER BY u.display_name
   `)
   const participants: CollectionParticipant[] = rowsCsv
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [display_name, phase1, phase2, paid_amount] = line.split("|")
+      const [display_name, phase1, phase2, paid_amount, live] = line.split("|")
       return {
         display_name,
         phase1_entry_fee: phase1 === "" ? null : Number(phase1),
         phase2_entry_fee: phase2 === "" ? null : Number(phase2),
         paid_amount: Number(paid_amount),
+        in_pot: live.trim() === "t" || live.trim() === "true",
       }
     })
 
@@ -288,6 +292,14 @@ function main() {
     "a revoked member's payment is not counted as collected",
     standing.collected === 42 && !JSON.stringify(standing.outstanding).includes("Gone Gary"),
     `collected ${standing.collected}`
+  )
+  // …and its twin, which is the half A28 added: not collected, but not gone
+  // either. Money that funds no pot is money somebody has to hand back, and
+  // if it isn't listed here it isn't listed anywhere.
+  check(
+    "…and IS listed as a refund owed, rather than vanishing (A28)",
+    standing.overpaid.some((o) => o.name === "Gone Gary" && o.amount === 40),
+    JSON.stringify(standing.overpaid)
   )
 
   const summary = buildCollectionSummary(standing, "Round Trip Open")

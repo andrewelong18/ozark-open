@@ -211,7 +211,13 @@ async function phaseOnePool(): Promise<string> {
     const wagered = mine.reduce((sum, r) => sum + Number(r.amount), 0)
     const voided = mine.reduce((sum, r) => sum + Number(r.refunded_stake ?? 0), 0)
     const entry = Number(p.phase1_entry_fee)
-    pool += Math.min(entry, Math.max(wagered, tournament.entry_fee_min)) - voided
+    // Mirrors phaseStanding()'s committed, A28 included: wagering nothing in
+    // the phase commits nothing, so the floor needs a wager behind it. This is
+    // a second implementation of lib/validation.ts on purpose — the spec has
+    // to derive the badge independently — so it has to track that rule too.
+    const committed =
+      wagered === 0 ? 0 : Math.min(entry, Math.max(wagered, tournament.entry_fee_min))
+    pool += committed - voided
   }
   return Number.isInteger(pool) ? `$${pool}` : `$${pool.toFixed(2)}`
 }

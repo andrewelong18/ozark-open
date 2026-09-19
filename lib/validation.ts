@@ -16,9 +16,11 @@
 // (validatePlacement); the completeness picture is reported, never blocking
 // (phaseStanding) — a participant is legitimately incomplete while still
 // placing bets, and at close whatever stands, stands (Q3), with the money
-// consequences ADR 0002 spells out: the first $entry_fee_min is committed to
-// the pot whether or not it was wagered, the rest comes back if it wasn't,
-// and self-bets count only up to their share of what was actually wagered.
+// consequences ADR 0002 spells out (as amended by A28): once anything at all
+// is wagered, the first $entry_fee_min is committed to the pot whether or not
+// it was wagered, and the rest comes back; wagering nothing at all is never
+// having entered, so the whole entry comes back; and self-bets count only up
+// to their share of what was actually wagered.
 
 import type { Phase } from "./phases.ts"
 
@@ -29,7 +31,8 @@ import type { Phase } from "./phases.ts"
 /** The rule parameters from the tournaments row. */
 export type TournamentRules = {
   /** Rule 1: bounds on EACH phase's entry. entry_fee_min doubles as the
-   * forfeit floor — wagered or not, that much of every entry funds the pot. */
+   * forfeit floor: once a bettor has wagered anything in the phase, that much
+   * of their entry funds the pot whether or not it was wagered (A28). */
   entry_fee_min: number
   entry_fee_max: number
   /** Rule 2: fewest wagered picks in each phase a bettor is entered in.
@@ -375,7 +378,12 @@ export function phaseStanding(
   const selfRecognized = Math.min(selfTotal, selfCapEffective)
   const selfForfeit = selfTotal - selfRecognized
 
-  const committed = Math.min(entry, Math.max(wagered, rules.entry_fee_min))
+  // Wagering nothing at all is "never entered" (A28): the whole entry comes
+  // back and none of it funds the pot. The floor only bites once there is a
+  // wager behind it — one dollar in and the first $entry_fee_min is committed
+  // as before, which is the cliff Andrew took deliberately on Sept 19, 2026.
+  const committed =
+    wagered === 0 ? 0 : Math.min(entry, Math.max(wagered, rules.entry_fee_min))
   const forfeit = Math.max(0, committed - wagered)
   const refund = Math.max(0, entry - committed)
   const overEntry = wagered > entry
@@ -393,7 +401,7 @@ export function phaseStanding(
     issues.push({
       tone: "warning",
       code: "forfeit",
-      message: `$${forfeit} forfeits to the Phase ${phase} pot unless you wager it — the first $${rules.entry_fee_min} of an entry is committed either way.`,
+      message: `$${forfeit} forfeits to the Phase ${phase} pot unless you wager it — once you've wagered anything, the first $${rules.entry_fee_min} of an entry is committed.`,
     })
   }
   if (selfForfeit > 0) {

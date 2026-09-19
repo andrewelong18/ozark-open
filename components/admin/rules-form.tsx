@@ -132,7 +132,7 @@ export function RulesForm({ rules }: { rules: TournamentRules }) {
               field="entry_fee_min"
               draft={draft}
               setField={setField}
-              hint="Also the forfeit floor: this much of an entry funds the pot whether or not it was wagered."
+              hint="Also the forfeit floor: once a bettor wagers anything in a phase, this much of their entry funds the pot. Wager nothing and the whole entry comes back."
             />
             <RuleField field="entry_fee_max" draft={draft} setField={setField} />
           </div>

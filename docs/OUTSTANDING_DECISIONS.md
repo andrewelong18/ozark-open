@@ -88,13 +88,17 @@ asked* is half the value of this file.
    exactly this case — Devin's $18 of $20 in Phase 2 forfeits $2.
 2. ~~**Steve Esswein's case** — someone pays the entry and never wagers. He appeared on the
    board at **$0.00 / −$20.00**. Is that what Pat wants when it's a real person?~~
-   **✅ RESOLVED Sept 7, 2026 — settled by conduct, and reopenable in one line if Pat disagrees.**
-   Two things changed the question. The **outcome** was already governed: PRD §12 Q3 says whatever
-   stands, stands, and nothing in the app adjusts it. The **prevention** shipped Sept 2, 2026 as
-   part of the launch-readiness pass — `buildComplianceSummary()` returned nothing at zero
-   placements, so the member who had done the least was the only one the app told nothing; it now
-   says what they still need. Pat has seen the $0.00 / −$20.00 row across two full dry runs
-   without objecting. That is a weaker answer than his own words and is recorded as such.
+   **✅ RESOLVED Sept 19, 2026 — by decision (PRD §12 A28), replacing the Sept 7 non-answer.**
+   Wagering nothing in a phase is now never having entered it: `C = 0`, `F = 0`, `R = E`. Steve
+   gets his whole $50 back and finishes Phase 1 at **$0.00 / $0.00**. Anyone who wagered a dollar
+   or more is unchanged — the $20 floor still bites — and the cliff that creates was named and
+   accepted. He is still on the chase list, because five picks are still owed to the group.
+
+   *The Sept 7, 2026 resolution, kept because the way it was reached is the point:* "settled by
+   conduct, and reopenable in one line if Pat disagrees… PRD §12 Q3 says whatever stands, stands…
+   Pat has seen the $0.00 / −$20.00 row across two full dry runs without objecting. That is a
+   weaker answer than his own words and is recorded as such." It was reopened in roughly one line,
+   which is the argument for recording weak answers as weak rather than as settled.
 3. **Cents** — payouts display to the cent. How does $29.03 get paid over Venmo? Decides
    whether to round or show a suggested-payment column.
 4. ~~**The participant leaderboard** — Pat suggested dropping it in July. Still his view? If so,
@@ -160,6 +164,8 @@ replaces it is that the app tracks payment status and *acts on none of it*.
 1. **A pot where nothing hit.** If no Phase 2 wager cashes (Σ theoretical = 0), the split has
    nothing to divide by. Today the standings say the pot wasn't paid out and leave its fate to the
    admins. Refund everyone's committed money? Roll it into the other pot? Something else?
+   *(Narrowed Sept 19, 2026 by A28: a phase nobody wagered in now has a $0 pool and needs no
+   answer at all. The question is only about wagers that were placed and didn't hit.)*
 2. **The self-bet line when under $20 is wagered.** Pat's rule counts self-bets up to a quarter of
    the phase entry *"if that total entry is fully submitted."* Andrew read that as: at close, a
    quarter of what was actually **wagered** counts — including below the $20 floor ($8 wagered

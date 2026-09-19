@@ -15,8 +15,8 @@
 --
 -- ...with two deliberate exceptions:
 --
---   · Devin Arand lands on $18 of his $20 Phase 2 entry, 5 picks. The first
---     $20 of an entry is committed either way, so $2 forfeits to the pot.
+--   · Devin Arand lands on $18 of his $20 Phase 2 entry, 5 picks. He wagered
+--     something, so the first $20 of the entry is committed and $2 forfeits.
 --     If the chase list doesn't name him, something is wrong with the list.
 --   · Mike Vemmer is PAT'S OWN WORKED EXAMPLE: a $50 Phase 2 entry, $20
 --     wagered, $12 of it on himself. $12 is inside his placement-time cap (a

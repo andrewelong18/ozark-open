@@ -237,10 +237,11 @@ function assertIdentities(table: ResultsTable) {
   }
 }
 
-test("participants with no placements fund the pot with the minimum and get the rest back", () => {
-  // Ann: $40 entered, one $5 wager that hit for $35 → W = 5, so $20 funds the
-  // pot ($15 with no wager behind it) and $20 comes back. Bo: $30 entered,
-  // nothing placed → $20 forfeits, $10 back.
+test("a wager under the floor funds the pot with the minimum; no wager funds nothing", () => {
+  // Ann: $40 entered, one $5 wager that hit for $35 → W = 5, so the floor
+  // bites: $20 funds the pot ($15 with no wager behind it) and $20 comes back.
+  // Bo: $30 entered, nothing placed → he never entered as far as the money is
+  // concerned (A28), so he commits nothing and all $30 comes back.
   const table = buildPhaseResults(
     1,
     [participant("a", "Ann", { p1: 40 }), participant("b", "Bo", { p1: 30 })],
@@ -248,7 +249,7 @@ test("participants with no placements fund the pot with the minimum and get the 
     RULES
   )
   assert.equal(table.scope, 1)
-  assert.equal(table.pool, 40)
+  assert.equal(table.pool, 20)
   assert.equal(table.entries, 70)
   assert.equal(table.sum_theoretical, 35)
 
@@ -257,16 +258,17 @@ test("participants with no placements fund the pot with the minimum and get the 
   assert.equal(ann.committed, 20)
   assert.equal(ann.forfeit_unwagered, 15)
   assert.equal(ann.refund_unwagered, 20)
-  assert.equal(ann.actual, 40) // sole theoretical holder takes the whole pot
-  assert.equal(cashReturned(ann), 60)
-  assert.equal(ann.profit_loss, 20)
+  assert.equal(ann.actual, 20) // sole theoretical holder takes the whole pot
+  assert.equal(cashReturned(ann), 40)
+  assert.equal(ann.profit_loss, 0)
 
   const bo = table.rows.find((r) => r.user_id === "b")!
-  assert.equal(bo.committed, 20)
-  assert.equal(bo.forfeit_unwagered, 20)
-  assert.equal(bo.refund_unwagered, 10)
+  assert.equal(bo.committed, 0)
+  assert.equal(bo.forfeit_unwagered, 0)
+  assert.equal(bo.refund_unwagered, 30)
   assert.equal(bo.actual, 0)
-  assert.equal(bo.profit_loss, -20)
+  assert.equal(cashReturned(bo), 30)
+  assert.equal(bo.profit_loss, 0) // whole again, not $20 down
   assertIdentities(table)
 })
 
@@ -386,7 +388,10 @@ test("a non-player's picks are never scaled, however they are linked (A15)", () 
   assert.equal(table.rows[0].theoretical, 24)
 })
 
-test("entered and never wagered: the first $20 is in the pot, the rest comes back", () => {
+test("entered and never wagered: the whole entry comes back (A28)", () => {
+  // Steve paid for a $50 entry and placed nothing. He keeps his standings row
+  // — he is visibly even, not missing — but none of his money funds the pot,
+  // so the pool is Ann's $20 alone and Steve's P/L is zero rather than −$20.
   const table = buildPhaseResults(
     1,
     [participant("s", "Steve", { p1: 50 }), participant("a", "Ann", { p1: 20 })],
@@ -394,8 +399,28 @@ test("entered and never wagered: the first $20 is in the pot, the rest comes bac
     RULES
   )
   const steve = table.rows.find((r) => r.user_id === "s")!
+  assert.equal(steve.committed, 0)
+  assert.equal(steve.forfeit_unwagered, 0)
+  assert.equal(steve.refund_unwagered, 50)
+  assert.equal(cashReturned(steve), 50)
+  assert.equal(steve.profit_loss, 0)
+  assert.equal(table.pool, 20)
+  assertIdentities(table)
+})
+
+test("one wagered dollar puts the floor back in the pot — the A28 cliff", () => {
+  // The same $50 entry with a single $1 wager behind it: the floor bites in
+  // full, so $20 is committed, $19 forfeits and $30 comes back. Deliberate
+  // (PRD §12 A28) — the identities hold on both sides of the cliff.
+  const table = buildPhaseResults(
+    1,
+    [participant("s", "Steve", { p1: 50 }), participant("a", "Ann", { p1: 20 })],
+    [row("a", 20, 30), row("s", 1, 0)],
+    RULES
+  )
+  const steve = table.rows.find((r) => r.user_id === "s")!
   assert.equal(steve.committed, 20)
-  assert.equal(steve.forfeit_unwagered, 20)
+  assert.equal(steve.forfeit_unwagered, 19)
   assert.equal(steve.refund_unwagered, 30)
   assert.equal(steve.profit_loss, -20)
   assert.equal(table.pool, 40)

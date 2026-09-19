@@ -148,11 +148,12 @@ UPDATE public.tournament_participants tp
    AND u.email IN ('andrewelong18@gmail.com', 'pleicht17@gmail.com');
 
 -- Steve is the deliberate "paid the entry, never placed a wager" control, now
--- with money on it (ADR 0002): $50 in Phase 1 and nothing in Phase 2. At the
--- Phase 1 close the first $20 of it forfeits to the pot and $30 comes back,
--- so he surfaces in the standings with $0 theoretical, $30 refunded and a
--- $20 loss — and at the Phase 2 close he is the one approved member with no
--- Phase 2 entry.
+-- with money on it (ADR 0002 as amended by A28): $50 in Phase 1 and nothing in
+-- Phase 2. Wagering nothing is never having entered, so none of his $50 funds
+-- the Phase 1 pot and all of it comes back: he surfaces in the standings with
+-- $0 theoretical, $50 refunded and a P/L of exactly $0. He is still on the
+-- Phase 1 chase line — the pick minimum is unmet — and at the Phase 2 close he
+-- is the one approved member with no Phase 2 entry.
 UPDATE public.tournament_participants tp
    SET phase1_entry_fee = 50, phase2_entry_fee = NULL, is_player = true
   FROM public.users u

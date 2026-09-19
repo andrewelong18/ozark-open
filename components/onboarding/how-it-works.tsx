@@ -58,7 +58,7 @@ export function howItWorksCards(rules: HowItWorksRules): HowItWorksCard[] {
     {
       icon: Scale,
       title: `${minPicks} picks minimum, and wager it all`,
-      body: `In every phase you enter, place at least ${minPicks} picks and wager the whole entry. Leave money unwagered and the first $${min} stays in the pot — the rest comes back.`,
+      body: `In every phase you enter, place at least ${minPicks} picks and wager the whole entry. Leave some of it unwagered and the first $${min} stays in the pot — the rest comes back. Wager none of it and the whole entry comes back.`,
       photo: "/onboarding/jake-step-3.jpg",
     },
     {

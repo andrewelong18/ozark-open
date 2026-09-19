@@ -43,7 +43,8 @@ reporting.
   bettors named. Clearing them deletes those wagers for good. Two things to know before you tap
   it: **the pots are still funded by the entries, not the wagers**, and the people named
   **drop below their phase entry and are told nothing** — you have to text them, because
-  unwagered entry forfeits or comes back at that phase's close.
+  unwagered entry forfeits or comes back at that phase's close — and a phase with nothing
+  wagered in it comes back whole (A28).
 - Whatever you choose, a save state is taken before anything is written, so
   `/admin/snapshots` undoes the whole upload.
 
@@ -253,7 +254,8 @@ so the project can pause and the automatic save states can stop.
 - [ ] **Chase the stragglers.** `/admin/close` → the chase list. Each phase is its own pot, so
       before the Phase 1 close it names **everyone entered in Phase 1** who is short of 5 picks,
       short of their Phase 1 entry, or over the self-bet line — with what it will cost them
-      ("$12 forfeits"). That includes people who paid and never bet. Copy the one-line "text
+      ("$12 forfeits"). That includes people who paid and never bet — their money is safe under
+      A28, the five picks they owe the group are not. Copy the one-line "text
       these people" and send it.
 - [ ] **Confirm the deadlines** one more time — they're the thing that closes betting, and they're
       editable right up to the moment they fire.
@@ -307,8 +309,10 @@ so the project can pause and the automatic save states can stop.
       with no Phase 2 entry. Anyone who paid for both phases but only has Phase 1 typed in can't bet
       tonight — fix it on `/admin/people` before telling the group.
 - [ ] Confirm on `/bets` that Phase 2 is taking wagers and Phase 1 is still readable as closed.
-- [ ] Tell the group Phase 2 is live. **Remind them to wager their whole Phase 2 entry** — of what
-      they leave unwagered, the first $20 forfeits to the pot; it's what the Saturday chase is about.
+- [ ] Tell the group Phase 2 is live. **Remind them to wager their whole Phase 2 entry** — once
+      they've wagered anything, the first $20 of what they leave unwagered forfeits to the pot;
+      it's what the Saturday chase is about. (Wagering *nothing* costs nothing — the whole entry
+      comes back, A28 — so don't tell the group otherwise. It's still five picks they owe.)
 
 **Saturday night** — the end:
 

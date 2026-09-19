@@ -112,13 +112,37 @@ test("nobody to chase says so, rather than printing an empty list", () => {
   assert.match(list.line, /nobody to chase, everyone entered is complete/)
 })
 
-test("an entrant who never wagered IS chased — the first $20 forfeits at this close", () => {
+test("an entrant who never wagered IS chased — the whole entry is about to come back", () => {
   // Under one pot this was Q2's exemption (betting entirely in the other
-  // phase was fine). Under two pots the entry is committed to this pot.
+  // phase was fine). Under two pots the entry belongs to this pot — and since
+  // A28 an untouched entry forfeits nothing, so the whole $40 comes back. The
+  // text is about the picks they meant to make, not money they're losing.
   const list = buildChaseList([ALEX], new Map(), rules, 1)
   assert.equal(list.people[0].needs_a_text, true)
   assert.equal(list.people[0].pick_count, 0)
-  assert.equal(list.people[0].reason, "$0 of $40, 0 of 5 picks → $20 forfeits, $20 comes back")
+  assert.equal(list.people[0].forfeit, 0)
+  assert.equal(list.people[0].reason, "$0 of $40, 0 of 5 picks → $40 comes back")
+})
+
+test("a zero-wager entrant stays in the top group, though they forfeit $0 (A28)", () => {
+  // Zz Refund wagered $25 of $40: over the floor, so nothing forfeits and $15
+  // simply comes back — the least urgent kind of incomplete. Alex wagered
+  // nothing at all: also $0 forfeited, but the biggest gap on the board.
+  // Sorting on (forfeit > 0) alone would rank them equal and fall through to
+  // the name, putting Alex last. "Forfeits, or did nothing" keeps him first.
+  const refundOnly: ChaseParticipant = { ...ALEX, user_id: "ref", display_name: "Zz Refund" }
+  const list = buildChaseList(
+    [refundOnly, ALEX],
+    new Map([["ref", picks(5, 1, 5, "ref")]]),
+    rules,
+    1
+  )
+  assert.equal(list.chase[0].forfeit, 0)
+  assert.equal(list.chase[1].forfeit, 0)
+  assert.deepEqual(
+    list.chase.map((p) => p.display_name),
+    ["Alex Leslie", "Zz Refund"]
+  )
 })
 
 test("over the minimum but under the entry reads as money coming back", () => {

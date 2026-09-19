@@ -228,9 +228,10 @@ export function StandingsToggle({
                 Actual share = your recognised theoretical payout ÷
                 everyone&apos;s × the {dollars(table.pool)} Phase {scope} pool.
                 The pool is every Phase {scope} entry that was committed minus
-                voided stakes, which come back. Entry money above the minimum
-                that went unwagered comes back too, and is included in Payout.
-                No house, no rake — the pool pays itself out.
+                voided stakes, which come back. Entry money that went unwagered
+                comes back too — above the minimum if you wagered some of it,
+                all of it if you wagered none — and is included in Payout. No
+                house, no rake — the pool pays itself out.
               </>
             )}
           </p>

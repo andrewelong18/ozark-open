@@ -167,7 +167,7 @@ Why server-side: a malicious user could bypass client-side checks. The validatio
 
 Lives in: a Postgres view (`placement_payouts_view`, computing from each pick's result and the placement's odds snapshot) plus a small TypeScript helper in `lib/payouts.ts` for the per-user roll-up.
 
-Why a view: the payout for any user is fully determined by their placements and the uploaded pick results. A view keeps it always-fresh and avoids stale cached values. The actual-payout proportional split runs in TypeScript at render time because it requires summing across all users (a single query result, not a per-row computation) — **once per phase since Sprint 30**, each phase its own pot: `pool = Σ min(entry, max(wagered, entry_fee_min)) − voids`, with self-bets over a quarter of what was wagered scaled out (ADR 0002). The combined standings are the per-person sum of the two.
+Why a view: the payout for any user is fully determined by their placements and the uploaded pick results. A view keeps it always-fresh and avoids stale cached values. The actual-payout proportional split runs in TypeScript at render time because it requires summing across all users (a single query result, not a per-row computation) — **once per phase since Sprint 30**, each phase its own pot: `pool = Σ (wagered === 0 ? 0 : min(entry, max(wagered, entry_fee_min))) − voids` (a member who wagered nothing in the phase funds no pot and gets the whole entry back — A28), with self-bets over a quarter of what was wagered scaled out (ADR 0002). The combined standings are the per-person sum of the two.
 
 ---
 

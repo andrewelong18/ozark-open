@@ -33,12 +33,14 @@
 --
 --   · Devin Arand has only THREE Phase 1 picks and $8 of a $20 Phase 1 entry
 --     — he is the straggler Act 6's chase list must catch. At the close $12
---     of his entry forfeits to the pot (the first $20 is committed either
---     way), and only $2 of his $5 on himself counts: the self-bet line at
---     close is a quarter of what he actually wagered.
+--     of his entry forfeits to the pot (he wagered something, so the first $20
+--     is committed), and only $2 of his $5 on himself counts: the self-bet
+--     line at close is a quarter of what he actually wagered.
 --   · Steve Esswein gets NO placements at all — the "paid the entry, never
---     wagered" control, entered for $50 in Phase 1 only. $20 forfeits, $30
---     comes back. He is on the Phase 1 chase line too, by design.
+--     wagered" control, entered for $50 in Phase 1 only. Since A28 nothing
+--     forfeits and the whole $50 comes back, so he finishes Phase 1 dead even.
+--     He is on the Phase 1 chase line too, by design: the money is safe, the
+--     five picks he owes the group are not.
 --
 -- Idempotent: clears these bettors' PHASE 1 rows first, in its own statement.
 -- (Sprint 21 / #95 — it used to do that in a CTE alongside the INSERT, where
