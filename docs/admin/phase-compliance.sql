@@ -24,7 +24,9 @@
 -- and the reason says what it COSTS if nothing changes, with the same
 -- arithmetic as lib/validation.ts phaseStanding():
 --
---   committed C = min(E, max(W, entry_fee_min))
+--   committed C = W = 0 ? 0 : min(E, max(W, entry_fee_min))
+--                              wagering nothing is never having entered, so
+--                              the floor needs a wager behind it (A28)
 --   forfeits    = C − W        (the pot keeps it, no wager behind it)
 --   comes back  = E − C        (refunded out of band)
 --   self counts = min(S, floor(pct × W))   — non-players have no self-bets
@@ -112,7 +114,9 @@ standing AS (
     totals.*,
     c.phase                                                            AS closing_phase,
     c.min_picks_per_phase                                              AS min_picks,
-    LEAST(totals.entry, GREATEST(totals.wagered, c.entry_fee_min))     AS committed,
+    CASE WHEN totals.wagered = 0 THEN 0
+         ELSE LEAST(totals.entry, GREATEST(totals.wagered, c.entry_fee_min))
+    END                                                                AS committed,
     LEAST(totals.self_total, floor(c.max_self_bet_pct * totals.wagered)::int) AS self_recognized
   FROM totals CROSS JOIN closing c
 )
@@ -149,7 +153,7 @@ SELECT
   over_entry,
   closing_phase
 FROM compliance_standing
-ORDER BY needs_a_text DESC, (forfeits > 0) DESC, display_name;
+ORDER BY needs_a_text DESC, (entry - wagered) DESC, display_name;
 
 -- Approved members with NO entry for the closing phase — not chased, counted.
 SELECT count(*) AS approved_but_not_entered_in_closing_phase
@@ -186,7 +190,7 @@ SELECT
           ''
         ) ||
       ')',
-      ', ' ORDER BY (forfeits > 0) DESC, display_name
+      ', ' ORDER BY (entry - wagered) DESC, display_name
     ) FILTER (WHERE needs_a_text),
     ' — nobody to chase, everyone entered is complete.'
   ) AS chase_list

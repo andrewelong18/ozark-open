@@ -112,13 +112,38 @@ test("nobody to chase says so, rather than printing an empty list", () => {
   assert.match(list.line, /nobody to chase, everyone entered is complete/)
 })
 
-test("an entrant who never wagered IS chased — the first $20 forfeits at this close", () => {
+test("an entrant who never wagered IS chased — the whole entry is about to come back", () => {
   // Under one pot this was Q2's exemption (betting entirely in the other
-  // phase was fine). Under two pots the entry is committed to this pot.
+  // phase was fine). Under two pots the entry belongs to this pot — and since
+  // A28 an untouched entry forfeits nothing, so the whole $40 comes back. The
+  // text is about the picks they meant to make, not money they're losing.
   const list = buildChaseList([ALEX], new Map(), rules, 1)
   assert.equal(list.people[0].needs_a_text, true)
   assert.equal(list.people[0].pick_count, 0)
-  assert.equal(list.people[0].reason, "$0 of $40, 0 of 5 picks → $20 forfeits, $20 comes back")
+  assert.equal(list.people[0].forfeit, 0)
+  assert.equal(list.people[0].reason, "$0 of $40, 0 of 5 picks → $40 comes back")
+})
+
+test("the chase list ranks on unwagered money, not on the forfeit (A28)", () => {
+  // Untouched $40 entry vs. $38 of $40 wagered. The second forfeits $2 and the
+  // first forfeits nothing, so the pre-A28 tiebreak on (forfeit > 0) would put
+  // the $2 gap first. Unwagered money is the honest ranking.
+  const near: ChaseParticipant = { ...ALEX, user_id: "near", display_name: "Aa Near" }
+  const list = buildChaseList(
+    [near, ALEX],
+    new Map([["near", picks(5, 1, 3, "near")]]),
+    rules,
+    1
+  )
+  // Aa Near wagered $15 of $40 — under the floor, so $5 forfeits and $25 is
+  // unwagered. Alex wagered nothing: $0 forfeits, $40 unwagered. The old
+  // tiebreak on (forfeit > 0) put Aa Near first, and so would the name.
+  assert.equal(list.chase[0].forfeit, 0)
+  assert.equal(list.chase[1].forfeit, 5)
+  assert.deepEqual(
+    list.chase.map((p) => p.display_name),
+    ["Alex Leslie", "Aa Near"]
+  )
 })
 
 test("over the minimum but under the entry reads as money coming back", () => {

@@ -13,8 +13,10 @@
 // SINCE SPRINT 30 (ADR 0002) EACH CLOSE IS ITS OWN RECKONING. Every phase is
 // its own entry and its own pot, so at Phase 1 close everyone entered in
 // Phase 1 who isn't complete gets a text — including the member who paid and
-// never wagered, because the first $entry_fee_min of their entry forfeits at
-// that moment. Phase 2 is not mentioned at all on Thursday, and at Phase 2
+// never wagered. Since A28 that member forfeits nothing (their whole entry
+// comes back), so the text is about the picks they meant to make rather than
+// money they are about to lose — but it is the same text, and they are still
+// the biggest gap on the list. Phase 2 is not mentioned on Thursday, and at Phase 2
 // close Phase 1's stragglers are not chased: that phase is closed, and
 // whatever stood, stands (Q3). Members with no entry for the closing phase are
 // not on the list — they chose to sit it out — but their count is reported,
@@ -115,7 +117,10 @@ function reasonFor(s: PhaseStanding, minPicks: number): string | null {
  * Everyone with an entry for that phase is listed; anyone whose standing is
  * not complete needs a text. There is no zero-placement exemption any more —
  * under one pot, betting entirely in the other phase was legitimate (Q2);
- * under two, an entry with nothing on it forfeits its first $20 at this close.
+ * under two, an entry with nothing on it is money that was meant to be in play
+ * and isn't. It comes back rather than forfeiting (A28), so the ordering below
+ * ranks on unwagered money, not on the forfeit: after A28 an untouched entry
+ * forfeits $0, and sorting on that would bury the very person to text first.
  */
 export function buildChaseList(
   participants: ChaseParticipant[],
@@ -155,7 +160,7 @@ export function buildChaseList(
   people.sort(
     (a, b) =>
       Number(b.needs_a_text) - Number(a.needs_a_text) ||
-      Number(b.forfeit > 0) - Number(a.forfeit > 0) ||
+      b.entry - b.wagered - (a.entry - a.wagered) ||
       a.display_name.localeCompare(b.display_name)
   )
 
