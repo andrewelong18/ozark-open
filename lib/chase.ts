@@ -119,8 +119,9 @@ function reasonFor(s: PhaseStanding, minPicks: number): string | null {
  * under one pot, betting entirely in the other phase was legitimate (Q2);
  * under two, an entry with nothing on it is money that was meant to be in play
  * and isn't. It comes back rather than forfeiting (A28), so the ordering below
- * ranks on unwagered money, not on the forfeit: after A28 an untouched entry
- * forfeits $0, and sorting on that would bury the very person to text first.
+ * groups on "costs money OR wagered nothing" rather than on the forfeit alone:
+ * an untouched entry forfeits $0, and sorting on that would bury the very
+ * person to text first.
  */
 export function buildChaseList(
   participants: ChaseParticipant[],
@@ -160,7 +161,12 @@ export function buildChaseList(
   people.sort(
     (a, b) =>
       Number(b.needs_a_text) - Number(a.needs_a_text) ||
-      b.entry - b.wagered - (a.entry - a.wagered) ||
+      // "Costs them money, or they've done nothing at all." Before A28 the
+      // second half was covered by the first, because an untouched entry
+      // forfeited its floor. Now it forfeits $0, and without the explicit
+      // wagered === 0 the person who has done the least would sort last.
+      Number(b.forfeit > 0 || b.wagered === 0) -
+        Number(a.forfeit > 0 || a.wagered === 0) ||
       a.display_name.localeCompare(b.display_name)
   )
 

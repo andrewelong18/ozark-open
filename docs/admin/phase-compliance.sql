@@ -153,7 +153,7 @@ SELECT
   over_entry,
   closing_phase
 FROM compliance_standing
-ORDER BY needs_a_text DESC, (entry - wagered) DESC, display_name;
+ORDER BY needs_a_text DESC, (forfeits > 0 OR wagered = 0) DESC, display_name;
 
 -- Approved members with NO entry for the closing phase — not chased, counted.
 SELECT count(*) AS approved_but_not_entered_in_closing_phase
@@ -190,7 +190,7 @@ SELECT
           ''
         ) ||
       ')',
-      ', ' ORDER BY (entry - wagered) DESC, display_name
+      ', ' ORDER BY (forfeits > 0 OR wagered = 0) DESC, display_name
     ) FILTER (WHERE needs_a_text),
     ' — nobody to chase, everyone entered is complete.'
   ) AS chase_list

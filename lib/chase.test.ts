@@ -124,25 +124,24 @@ test("an entrant who never wagered IS chased — the whole entry is about to com
   assert.equal(list.people[0].reason, "$0 of $40, 0 of 5 picks → $40 comes back")
 })
 
-test("the chase list ranks on unwagered money, not on the forfeit (A28)", () => {
-  // Untouched $40 entry vs. $38 of $40 wagered. The second forfeits $2 and the
-  // first forfeits nothing, so the pre-A28 tiebreak on (forfeit > 0) would put
-  // the $2 gap first. Unwagered money is the honest ranking.
-  const near: ChaseParticipant = { ...ALEX, user_id: "near", display_name: "Aa Near" }
+test("a zero-wager entrant stays in the top group, though they forfeit $0 (A28)", () => {
+  // Zz Refund wagered $25 of $40: over the floor, so nothing forfeits and $15
+  // simply comes back — the least urgent kind of incomplete. Alex wagered
+  // nothing at all: also $0 forfeited, but the biggest gap on the board.
+  // Sorting on (forfeit > 0) alone would rank them equal and fall through to
+  // the name, putting Alex last. "Forfeits, or did nothing" keeps him first.
+  const refundOnly: ChaseParticipant = { ...ALEX, user_id: "ref", display_name: "Zz Refund" }
   const list = buildChaseList(
-    [near, ALEX],
-    new Map([["near", picks(5, 1, 3, "near")]]),
+    [refundOnly, ALEX],
+    new Map([["ref", picks(5, 1, 5, "ref")]]),
     rules,
     1
   )
-  // Aa Near wagered $15 of $40 — under the floor, so $5 forfeits and $25 is
-  // unwagered. Alex wagered nothing: $0 forfeits, $40 unwagered. The old
-  // tiebreak on (forfeit > 0) put Aa Near first, and so would the name.
   assert.equal(list.chase[0].forfeit, 0)
-  assert.equal(list.chase[1].forfeit, 5)
+  assert.equal(list.chase[1].forfeit, 0)
   assert.deepEqual(
     list.chase.map((p) => p.display_name),
-    ["Alex Leslie", "Aa Near"]
+    ["Alex Leslie", "Zz Refund"]
   )
 })
 

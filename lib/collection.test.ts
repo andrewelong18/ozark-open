@@ -7,7 +7,6 @@ import {
   MAX_RECORDED_PAYMENT,
   collectionStanding,
   entryOwed,
-  isPaidInFull,
   parsePaidAmount,
 } from "./collection.ts"
 
@@ -69,11 +68,32 @@ test("a missing paid_amount column reads as nothing paid", () => {
   assert.deepEqual(standing.outstanding, [{ name: "Legacy Lee", owed: 20 }])
 })
 
-test("isPaidInFull is derived, never stored, and false with nothing to pay for", () => {
-  assert.equal(isPaidInFull(person("A", { p1: 20, p2: 20 }, 40)), true)
-  assert.equal(isPaidInFull(person("B", { p1: 20, p2: 20 }, 39)), false)
-  assert.equal(isPaidInFull(person("C", { p1: 20 }, 25)), true)
-  assert.equal(isPaidInFull(person("D", {}, 0)), false)
+test("entryOwed: a row in no pot owes nothing, entries on it or not (A28)", () => {
+  // A revoked member keeps their entries so a re-approval restores them, but
+  // they fund neither pot — so they are not money still owed.
+  assert.equal(entryOwed({ ...person("Gone", { p1: 20, p2: 20 }, 40), in_pot: false }), 0)
+  // Absent flag = the pre-A28 behaviour every other caller relies on.
+  assert.equal(entryOwed(person("Here", { p1: 20, p2: 20 }, 40)), 40)
+  assert.equal(entryOwed({ ...person("Here", { p1: 20, p2: 20 }, 40), in_pot: true }), 40)
+})
+
+test("collection: money against no pot is a refund, not collected (A28)", () => {
+  // Gone Gary was revoked holding $40 of entries and $40 paid; No-Entry Nia
+  // was approved before her entries were typed in and sent $20 anyway.
+  // Neither funds a pot, so nothing they paid counts as collected and all of
+  // it is listed to refund.
+  const standing = collectionStanding([
+    { ...person("Gone Gary", { p1: 20, p2: 20 }, 40), in_pot: false },
+    { ...person("No-Entry Nia", {}, 20), in_pot: false },
+    person("Paid Pat", { p1: 20 }, 20),
+  ])
+  assert.equal(standing.expected, 20)
+  assert.equal(standing.collected, 20)
+  assert.deepEqual(standing.outstanding, [])
+  assert.deepEqual(standing.overpaid, [
+    { name: "Gone Gary", amount: 40 },
+    { name: "No-Entry Nia", amount: 20 },
+  ])
 })
 
 test("parsePaidAmount takes whole dollars from 0 up to the typo guard", () => {

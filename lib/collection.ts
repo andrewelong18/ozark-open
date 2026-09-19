@@ -15,6 +15,15 @@
 // came in against a phase they aren't in any more is a refund Pat owes them
 // (his rule 1), so it is listed rather than left to a spreadsheet in October.
 //
+// A28 finished that thought. A row in NO pot at all — revoked, or approved
+// with no entry recorded in either phase — owes nothing, so every dollar
+// against it is a refund. `in_pot` is how a caller says so; without it a
+// revoked member's preserved entries would read as money they still owe.
+// The rule lives here rather than in the console's .map() because
+// scripts/collection-roundtrip.ts checks this arithmetic against SQL ground
+// truth, and a policy buried in a React component is a policy no harness can
+// reach.
+//
 // It exists as one helper rather than two because the console and the
 // collection text answer the same question in two places, and this project
 // has already paid once for letting two surfaces compute the same money
@@ -28,6 +37,10 @@ export type CollectionParticipant = {
   phase2_entry_fee: number | string | null
   /** Absent on a database that predates the column; treated as nothing paid. */
   paid_amount?: number | null
+  /** False = this row funds no pot (revoked, or no entry in either phase), so
+   *  it owes nothing and everything paid against it is a refund (A28).
+   *  Defaults to true, which is every caller that predates the flag. */
+  in_pot?: boolean
 }
 
 export type Outstanding = {
@@ -61,10 +74,16 @@ function fee(value: number | string | null | undefined): number {
 }
 
 /** What a member owes: the sum of the phase entries they are in. Zero when
- *  no entry has been recorded yet. */
+ *  no entry has been recorded yet, and zero for a row in no pot — a revoked
+ *  member's entries stay on the row, but they stopped being money owed the
+ *  moment the revoke took them out of both pots (A28). */
 export function entryOwed(
-  participant: Pick<CollectionParticipant, "phase1_entry_fee" | "phase2_entry_fee">
+  participant: Pick<
+    CollectionParticipant,
+    "phase1_entry_fee" | "phase2_entry_fee" | "in_pot"
+  >
 ): number {
+  if (participant.in_pot === false) return 0
   return fee(participant.phase1_entry_fee) + fee(participant.phase2_entry_fee)
 }
 
@@ -106,15 +125,6 @@ export function collectionStanding(
   outstanding.sort((a, b) => b.owed - a.owed || a.name.localeCompare(b.name))
   overpaid.sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name))
   return { expected, collected, outstanding, overpaid }
-}
-
-/** Has this member's entry been collected in full? Nobody with no entry
- *  recorded is "paid in full" — there is nothing to have paid for. */
-export function isPaidInFull(
-  participant: Pick<CollectionParticipant, "phase1_entry_fee" | "phase2_entry_fee" | "paid_amount">
-): boolean {
-  const owed = entryOwed(participant)
-  return owed > 0 && paid(participant) >= owed
 }
 
 /** A typo guard, not a rule. Two phases at $50 each is $100, so a three-figure

@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label"
 import { EmptyState } from "@/components/modules/empty-state"
 import { formatRelativeTime, formatTimestamp } from "@/lib/format"
 import { funnelStage, type RosterPerson, type RosterRequest } from "@/lib/roster"
-import { collectionStanding, entryOwed, isPaidInFull } from "@/lib/collection"
+import { collectionStanding, entryOwed } from "@/lib/collection"
 import { describeRequest, VENMO_MEMO } from "@/lib/entry-request"
 import type { SkippedLine } from "@/lib/invites"
 
@@ -342,7 +342,9 @@ function EditPanel({
   const [confirmingRevoke, setConfirmingRevoke] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
 
-  const owed = entryOwed(person)
+  // Same in_pot semantics as the strip: a revoked row's entries stay on it but
+  // stopped funding anything, so they stopped being money owed (A28).
+  const owed = entryOwed({ ...person, in_pot: person.status === "ready" })
   const dirty =
     name.trim() !== person.name ||
     phase1.trim() !== entryDraft(person.phase1_entry_fee) ||
@@ -451,9 +453,19 @@ function EditPanel({
           </div>
         </div>
         <p className="text-xs text-text-muted">
-          Their ${owed} in entries counts in the pots either way — this only
-          tracks what&rsquo;s actually been handed over. Partial amounts are
-          fine; anything over what they owe is a refund Pat owes them.
+          {owed === 0 ? (
+            <>
+              They have no entry in either pot, so they owe nothing — anything
+              recorded here is money to give back. This only tracks what&rsquo;s
+              actually been handed over.
+            </>
+          ) : (
+            <>
+              Their ${owed} in entries counts in the pots either way — this only
+              tracks what&rsquo;s actually been handed over. Partial amounts are
+              fine; anything over what they owe is a refund Pat owes them.
+            </>
+          )}
         </p>
       </div>
 
@@ -805,9 +817,18 @@ function AddMemberBox({
  * The collection headline — what's in against what's owed, over the table the
  * admin is already reading.
  *
- * Counted over APPROVED bettors only (`status === "ready"`), which is the same
- * set the pots are built from: a live participant row with an entry and no
- * revoke. Someone still awaiting approval owes nothing yet.
+ * What's OWED is counted over approved bettors only (`status === "ready"`),
+ * which is the same set the pots are built from: a live participant row with
+ * an entry and no revoke. Someone still awaiting approval owes nothing yet.
+ *
+ * What's REFUNDABLE has to reach further. A row carrying money but no entry in
+ * either phase — the ordinary state after the Sprint 30 reset, and of anyone
+ * who paid before an admin typed their entries in — is `fee_unset`, and a
+ * revoked row is `revoked`; both are `not_ready`, so both used to be filtered
+ * out here and their money never appeared anywhere. Neither is in any pot
+ * (ADR 0002), so neither owes anything and every dollar recorded against them
+ * comes back. `in_pot: false` is what says that, and the rule lives in
+ * lib/collection.ts so the round-trip harness checks it against SQL too.
  *
  * The number is deliberately not a rule anywhere. An unpaid member still funds
  * the pots on paper (ADR 0002) — which is exactly why an admin needs to see
@@ -815,14 +836,16 @@ function AddMemberBox({
  */
 function CollectionStrip({ people }: { people: RosterPerson[] }) {
   const approved = people.filter((p) => p.status === "ready")
-  if (approved.length === 0) return null
+  const counted = people.filter((p) => p.status === "ready" || p.paid_amount > 0)
+  if (counted.length === 0) return null
 
   const standing = collectionStanding(
-    approved.map((p) => ({
+    counted.map((p) => ({
       display_name: p.name,
       phase1_entry_fee: p.phase1_entry_fee,
       phase2_entry_fee: p.phase2_entry_fee,
       paid_amount: p.paid_amount,
+      in_pot: p.status === "ready",
     }))
   )
   const short = standing.expected - standing.collected
@@ -835,10 +858,16 @@ function CollectionStrip({ people }: { people: RosterPerson[] }) {
           ${standing.collected} of ${standing.expected} collected
         </span>
         <span className="mt-0.5 block text-xs text-text-muted">
-          {short > 0
-            ? `${standing.outstanding.length} ${standing.outstanding.length === 1 ? "entry" : "entries"} still out — $${short}. The pots count all ${approved.length} either way.`
-            : `All ${approved.length} ${approved.length === 1 ? "entry" : "entries"} are in.`}
-          {refunds > 0 && ` $${refunds} paid over the entries — refund it.`}
+          {/* With nobody approved yet there is no entry to be in or out, but
+              there can still be money sitting against nothing — say that
+              rather than "All 0 entries are in". */}
+          {approved.length === 0
+            ? "No entries recorded yet."
+            : short > 0
+              ? `${standing.outstanding.length} ${standing.outstanding.length === 1 ? "entry" : "entries"} still out — $${short}. The pots count all ${approved.length} either way.`
+              : `All ${approved.length} ${approved.length === 1 ? "entry" : "entries"} are in.`}
+          {refunds > 0 &&
+            ` $${refunds} to refund — paid over an entry, or against no entry at all.`}
         </span>
       </div>
       <Badge variant={short > 0 ? "amber" : "green"} uppercase>
@@ -913,7 +942,7 @@ export function PeopleConsole({
                 : null
           const open = openKey === person.key
           const close = () => setOpenKey(null)
-          const owed = entryOwed(person)
+          const owed = entryOwed({ ...person, in_pot: person.status === "ready" })
 
           return (
             <div
@@ -957,18 +986,28 @@ export function PeopleConsole({
                         <span className="ml-1.5">· not on the invite list</span>
                       )}
                     </div>
-                    {/* The entries, and what's still owed — only for approved
-                        bettors, and only when they're short: a row that says
-                        nothing has nothing owing. */}
-                    {person.status === "ready" && (
+                    {/* The entries, and the money gap either way. Shown for an
+                        approved bettor, and for anyone else still holding a
+                        recorded payment — a row that says nothing and owes
+                        nothing stays quiet. Three exclusive cases, because
+                        `owed − paid` goes negative on an overpayment and used
+                        to render as "owes $-20". */}
+                    {(person.status === "ready" || person.paid_amount > 0) && (
                       <div className="text-xs text-text-muted">
-                        {entrySummary(person)}
-                        {!isPaidInFull(person) && (
+                        {person.status === "ready" ? entrySummary(person) : "No entry"}
+                        {person.paid_amount > owed ? (
+                          <span className="ml-1.5 text-caution-strong">
+                            · refund ${person.paid_amount - owed}
+                            {owed === 0
+                              ? ` ($${person.paid_amount} in, no entry to put it against)`
+                              : ` ($${person.paid_amount} in against $${owed})`}
+                          </span>
+                        ) : person.paid_amount < owed ? (
                           <span className="ml-1.5 text-caution-strong">
                             · owes ${owed - person.paid_amount}
                             {person.paid_amount > 0 && ` ($${person.paid_amount} in)`}
                           </span>
-                        )}
+                        ) : null}
                       </div>
                     )}
                     {/* Somebody who asked and is still waiting: the admin's cue
