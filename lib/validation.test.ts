@@ -468,20 +468,35 @@ test("standing: under the $20 minimum — the gap forfeits, the rest comes back"
   assert.equal(s.issues[0].message, "2 more picks needed in Phase 1 (3 of 5).")
   assert.equal(
     s.issues[1].message,
-    "$8 forfeits to the Phase 1 pot unless you wager it — the first $20 of an entry is committed either way."
+    "$8 forfeits to the Phase 1 pot unless you wager it — once you've wagered anything, the first $20 of an entry is committed."
   )
 })
 
-test("standing: entered and never wagered — $20 forfeits, the rest comes back", () => {
+test("standing: entered and never wagered — the whole entry comes back (A28)", () => {
+  // Wagering nothing at all is never having entered: the floor needs a wager
+  // behind it, so nothing is committed and nothing forfeits.
   const s = phaseStanding([], 50, 1, rules)
-  assert.equal(s.committed, 20)
-  assert.equal(s.forfeit, 20)
-  assert.equal(s.refund, 30)
+  assert.equal(s.committed, 0)
+  assert.equal(s.forfeit, 0)
+  assert.equal(s.refund, 50)
   assert.equal(s.issues[0].message, "5 more picks needed in Phase 1 (0 of 5).")
-  // At the minimum entry the whole thing forfeits.
+  // At the minimum entry the whole thing comes back too — there is no floor
+  // to keep when no wager was placed against it.
   const min = phaseStanding([], 20, 1, rules)
-  assert.equal(min.forfeit, 20)
-  assert.equal(min.refund, 0)
+  assert.equal(min.committed, 0)
+  assert.equal(min.forfeit, 0)
+  assert.equal(min.refund, 20)
+})
+
+test("standing: the first wagered dollar commits the floor — the A28 cliff", () => {
+  // $1 wagered against a $50 entry: the floor bites in full, so $19 forfeits
+  // and $30 comes back. One dollar less and the whole $50 would come back.
+  // Deliberate (PRD §12 A28), not an accident of the arithmetic.
+  const s = phaseStanding(picks(1, 1, 1), 50, 1, rules)
+  assert.equal(s.wagered, 1)
+  assert.equal(s.committed, 20)
+  assert.equal(s.forfeit, 19)
+  assert.equal(s.refund, 30)
 })
 
 test("standing: over the $20 minimum but under the entry — refunded, no forfeit", () => {
