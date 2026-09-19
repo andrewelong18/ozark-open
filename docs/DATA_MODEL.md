@@ -214,7 +214,7 @@ Join table connecting users to tournaments. A user is "in" a tournament for a gi
 | `id` | `uuid` PK | |
 | `user_id` | `uuid` NOT NULL FK → `users.id` | |
 | `tournament_id` | `uuid` NOT NULL FK → `tournaments.id` | |
-| `phase1_entry_fee` | `int` NULL CHECK (`> 0`) | The Phase 1 entry in whole dollars, or NULL = **not entered in Phase 1** (Sprint 30 / A25). A pool input: `min(E, max(W, entry_fee_min))` funds the Phase 1 pot |
+| `phase1_entry_fee` | `int` NULL CHECK (`> 0`) | The Phase 1 entry in whole dollars, or NULL = **not entered in Phase 1** (Sprint 30 / A25). A pool input: `W = 0 ? 0 : min(E, max(W, entry_fee_min))` funds the Phase 1 pot — a phase with nothing wagered in it funds nothing (A28) |
 | `phase2_entry_fee` | `int` NULL CHECK (`> 0`) | The Phase 2 entry, same semantics. Recorded by an admin when the money arrives, never assumed |
 | `is_player` | `boolean` NOT NULL DEFAULT `true` | True if they're playing golf, false if they're only betting (rare) |
 | `revoked_at` | `timestamptz` NULL | Non-null = betting access revoked (Sprint 21 / #91). The row and its entries are kept so re-approval restores both; see "How access is revoked" below |
@@ -475,7 +475,7 @@ Notes:
 The actual-payout proportional split runs in TypeScript at render time (`lib/payouts.ts`, `buildPhaseResults()`), **once per phase** since Sprint 30, because it requires summing across all users (one query, then arithmetic). Per bettor per phase, with `E` the phase entry and `W` their live wagers in it (ADR 0002 §2):
 
 ```
-committed    = min(E, max(W, entry_fee_min))
+committed    = W = 0 ? 0 : min(E, max(W, entry_fee_min))   -- nothing wagered funds nothing (A28)
 k            = self stake > 0 ? min(1, floor(max_self_bet_pct × W) / self stake) : 1
 theo'        = theoretical_payout × (is_self_pick ? k : 1)
 refunded'    = refunded_stake     × (is_self_pick ? k : 1)
