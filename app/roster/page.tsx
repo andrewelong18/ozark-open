@@ -12,6 +12,10 @@ import {
 // of their profiles — the same modal every other page opens.
 //
 // The page is glue; who counts as "in the field" lives in lib/roster-page.ts.
+// Since Sept 20, 2026 that means "registered, named, and carrying a player
+// profile" rather than "approved with a phase entry" — read the header there
+// for why, and for the two admin vetoes that still apply.
+//
 // Both reads are open to any authenticated member by existing RLS
 // (users_read_all, and "Authenticated users can read participants"), so this
 // runs on the anon key with the viewer's session like everything else.
@@ -49,11 +53,19 @@ export default async function RosterPage() {
   const tournament = tournamentData as { id: string; name: string }
 
   const [participantResult, userResult] = await Promise.all([
+    // Only the two veto columns — the entries no longer gate the roster.
     supabase
       .from("tournament_participants")
-      .select("user_id, phase1_entry_fee, phase2_entry_fee, is_player, revoked_at")
+      .select("user_id, is_player, revoked_at")
       .eq("tournament_id", tournament.id),
-    supabase.from("users").select("id, display_name, nickname, avatar_url"),
+    // The profile columns are read to answer "is there a profile at all", not
+    // to render: the card shows a name, a nickname and a face, and the modal
+    // fetches the real profile when it opens.
+    supabase
+      .from("users")
+      .select(
+        "id, display_name, nickname, avatar_url, hometown, member_since, bio, strength, weakness, past_performance"
+      ),
   ])
 
   // A half-loaded roster is worse than no roster — it reads as "these are the
@@ -84,7 +96,7 @@ export default async function RosterPage() {
         <EmptyState
           glyph="🏌️"
           title="No players yet"
-          message="Nobody's been approved for this year's field yet. Check back once entries are in."
+          message="Nobody's finished signing up yet. Players appear here as soon as they create their account — no approval needed."
         />
       ) : (
         <RosterGrid players={players} />
