@@ -128,6 +128,30 @@ so the project can pause and the automatic save states can stop.
 
 ## Week of (target: Monday Sept 21)
 
+> **Sept 20, 2026 — production was reset to pre-Phase-1 and the clock re-set.** The dry run
+> (Sept 15–17) left real state behind: 30 bets, 114 picks, 80 wagers, `status = 'completed'`, a
+> Phase 1 deadline of Sept 15 15:26 CT, and dry-run entries and payments on all seven participant
+> rows. All of it is gone. What was done, in one transaction, after a `manual` save state
+> (`04224a53-89f4-45ec-8f4a-f8f679c33cb2`) — restorable from `/admin/snapshots` if any of it was
+> wanted back:
+>
+> - **Every wager deleted**, soft-deleted rows included, then every bet (picks CASCADE with them).
+>   The board is empty so Pat's Phase 1 upload is a pure insert with nothing to sweep.
+> - **Every participant's phase entries set to NULL and `paid_amount`/`paid_at`/`paid_note`
+>   cleared.** The seven roster rows themselves stay — they are approved members. NULL entry means
+>   *not entered in that phase*, so everyone goes through `/entry` → admin approval again, which is
+>   the funnel the section below describes.
+> - **`status` back to `upcoming`** (out of `completed`, which embeds the standings on the
+>   dashboard; the importer accepts `upcoming`).
+> - **`phase1_closes_at` restored to Sept 24 11:00 CT and `phase2_closes_at` confirmed at
+>   Sept 26 11:00 CT**, `show_countdown` on. The dashboard counts down to whichever is next, so it
+>   reads *"Phase 1 betting closes"* now and rolls to Phase 2 at Round 1 tee-off.
+>
+> Deliberately **kept**: the seven `users` rows and their `onboarded_at` stamps (so the activity
+> feed still shows people joining), all 27 `player_profile_seed` rows, the 5 bet categories, and
+> every snapshot.
+
+
 - [ ] **Wake the Supabase project.** On Pro (see Late August above) the project no longer sleeps,
       so this should be a formality — but confirm it anyway: open the Supabase dashboard, check the
       project is *Active*, then load the app and sign in. Do this **before** anything below — every
