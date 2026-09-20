@@ -128,6 +128,30 @@ so the project can pause and the automatic save states can stop.
 
 ## Week of (target: Monday Sept 21)
 
+> **Sept 20, 2026 — production was reset to pre-Phase-1 and the clock re-set.** The dry run
+> (Sept 15–17) left real state behind: 30 bets, 114 picks, 80 wagers, `status = 'completed'`, a
+> Phase 1 deadline of Sept 15 15:26 CT, and dry-run entries and payments on all seven participant
+> rows. All of it is gone. What was done, in one transaction, after a `manual` save state
+> (`04224a53-89f4-45ec-8f4a-f8f679c33cb2`) — restorable from `/admin/snapshots` if any of it was
+> wanted back:
+>
+> - **Every wager deleted**, soft-deleted rows included, then every bet (picks CASCADE with them).
+>   The board is empty so Pat's Phase 1 upload is a pure insert with nothing to sweep.
+> - **Every participant's phase entries set to NULL and `paid_amount`/`paid_at`/`paid_note`
+>   cleared.** The seven roster rows themselves stay — they are approved members. NULL entry means
+>   *not entered in that phase*, so everyone goes through `/entry` → admin approval again, which is
+>   the funnel the section below describes.
+> - **`status` back to `upcoming`** (out of `completed`, which embeds the standings on the
+>   dashboard; the importer accepts `upcoming`).
+> - **`phase1_closes_at` restored to Sept 24 11:00 CT and `phase2_closes_at` confirmed at
+>   Sept 26 11:00 CT**, `show_countdown` on. The dashboard counts down to whichever is next, so it
+>   reads *"Phase 1 betting closes"* now and rolls to Phase 2 at Round 1 tee-off.
+>
+> Deliberately **kept**: the seven `users` rows and their `onboarded_at` stamps (so the activity
+> feed still shows people joining), all 27 `player_profile_seed` rows, the 5 bet categories, and
+> every snapshot.
+
+
 - [ ] **Wake the Supabase project.** On Pro (see Late August above) the project no longer sleeps,
       so this should be a formality — but confirm it anyway: open the Supabase dashboard, check the
       project is *Active*, then load the app and sign in. Do this **before** anything below — every
@@ -149,6 +173,19 @@ so the project can pause and the automatic save states can stop.
       green. If the sentence you get back is not a manifest, read
       `docs/DATA_SAFETY.md` § Troubleshooting and **stop** — an undo button you find out is broken
       at 10pm on tournament Friday is worse than no undo button, because you were counting on it.
+
+      *Since fixed, and since exercised — twice.* `public.snapshots` carries two `pre-restore`
+      rows, Sept 11 10:36 PM CT (26 placements, 7 bets) and Sept 15 (51 placements, 15 bets), both
+      after `20260911000000_restore_snapshot_where_clause.sql`. Those rows **are** the proof: the
+      `pre-restore` save state is taken inside the same implicit transaction as the deletes, so a
+      restore that failed would have rolled its own snapshot away with it. A surviving
+      `pre-restore` row means that restore committed. Query them if you want to skip the rehearsal:
+      ```sql
+      SELECT created_at, jsonb_array_length(payload->'bet_placements') AS placements
+        FROM public.snapshots WHERE trigger = 'pre-restore' ORDER BY created_at DESC;
+      ```
+      The rehearsal is still the cheaper habit — it costs a minute and proves it on *today's*
+      deploy — but it is no longer the first time.
 
 - [ ] **Send people `https://ozark-open.com` — not a `.vercel.app` link.** Since Aug 23, 2026
       the app forces this itself: every other production alias 308s to `ozark-open.com`, and the
