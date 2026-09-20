@@ -174,6 +174,19 @@ so the project can pause and the automatic save states can stop.
       `docs/DATA_SAFETY.md` § Troubleshooting and **stop** — an undo button you find out is broken
       at 10pm on tournament Friday is worse than no undo button, because you were counting on it.
 
+      *Since fixed, and since exercised — twice.* `public.snapshots` carries two `pre-restore`
+      rows, Sept 11 10:36 PM CT (26 placements, 7 bets) and Sept 15 (51 placements, 15 bets), both
+      after `20260911000000_restore_snapshot_where_clause.sql`. Those rows **are** the proof: the
+      `pre-restore` save state is taken inside the same implicit transaction as the deletes, so a
+      restore that failed would have rolled its own snapshot away with it. A surviving
+      `pre-restore` row means that restore committed. Query them if you want to skip the rehearsal:
+      ```sql
+      SELECT created_at, jsonb_array_length(payload->'bet_placements') AS placements
+        FROM public.snapshots WHERE trigger = 'pre-restore' ORDER BY created_at DESC;
+      ```
+      The rehearsal is still the cheaper habit — it costs a minute and proves it on *today's*
+      deploy — but it is no longer the first time.
+
 - [ ] **Send people `https://ozark-open.com` — not a `.vercel.app` link.** Since Aug 23, 2026
       the app forces this itself: every other production alias 308s to `ozark-open.com`, and the
       magic-link email is built from it. Paste the wrong URL and a member is bounced to the right
