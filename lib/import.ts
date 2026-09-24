@@ -761,14 +761,26 @@ export function buildImportPlan(
     const existing = existingPickBySheetId.get(row.sheetPickId)
 
     // Pick→player mapping (ADR 0001 §11): strip the stroke suffix, match
-    // against display names. Unmatched leaves NULL on a new pick but
-    // PRESERVES an existing link on update — admins hand-set links in
-    // Studio for players who haven't logged in, and a re-upload must not
-    // wipe that out.
+    // against display names. Unmatched leaves NULL on a new pick, and keeps
+    // an existing link on update ONLY while the pick still names the same
+    // person — admins hand-set links in Studio, and a re-upload that merely
+    // moves a stroke ("(E)" → "(-1)") must not wipe that out.
+    //
+    // It used to keep the link whenever the name was unmatched, which is how
+    // Sept 23, 2026 happened: the real field went into pick_ids the
+    // placeholder sheet had used for the early accounts, "Pat Leicht (-5)"
+    // became "Dustin Scheller (E)", Dustin had no account yet, and the pick
+    // stayed Pat's — so Pat was blocked as Dustin's opponent and tapping the
+    // name opened the wrong profile. A pick_id reused for someone else is a
+    // different person, not a hand-set link.
     const strippedName = stripStrokeSuffix(row.pickLabel)
     const matchedUserId =
       userIdByName.get(strippedName.toLowerCase()) ?? null
     if (!matchedUserId) unmatched.add(strippedName)
+    const namesSamePerson =
+      existing !== undefined &&
+      stripStrokeSuffix(existing.label).toLowerCase() ===
+        strippedName.toLowerCase()
 
     const write: PickWrite = {
       sheet_bet_id: row.sheetBetId,
@@ -777,7 +789,8 @@ export function buildImportPlan(
       american_odds: row.americanOdds,
       fractional_odds: row.fractionalOdds,
       probability: row.probability,
-      player_user_id: matchedUserId ?? existing?.player_user_id ?? null,
+      player_user_id:
+        matchedUserId ?? (namesSamePerson ? existing.player_user_id : null),
       result: row.result,
     }
     // A pick that somehow moved to a different bet is treated as an update

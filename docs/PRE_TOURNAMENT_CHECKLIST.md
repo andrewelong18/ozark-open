@@ -243,6 +243,11 @@ so the project can pause and the automatic save states can stop.
       - [ ] **Unmatched pick names** — every one is a golfer whose picks won't link to their
             profile, and whose self-bet cap, self-pick flag and opponent block silently won't apply.
             Fix the spelling in the sheet to match their display name and re-upload.
+      - [ ] **Links are made at upload time only.** A golfer who signs up *after* this upload
+            stays unlinked until the next one. That was half of the Sept 24, 2026 incident: ~20
+            golfers signed up two hours after the Phase 1 upload. Before telling the group betting
+            is open, paste `docs/admin/pick-links-check.sql` into the SQL editor. Both counts must
+            be 0. If not, re-upload the same sheet, or run `docs/admin/pick-links-repair.sql`.
       - [ ] Warnings about odds changing on a bet that already has placements.
 
 - [ ] **Soft open — watch the first real sign-ins land.** *(Added Sept 7, 2026, when Sprint 9's
@@ -317,6 +322,25 @@ so the project can pause and the automatic save states can stop.
 
 ## Each morning
 
+> **Sept 24, 2026 (Phase 1 open), pick links repaired in production.** Pat couldn't bet on Jake
+> Kohne ("you're in this match"), and tapping "Mike Cimo" opened Steve Esswein's profile. Both came
+> from `bet_picks.player_user_id`:
+>
+> - **16 picks pointed at the wrong golfer.** The Sept 23 upload put the real field into `pick_id`s
+>   the placeholder sheet had used for the early accounts. The importer kept the old link because
+>   the new name had no account yet, so pick #25 "Dustin Scheller (E)" still said Pat.
+> - **~27 picks linked to nobody.** About 20 golfers signed up two hours after the upload that opened
+>   Phase 1, and links are only made at upload time.
+> - **Three accounts never matched the sheet:** DonH, Michael Yenzer and Steven Jones.
+>
+> Fixed at 13:30 UTC by `docs/admin/pick-links-repair.sql`, after a `manual` save state
+> (`26fa311e-129a-437e-aa50-cb7ea3dcf5e3`). It renamed those three accounts to Don Harris, Mike
+> Yenzer and Steve Jones (which also put them on `/roster`), relinked 50 picks across both phases,
+> and changed no wager. Money reads the live link, so every self-bet share corrected itself.
+> Everyone stayed inside the self-bet cap. Three wagers that the missing links had let through break
+> rule 8 (betting on an opponent in your own match). Those were left for Pat to rule on, not decided
+> by the repair. The importer fix is in the same PR.
+
 - [ ] **Wake the app before the group does.** Load `/dashboard` on your phone. First request after
       an idle night is the slow one; let it be yours.
 - [ ] **The chase list, one last time**, before the phase's deadline fires. `/admin/close`.
@@ -342,6 +366,8 @@ so the project can pause and the automatic save states can stop.
 
 - [ ] **Upload #3.** Phase 2 bets `hidden` → `open`, Tournament odds updated. (The upload refuses a
       bet with wagers moving between phases, and a Match without exactly two picks.)
+- [ ] **Pick links.** Paste `docs/admin/pick-links-check.sql` into the SQL editor. Both counts must be 0,
+      or the opponent block and self-bet cap aren't policing someone in Phase 2.
 - [ ] **Phase 2 entries are recorded.** `/admin/close` at the Phase 2 close counts approved members
       with no Phase 2 entry. Anyone who paid for both phases but only has Phase 1 typed in can't bet
       tonight — fix it on `/admin/people` before telling the group.
@@ -447,7 +473,8 @@ would have surfaced. Work it in this order:
 | Anything at all is broken | Load `/api/health` first — 30 seconds, and it names the failing read. |
 | Nobody can sign in | Project asleep, or magic-link email failing. Dashboard first, then Resend. |
 | A member says "I can't bet" | They're not approved, or they're revoked. `/admin/people`. |
-| A pick doesn't link to a golfer | Name mismatch between the sheet and their display name. Fix the sheet, re-upload — the §7 self-bet rules depend on that link. |
+| A pick doesn't link to a golfer | Name mismatch between the sheet and their display name, or they signed up after the last upload. Fix the name (sheet or `/admin/people`) and re-upload. The §7 self-bet rules depend on that link. `docs/admin/pick-links-check.sql` lists every one. |
+| "It says I'm in a match I'm not in" / a name opens the wrong profile | The pick is linked to the wrong person. Run `docs/admin/pick-links-check.sql`, then `pick-links-repair.sql` (it takes a save state first). |
 | Payouts look too high | Something is still `pending`. `/admin/close` names it. |
 | Betting is closed and shouldn't be | The phase deadline passed. Push it out on `/admin/close` — no re-upload needed. |
 | Betting is open and shouldn't be | The deadline hasn't fired. *Close now*. A sheet marked `closed` does not stop wagering on its own. |

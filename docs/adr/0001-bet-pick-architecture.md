@@ -145,6 +145,8 @@ To flag self-picks and hard-block opponent picks, the importer maps each pick to
 - **Self-pick** = placing on a pick whose player is you → allowed, sets `requires_admin_review`.
 - **Opponent pick** (Match/Group Match) = you are one of the bet's players and you place on a *different* pick's player → **rejected server-side**.
 
+> **Amended Sept 24, 2026 — when a re-upload keeps an existing link.** The code had drifted from "unmatched picks get no player link": it kept a pick's existing link whenever the new name was unmatched, so a hand-set link would survive a re-upload. It also kept links nobody had set by hand. On Sept 23 the real field went into `pick_id`s the placeholder sheet had used for the early accounts. "Pat Leicht (-5)" became "Dustin Scheller (E)", Dustin had no account yet, and the pick stayed Pat's, which blocked Pat as the opponent in a match he wasn't in. The rule now: **a name match always wins; otherwise an existing link survives only while the pick still names the same person** (label minus the stroke suffix, case-insensitive). A new name that matches nobody is unlinked, as this section always said. Links are still made only at upload time, so a golfer who signs up after an upload stays unlinked until the next one. `docs/admin/pick-links-check.sql` lists both kinds of bad link, and `pick-links-repair.sql` fixes them without an upload.
+
 ### 12. Odds snapshot at placement is unchanged
 
 Each placement still snapshots odds at write time (`odds_at_placement`, now from the pick), and payouts compute from the snapshot — never from the live pick row. Admins repricing an open bet via re-upload affects future placements only (PRD §7.1).

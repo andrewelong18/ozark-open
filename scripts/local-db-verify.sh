@@ -3,7 +3,8 @@
 # applies every migration + the Phase 1 seed over the stub Supabase auth
 # schema, runs the round-trip harnesses (import, placement RLS,
 # users RLS, activity feed, payout view, onboarding guard, collection,
-# snapshots, snapshot restore), and smoke-tests the admin chase SQL. No Supabase creds,
+# snapshots, snapshot restore), and smoke-tests the admin chase SQL and the
+# pick-link check/repair SQL. No Supabase creds,
 # no TCP port (unix socket only), no leftovers — the cluster is deleted
 # on exit. This is the recipe from the round-trip scripts' headers, scripted.
 #
@@ -111,5 +112,27 @@ node --experimental-strip-types "$REPO/scripts/snapshot-restore-roundtrip.ts"
 
 echo "==> admin chase SQL smoke (docs/admin/phase-compliance.sql)"
 psql "$PGURI" -X -v ON_ERROR_STOP=1 -f "$REPO/docs/admin/phase-compliance.sql"
+
+# Sept 24, 2026: the pick → golfer link check and repair. Break one link the
+# way Sept 23 did — a pick pointing at an account its label doesn't name —
+# then prove the check sees it, the repair clears it, and the check agrees.
+# Last, because the repair rewrites links across the whole seed.
+echo "==> pick-link SQL smoke (docs/admin/pick-links-check.sql, pick-links-repair.sql)"
+psql "$PGURI" -X -v ON_ERROR_STOP=1 -q -c "
+  UPDATE public.bet_picks
+  SET player_user_id = (SELECT id FROM public.users ORDER BY created_at, id LIMIT 1)
+  WHERE id = (
+    SELECT pk.id FROM public.bet_picks pk
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.users u
+      WHERE lower(trim(u.display_name))
+          = lower(trim(regexp_replace(pk.label, '\s*\((E|[+-]?\d+)\)\s*\$', '', 'i'))))
+    ORDER BY pk.id LIMIT 1);"
+before="$(psql "$PGURI" -X -v ON_ERROR_STOP=1 -At -f "$REPO/docs/admin/pick-links-check.sql" | tail -1)"
+[ "${before%%|*}" -ge 1 ] || { echo "pick-links-check.sql missed a planted wrong link (got '$before')" >&2; exit 1; }
+psql "$PGURI" -X -v ON_ERROR_STOP=1 -q -f "$REPO/docs/admin/pick-links-repair.sql" >/dev/null
+after="$(psql "$PGURI" -X -v ON_ERROR_STOP=1 -At -f "$REPO/docs/admin/pick-links-check.sql" | tail -1)"
+[ "$after" = "0|0" ] || { echo "pick-links-repair.sql left links wrong/missing (got '$after')" >&2; exit 1; }
+echo "pick links: check caught the planted link ($before → $after after repair)."
 
 echo "All local DB verification passed."

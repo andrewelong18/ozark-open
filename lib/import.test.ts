@@ -21,7 +21,9 @@ import {
   validateSheet,
   type ExistingBet,
   type ExistingPick,
+  type ImportPlan,
   type PlacementRef,
+  type UserRow,
 } from "./import.ts"
 import { CATEGORIES } from "./bet-taxonomy.ts"
 import type { PhaseClock } from "./phases.ts"
@@ -40,6 +42,8 @@ type RowSpec = {
   title?: string
   category?: string
   round?: string
+  /** The pick label; defaults to `Pick <pickId>`, which names nobody. */
+  pick?: string
 }
 
 function row(spec: RowSpec): string {
@@ -52,6 +56,7 @@ function row(spec: RowSpec): string {
     title = `Bet ${betId}`,
     category = "Top Finisher",
     round = "Round 1",
+    pick = `Pick ${pickId}`,
   } = spec
   return [
     phase,
@@ -61,7 +66,7 @@ function row(spec: RowSpec): string {
     betId,
     pickId,
     title,
-    `Pick ${pickId}`,
+    pick,
     110,
     "11/10",
     0.476,
@@ -408,6 +413,130 @@ test("opened_at: reopening a closed bet stamps again", async () => {
     [existingBet("closed")]
   )
   assert.equal(plan.bets.update[0].opened_at, NOW.toISOString())
+})
+
+// ---------------------------------------------------------------------------
+// Pick → player links (ADR 0001 §11)
+//
+// player_user_id is what the opponent block, the self-bet cap and the profile
+// link all key off, and nothing errors when it's wrong. On Sept 23, 2026 a
+// re-upload put "Dustin Scheller (E)" into the pick_id that had been "Pat
+// Leicht (-5)"; Dustin had no account yet, the importer kept Pat's link, and
+// Pat was blocked as Dustin's opponent in a match he wasn't in.
+// ---------------------------------------------------------------------------
+
+const PAT: UserRow = { id: "user-pat", display_name: "Pat Leicht" }
+const DUSTIN: UserRow = { id: "user-dustin", display_name: "Dustin Scheller" }
+
+function existingPick(label: string, playerUserId: string | null): ExistingPick {
+  return {
+    id: "pick-uuid-1",
+    bet_id: "bet-uuid-1",
+    sheet_pick_id: 1,
+    label,
+    american_odds: 110,
+    fractional_odds: "11/10",
+    probability: 0.476,
+    player_user_id: playerUserId,
+    result: "pending",
+  }
+}
+
+async function linkPlanFor(
+  label: string,
+  existingPicks: ExistingPick[],
+  users: UserRow[]
+): Promise<ImportPlan> {
+  const validation = await validate([{ pickId: 1, pick: label }])
+  assert.ok(validation.ok, "fixture sheet should validate")
+  return buildImportPlan(
+    validation.rows,
+    [existingBet("open")],
+    existingPicks,
+    CATEGORY_ROWS,
+    users,
+    NOW
+  )
+}
+
+/** The link the plan writes for pick 1, create or update. */
+function linkWritten(plan: ImportPlan): string | null {
+  const write = plan.picks.create[0] ?? plan.picks.update[0]
+  assert.ok(write, "expected a write for pick 1")
+  return write.player_user_id
+}
+
+test("links: a new pick links to the account its name matches — stroke stripped, any case", async () => {
+  const plan = await linkPlanFor("PAT LEICHT (-5)", [], [PAT])
+  assert.equal(linkWritten(plan), PAT.id)
+  assert.deepEqual(plan.unmatchedPickNames, [])
+})
+
+test("links: a new pick naming nobody is unlinked and reported", async () => {
+  const plan = await linkPlanFor("Dustin Scheller (E)", [], [PAT])
+  assert.equal(linkWritten(plan), null)
+  assert.deepEqual(plan.unmatchedPickNames, ["Dustin Scheller"])
+})
+
+test("links: a pick_id reused for someone else drops the old link (Sept 23)", async () => {
+  const plan = await linkPlanFor(
+    "Dustin Scheller (E)",
+    [existingPick("Pat Leicht (-5)", PAT.id)],
+    [PAT]
+  )
+  assert.equal(plan.picks.update.length, 1)
+  assert.equal(linkWritten(plan), null, "the pick is Dustin now, not Pat")
+})
+
+test("links: a pick_id reused for someone with an account links to them", async () => {
+  const plan = await linkPlanFor(
+    "Dustin Scheller (E)",
+    [existingPick("Pat Leicht (-5)", PAT.id)],
+    [PAT, DUSTIN]
+  )
+  assert.equal(linkWritten(plan), DUSTIN.id)
+})
+
+test("links: a hand-set link survives a stroke change while the name matches no account", async () => {
+  // The admin linked "Don Harris" to an account named "DonH" by hand; the
+  // sheet then moved his handicap. Same person — the link stays.
+  const donh: UserRow = { id: "user-donh", display_name: "DonH" }
+  const plan = await linkPlanFor(
+    "Don Harris (-1)",
+    [existingPick("Don Harris (-2)", donh.id)],
+    [PAT, donh]
+  )
+  assert.equal(plan.picks.update.length, 1)
+  assert.equal(linkWritten(plan), donh.id)
+})
+
+test("links: an identical re-upload keeps a hand-set link and writes nothing", async () => {
+  const donh: UserRow = { id: "user-donh", display_name: "DonH" }
+  const plan = await linkPlanFor(
+    "Don Harris (-2)",
+    [existingPick("Don Harris (-2)", donh.id)],
+    [PAT, donh]
+  )
+  assert.equal(plan.picks.unchanged, 1)
+  assert.equal(plan.picks.update.length, 0)
+})
+
+test("links: a re-upload heals a golfer who signed up after the last upload", async () => {
+  // Unlinked because Dustin had no account at the last upload…
+  const unlinked = await linkPlanFor(
+    "Dustin Scheller (E)",
+    [existingPick("Dustin Scheller (E)", null)],
+    [PAT, DUSTIN]
+  )
+  assert.equal(linkWritten(unlinked), DUSTIN.id)
+
+  // …or still carrying the previous occupant's link, as production was.
+  const stale = await linkPlanFor(
+    "Dustin Scheller (E)",
+    [existingPick("Dustin Scheller (E)", PAT.id)],
+    [PAT, DUSTIN]
+  )
+  assert.equal(linkWritten(stale), DUSTIN.id)
 })
 
 // ---------------------------------------------------------------------------
